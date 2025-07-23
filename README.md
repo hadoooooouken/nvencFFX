@@ -1,93 +1,122 @@
-# nvencFF Toolbox
+![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
+# nvencFF Toolbox 🚀
 
+![Project Icon](icon.ico) ## Table of Contents
+- [About the Project](#about-the-project)
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Building Executable (For Developers)](#building-executable-for-developers)
+- [Usage](#usage)
+- [Contributing](#contributing)
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## About The Project
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+The **nvencFF Toolbox** is a convenient graphical user interface (GUI) application designed to simplify video processing tasks using **FFmpeg** and leveraging **NVIDIA's NVENC hardware encoder**.
 
-## Add your files
+This project was primarily developed to explore the capabilities of FFmpeg and NVIDIA's hardware encoders, resulting in a user-friendly tool that streamlines common video manipulation workflows, such as encoding and trimming.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+---
 
-```
-cd existing_repo
-git remote add origin https://gitlab.com/hadoukez/nvencff-toolbox.git
-git branch -M main
-git push -uf origin main
-```
+## Features
 
-## Integrate with your tools
+* **Intuitive GUI:** Easy-to-use interface built with `customtkinter` for a smooth user experience.
+* **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
+* **NVIDIA NVENC Support:** Utilizes NVIDIA's NVENC for high-performance, hardware-accelerated video encoding.
+* **Video Trimming:** Easily trim video segments by specifying start and end times (HH:MM:SS format).
+* **Additional Options:** Flexibility to add custom FFmpeg commands for advanced users.
+* **Drag-and-Drop Support:** Conveniently add input files by dragging them into the application window.
 
-- [ ] [Set up project integrations](https://gitlab.com/hadoukez/nvencff-toolbox/-/settings/integrations)
+![nff-mainwindow_start](screenshots/nff-mainwindow_settings.png)
 
-## Collaborate with your team
+---
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Getting Started
 
-## Test and Deploy
+### Prerequisites
 
-Use the built-in continuous integration in GitLab.
+To use the nvencFF Toolbox, you will need:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+* **Windows Operating System:** The application is built for Windows 10/11.
+* **FFmpeg:** You need to have FFmpeg installed on your system and its executable (`ffmpeg.exe`) accessible in your system's PATH, or specify its path within the application.
+* **NVIDIA GPU with NVENC Support:** For hardware-accelerated encoding, an NVIDIA graphics card with NVENC capabilities is required. Ensure you have the latest NVIDIA drivers installed.
 
-***
+### Installation
 
-# Editing this README
+#### 1. Download the Executable (Recommended)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFF-Toolbox/-/releases) page.
 
-## Suggestions for a good README
+1.  Go to the [Releases](https://gitlab.com/hadoukez/nvencFF-Toolbox/-/releases) section of this GitLab repository.
+2.  Download the `nvencFF_Toolbox.exe` file.
+3.  Run the executable.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+#### 2. Run from Source (For Developers)
 
-## Name
-Choose a self-explaining name for your project.
+If you want to run the application from its Python source code:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+1.  **Clone the repository:**
+    ```
+    git clone [https://gitlab.com/hadoukez/nvencFF-Toolbox.git](https://gitlab.com/hadoukez/nvencFF-Toolbox.git)
+    cd nvencFF-Toolbox
+    ```
+2.  **Install dependencies:**
+    The project uses `customtkinter`, `CTkToolTip`, `pywin32` (for `win32gui`, `win32con`, `win32api`).
+    ```bash
+    pip install customtkinter CTkToolTip pywin32
+    ```
+3.  **Run the application:**
+    ```
+    python "nvencFF Toolbox.py"
+    ```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Building Executable (For Developers)
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+You can compile the Python script into a standalone Windows executable (`.exe`) using **Nuitka**.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+1.  **Install Nuitka:**
+    ```
+    pip install nuitka
+    ```
+2.  **Build the executable:**
+    Navigate to the project's root directory in your terminal and run the following command. This command configures Nuitka to create a standalone, single-file executable with disabled console mode, include necessary packages, set application metadata, and specify an icon.
+
+    ```
+    nuitka --msvc=latest --standalone --onefile --windows-console-mode=disable ^
+    --include-package=customtkinter --enable-plugin=tk-inter ^
+    --windows-icon-from-ico="icon.ico" ^
+    --include-data-file=icon.ico=./ ^
+    --product-name="nvencFF Toolbox" ^
+    --product-version="1.0.1.3" ^
+    --file-version="1.0.1.3" ^
+    --file-description="nvencFF Toolbox" ^
+    --company-name="Deepseek Enjoyer" ^
+    --copyright="Copyright (C) 2025 hadouken" ^
+    --output-dir=build "nvencFF Toolbox.py"
+    ```
+    The compiled executable will be found in the `build` directory specified by `--output-dir`.
+
+---
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1.  **Launch the application:** Run the `.exe` file or `nvencFF Toolbox.py`.
+2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
+3.  **Specify Output File:** Click "Browse Output" to choose where to save your processed video and what to name it.
+4.  **Configure Options:**
+    * **Trim Video:** Enter the `Start Time` and `End Time` in `HH:MM:SS` format to trim your video.
+    * **Encoder:** Select your desired video encoder (e.g., `hevc_nvenc`, `h264_nvenc`, `av1_nvenc`).
+    * **Additional FFmpeg Options:** Add any extra FFmpeg commands you need (e.g., `-aq-strength 8; -cq 0; -bf 0 or -bf 4; -intra-refresh 1; -forced-idr 1`).
+5.  **Start Processing:** Click the "Convert" button to begin the video encoding.
+6.  **Monitor Progress:** The console output within the application will show the FFmpeg progress.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+---
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+If you have a suggestion that would make this better, you can simply open an issue with the tag "enhancement" or "bug".
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.

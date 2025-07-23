@@ -1,0 +1,11 @@
+nuitka --msvc=latest --standalone --onefile --windows-console-mode=disable ^
+--include-package=customtkinter --enable-plugin=tk-inter ^
+--windows-icon-from-ico="icon.ico" ^
+--include-data-file=icon.ico=./ ^
+--product-name="nvencFF Toolbox" ^
+--product-version="1.0.1.3" ^
+--file-version="1.0.1.3" ^
+--file-description="nvencFF Toolbox" ^
+--company-name="Deepseek Enjoyer" ^
+--copyright="Copyright (C) 2025 hadouken" ^
+--output-dir=build "nvencFF Toolbox.py"
