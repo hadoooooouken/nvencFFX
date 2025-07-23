@@ -2,7 +2,7 @@
 
 # nvencFF Toolbox 🚀
 
-![Project Icon](icon.ico) ## Table of Contents
+## Table of Contents
 - [About the Project](#about-the-project)
 - [Features](#features)
 - [Getting Started](#getting-started)
