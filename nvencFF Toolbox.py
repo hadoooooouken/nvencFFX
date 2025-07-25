@@ -28,8 +28,10 @@ ctk.set_appearance_mode("dark")
 PRIMARY_BG = "#0e1113"
 SECONDARY_BG = "#171b1f"
 ACCENT_GREEN = "#4fb62f"
+HOVER_GREEN = "#47a32a"
 ACCENT_RED = "#FF5555"
 TEXT_COLOR = "#FFFFFF"
+TEXT_BUTTON = "#000000"
 PLACEHOLDER_COLOR = "#A0A0A0"
 
 class DropTarget:
@@ -141,8 +143,20 @@ class VideoConverterApp:
 
         # Find FFmpeg executables (critical dependency)
         self.ffmpeg_path = self._find_executable("ffmpeg.exe")
-        self.ffprobe_path = self._find_executable("ffprobe.exe")
+        self.ffprobe_path = None
         
+        # Try to load saved path
+        saved_path = self._load_ffmpeg_path()
+        if saved_path:
+            self.ffmpeg_path = saved_path
+        else:
+            if self.ffmpeg_path:
+                ffprobe_path = os.path.join(os.path.dirname(self.ffmpeg_path), "ffprobe.exe")
+                if os.path.exists(ffprobe_path):
+                    self.ffprobe_path = ffprobe_path
+                else:
+                    self.ffprobe_path = self._find_executable("ffprobe.exe")
+
         # Set the FFmpeg path in the UI if found
         if self.ffmpeg_path:
             self.ffmpeg_custom_path.set(self.ffmpeg_path)
@@ -158,6 +172,8 @@ class VideoConverterApp:
 
         self._center_window()
         self.drop_target = DropTarget(self.master.winfo_id(), self._handle_dropped_file)
+
+        self._setup_keyboard_shortcuts()
 
         if len(sys.argv) > 1:
             self._handle_dropped_file(sys.argv[1])
@@ -215,6 +231,43 @@ class VideoConverterApp:
         self.trim_end = ctk.StringVar(value="00:00:00")
         self.trim_streamcopy = ctk.BooleanVar(value=False)
 
+    def _setup_keyboard_shortcuts(self):
+        self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
+
+    def _handle_key_press(self, event):
+        # keycode 67 = 'C'
+        if event.keycode == 67 and (event.state & 0x0004):  # Ctrl+C
+            self._copy_text()
+            return "break"
+        
+        # keycode 86 = 'V'
+        elif event.keycode == 86 and (event.state & 0x0004):  # Ctrl+V
+            self._paste_text()
+            return "break"
+
+    def _copy_text(self):
+        widget = self.master.focus_get()
+        if hasattr(widget, "get"):
+            self.master.clipboard_clear()
+            text = widget.get()
+            if hasattr(widget, "selection_get"):
+                try:
+                    text = widget.selection_get()
+                except:
+                    pass
+            self.master.clipboard_append(text)
+
+    def _paste_text(self):
+        widget = self.master.focus_get()
+        if hasattr(widget, "insert"):
+            try:
+                text = self.master.clipboard_get()
+                if hasattr(widget, "delete"):
+                    widget.delete(0, "end")
+                widget.insert("insert", text)
+            except tk.TclError:
+                pass
+
     def _create_widgets(self):
         # Build the entire GUI interface
         main_frame = ctk.CTkFrame(self.content_frame, fg_color=PRIMARY_BG, corner_radius=25)
@@ -241,8 +294,8 @@ class VideoConverterApp:
             text="Browse",
             command=self._browse_input,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
         ).grid(row=0, column=2, padx=5, pady=5)
 
         # Output File
@@ -261,8 +314,8 @@ class VideoConverterApp:
             text="Save As",
             command=self._browse_output,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
         ).grid(row=1, column=2, padx=5, pady=5)
 
         # FFmpeg Path
@@ -287,7 +340,7 @@ class VideoConverterApp:
             command=self._browse_ffmpeg,
             fg_color="#b2b2b2",
             hover_color="#8e8e8e",
-            text_color="black",
+            text_color=TEXT_BUTTON,
         ).grid(row=2, column=2, padx=5, pady=5)
 
         # Video Bitrate
@@ -306,7 +359,7 @@ class VideoConverterApp:
             command=self._show_output_command,
             fg_color="#b2b2b2",
             hover_color="#8e8e8e",
-            text_color="black",
+            text_color=TEXT_BUTTON,
         ).grid(row=3, column=2, sticky="w", padx=5, pady=5)
 
         # Video Codec Selection
@@ -321,7 +374,7 @@ class VideoConverterApp:
             value="hevc",
             command=self._update_codec_settings,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         hevc_rb.pack(side="left", padx=5)
 
@@ -332,7 +385,7 @@ class VideoConverterApp:
             value="h264",
             command=self._update_codec_settings,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         h264_rb.pack(side="left", padx=5)
 
@@ -343,7 +396,7 @@ class VideoConverterApp:
             value="av1",
             command=self._update_codec_settings,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         av1_rb.pack(side="left", padx=5)
 
@@ -354,7 +407,7 @@ class VideoConverterApp:
             variable=self.enable_encoder_options,
             command=self._toggle_encoder_options_frame,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         encoder_options_frame_toggle.grid(row=5, column=0, sticky="w", padx=10, pady=5)
         
@@ -371,7 +424,7 @@ class VideoConverterApp:
             values=[f"p{i}" for i in range(1, 8)],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -385,7 +438,7 @@ class VideoConverterApp:
             values=["hq", "uhq", "ll", "ull", "lossless"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -399,7 +452,7 @@ class VideoConverterApp:
             values=["main", "main10", "rext"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -413,7 +466,7 @@ class VideoConverterApp:
             values=["auto", "1.0", "2.0", "2.1", "3.0", "3.1", "4.0", "4.1", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -430,7 +483,7 @@ class VideoConverterApp:
             values=["0", "1"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -448,7 +501,7 @@ class VideoConverterApp:
             values=["default", "auto", "cabac", "cavlc", "ac", "vlc"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -470,7 +523,7 @@ class VideoConverterApp:
             values=["disabled", "qres", "fullres"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -484,7 +537,7 @@ class VideoConverterApp:
             values=["vbr", "cbr"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -501,7 +554,7 @@ class VideoConverterApp:
             values=["-1", "0", "1", "2", "3"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN
         )
@@ -515,7 +568,7 @@ class VideoConverterApp:
             text="Spatial AQ",
             variable=self.spatial_aq,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=0, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         ctk.CTkCheckBox(
@@ -523,7 +576,7 @@ class VideoConverterApp:
             text="Temporal AQ",
             variable=self.temporal_aq,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=1, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         ctk.CTkCheckBox(
@@ -531,7 +584,7 @@ class VideoConverterApp:
             text="Strict GOP",
             variable=self.strict_gop,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=2, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         ctk.CTkCheckBox(
@@ -539,7 +592,7 @@ class VideoConverterApp:
             text="No-Scenecut",
             variable=self.no_scenecut,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=3, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         ctk.CTkCheckBox(
@@ -547,7 +600,7 @@ class VideoConverterApp:
             text="Weighted Prediction",
             variable=self.weighted_pred,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=3, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         ctk.CTkCheckBox(
@@ -555,7 +608,7 @@ class VideoConverterApp:
             text="High Bit Depth",
             variable=self.highbitdepth,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=4, column=2, columnspan=2, sticky="w", padx=5, pady=2)
 
         # FPS and Scaling
@@ -565,7 +618,7 @@ class VideoConverterApp:
             variable=self.enable_fps_scale_options,
             command=self._toggle_fps_scale_options_frame,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         fps_scale_frame_toggle.grid(row=7, column=0, sticky="w", padx=10, pady=5)
         
@@ -589,7 +642,7 @@ class VideoConverterApp:
                 value=value,
                 command=self._toggle_custom_fps_entry,
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
+                hover_color=HOVER_GREEN,
             )
             rb.grid(row=1, column=i+1, sticky="w", padx=2)
         
@@ -600,7 +653,7 @@ class VideoConverterApp:
             value="custom",
             command=self._toggle_custom_fps_entry,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         rb_custom.grid(row=2, column=1, sticky="w", padx=2, pady=(10, 10))
         
@@ -636,7 +689,7 @@ class VideoConverterApp:
                 value=value,
                 command=self._toggle_custom_video_width_entry,
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
+                hover_color=HOVER_GREEN,
             )
             if value == "custom":
                 rb.grid(row=4, column=1, sticky="w", padx=2, pady=(10, 2))
@@ -665,7 +718,7 @@ class VideoConverterApp:
             values=["bilinear", "bicubic", "neighbor", "area", "lanczos", "spline"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
-            button_hover_color="#47a32a",
+            button_hover_color=HOVER_GREEN,
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
@@ -687,7 +740,7 @@ class VideoConverterApp:
             variable=self.enable_audio_options,
             command=self._toggle_audio_options_frame,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         audio_frame_toggle.grid(row=9, column=0, sticky="w", padx=10, pady=5)
 
@@ -712,7 +765,7 @@ class VideoConverterApp:
                 value=value,
                 command=self._toggle_custom_abitrate,
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
+                hover_color=HOVER_GREEN,
             )
             rb.grid(row=0, column=i, sticky="w", padx=10, pady=10)
 
@@ -723,7 +776,7 @@ class VideoConverterApp:
             value="custom",
             command=self._toggle_custom_abitrate,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         self.custom_audio_rb.grid(row=1, column=0, sticky="w", padx=10, pady=2)
 
@@ -743,7 +796,7 @@ class VideoConverterApp:
             variable=self.enable_additional_options,
             command=self._toggle_additional_options_frame,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         additional_options_toggle.grid(row=11, column=0, sticky="w", padx=10, pady=5)
         self.additional_options_frame = ctk.CTkFrame(main_frame, fg_color=SECONDARY_BG)
@@ -804,8 +857,8 @@ class VideoConverterApp:
             text="Trim",
             command=self._add_trim_options,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).grid(row=2, column=6, padx=15)
 
@@ -813,9 +866,10 @@ class VideoConverterApp:
         ctk.CTkCheckBox(
             trim_frame,
             text="Streamcopy",
+            command=lambda: self.audio_option.set("copy"),
             variable=self.trim_streamcopy,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         ).grid(row=2, column=7)
   
         # Video Filters
@@ -864,8 +918,8 @@ class VideoConverterApp:
             text="Speed up X2",
             command=lambda: self._set_speed_filter("2.0"),
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left", padx=(0, 10))
         
@@ -874,8 +928,8 @@ class VideoConverterApp:
             text="Slow down X2",
             command=lambda: self._set_speed_filter("0.5"),
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left")
 
@@ -883,10 +937,10 @@ class VideoConverterApp:
         ctk.CTkButton(
             speed_buttons_frame,
             text="Sharpness",
-            command=lambda: self._add_video_filter("unsharp=5:5:1.25:3:3:0.0"),
+            command=lambda: self._add_video_filter("unsharp=5:5:1.15:3:3:0.0"),
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left", padx=(10, 10))
         
@@ -894,10 +948,10 @@ class VideoConverterApp:
         ctk.CTkButton(
             speed_buttons_frame,
             text="Saturation",
-            command=lambda: self._add_video_filter("eq=saturation=1.25"),
+            command=lambda: self._add_video_filter("eq=saturation=1.15"),
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left")
 
@@ -907,8 +961,8 @@ class VideoConverterApp:
             text="Preview 10s",
             command=lambda: self._add_preview_option(),
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left", padx=(10, 0))
 
@@ -919,7 +973,65 @@ class VideoConverterApp:
             command=self._clear_all_filters,
             fg_color=ACCENT_RED,
             hover_color="#FF3333",
-            text_color="black",
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left", padx=(10, 0))
+
+        speed_buttons_frame_2 = ctk.CTkFrame(self.additional_options_frame, fg_color="transparent")
+        speed_buttons_frame_2.grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10))
+
+        # FPS passtrough button
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="FPS Pass",
+            command=lambda: self._add_additional_option("-fps_mode passthrough"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left", padx=(0, 10))
+
+        # Frame drop threshold button
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="Drop thresh",
+            command=lambda: self._add_additional_option("-frame_drop_threshold 0.5"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left")
+
+        # Gamma RGB
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="Gamma RGB",
+            command=lambda: self._add_video_filter("eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left", padx=(10, 10))
+
+        # Brightness button
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="Brightness",
+            command=lambda: self._add_video_filter("eq=brightness=-0.15"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left")
+
+        # Audio fix button
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="Audio fix",
+            command=lambda: self._add_audio_filter("loudnorm=I=-16:TP=-1.5:LRA=11"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             width=100
         ).pack(side="left", padx=(10, 0))
 
@@ -930,7 +1042,7 @@ class VideoConverterApp:
             variable=self.enable_presets,
             command=self._toggle_presets_frame,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
+            hover_color=HOVER_GREEN,
         )
         presets_frame_toggle.grid(row=13, column=0, sticky="w", padx=10, pady=5)
         self.presets_frame = ctk.CTkFrame(main_frame, fg_color=SECONDARY_BG)
@@ -951,18 +1063,9 @@ class VideoConverterApp:
                 value=value,
                 command=lambda v=value: self._apply_preset(v),
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
+                hover_color=HOVER_GREEN,
             )
-            if i == 0:
-                rb.grid(row=1, column=0, padx=10, pady=5, sticky="w")
-            elif i == 1:
-                rb.grid(row=1, column=1, padx=10, pady=5, sticky="w")
-            elif i == 2:
-                rb.grid(row=1, column=2, padx=10, pady=5, sticky="w")
-            elif i == 3:
-                rb.grid(row=1, column=3, padx=10, pady=5, sticky="w")
-            else:
-                rb.grid(row=1, column=4, padx=10, pady=5, sticky="w")
+            rb.grid(row=1, column=i, padx=10, pady=5, sticky="w")
 
         # Preset Indicator
         self.preset_indicator = ctk.CTkLabel(
@@ -997,8 +1100,8 @@ class VideoConverterApp:
             text="Convert",
             command=self._toggle_conversion,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
             height=40,
             font=("", 14, "bold"),
         )
@@ -1047,8 +1150,8 @@ class VideoConverterApp:
                 text="Copy to Clipboard",
                 command=lambda: self.master.clipboard_clear() or self.master.clipboard_append(" ".join(command)),
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
-                text_color="black"
+                hover_color=HOVER_GREEN,
+                text_color=TEXT_BUTTON
             )
             copy_btn.pack(pady=10)
             
@@ -1057,8 +1160,8 @@ class VideoConverterApp:
                 text="Close",
                 command=output_window.destroy,
                 fg_color=ACCENT_GREEN,
-                hover_color="#47a32a",
-                text_color="black"
+                hover_color=HOVER_GREEN,
+                text_color=TEXT_BUTTON
             )
             close_btn.pack(pady=5)
             
@@ -1257,6 +1360,8 @@ class VideoConverterApp:
             video_filter = f"setpts={1/speed}*PTS"
             self.additional_filter_options.set(video_filter)
             self.additional_filter_options_entry.configure(text_color=TEXT_COLOR)
+            if self.audio_option.get() in ("disable", "copy"):
+                self.audio_option.set("aac_96k")
 
             if self.audio_option.get() != "disable":
                 audio_filter = f"atempo={speed}"
@@ -1284,6 +1389,28 @@ class VideoConverterApp:
         self.additional_filter_options.set(new_filters)
         self.additional_filter_options_entry.configure(text_color=TEXT_COLOR)
 
+    def _add_audio_filter(self, filter_str):
+
+        if self.audio_option.get() in ("disable", "copy"):
+            self.audio_option.set("aac_160k")
+        
+        current_filters = self.additional_audio_filter_options.get()
+        if current_filters == self.additional_audio_filter_options_placeholder:
+            current_filters = ""
+        
+        existing_filters = [f.strip() for f in current_filters.split(",") if f.strip()]
+        
+        if filter_str in existing_filters:
+            return
+        
+        if existing_filters:
+            new_filters = ",".join(existing_filters + [filter_str])
+        else:
+            new_filters = filter_str
+            
+        self.additional_audio_filter_options.set(new_filters)
+        self.additional_audio_filter_options_entry.configure(text_color=TEXT_COLOR)
+
     def _add_preview_option(self):
         current_options = self.additional_options.get()
         if current_options == self.additional_options_placeholder:
@@ -1296,6 +1423,26 @@ class VideoConverterApp:
         else:
             new_options = preview_option
             
+        self.additional_options.set(new_options)
+        self.additional_options_entry.configure(text_color=TEXT_COLOR)
+
+    def _add_additional_option(self, option_str):
+        current_options = self.additional_options.get()
+        
+        if current_options == self.additional_options_placeholder:
+            current_options = ""
+        
+        existing_options = current_options.split()
+        
+        option_name = option_str.split()[0]
+        for i, opt in enumerate(existing_options):
+            if opt == option_name:
+                existing_options[i:i+2] = option_str.split()
+                break
+        else:
+            existing_options.extend(option_str.split())
+        
+        new_options = " ".join(existing_options).strip()
         self.additional_options.set(new_options)
         self.additional_options_entry.configure(text_color=TEXT_COLOR)
 
@@ -1343,6 +1490,11 @@ class VideoConverterApp:
             self.ffmpeg_path_entry.configure(text_color=PLACEHOLDER_COLOR)
         else:
             self.ffmpeg_path_entry.configure(text_color=TEXT_COLOR)
+            # Save the path if it exists
+            if os.path.exists(current_text) and os.path.isfile(current_text):
+                self._save_ffmpeg_path(current_text)
+                self.ffmpeg_path = current_text
+                self.ffprobe_path = os.path.join(os.path.dirname(current_text), "ffprobe.exe")
     
     def _on_options_entry_focus_in(self, event):
         current_text = self.additional_options.get()
@@ -1410,6 +1562,38 @@ class VideoConverterApp:
             return None
         except FileNotFoundError:
             return None
+        
+    def _save_ffmpeg_path(self, path):
+        """Save FFmpeg path to a file in the program directory"""
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            path_file = os.path.join(script_dir, "ffmpeg_path.txt")
+            with open(path_file, 'w') as f:
+                f.write(path)
+        except Exception as e:
+            print(f"Error saving FFmpeg path: {e}")
+
+    def _load_ffmpeg_path(self):
+        """Load FFmpeg path from file if it exists and is valid"""
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            path_file = os.path.join(script_dir, "ffmpeg_path.txt")
+            
+            if os.path.exists(path_file):
+                with open(path_file, 'r') as f:
+                    saved_path = f.read().strip()
+                
+                if os.path.exists(saved_path) and os.path.isfile(saved_path):
+                    self.ffmpeg_path = saved_path
+                    ffprobe_path = os.path.join(os.path.dirname(saved_path), "ffprobe.exe")
+                    if os.path.exists(ffprobe_path):
+                        self.ffprobe_path = ffprobe_path
+                    else:
+                        self.ffprobe_path = None
+                    return saved_path
+        except Exception as e:
+            print(f"Error loading FFmpeg path: {e}")
+        return None
 
     def _browse_input(self):
         filename = filedialog.askopenfilename(
@@ -1448,12 +1632,15 @@ class VideoConverterApp:
             normalized_path = os.path.normpath(filename)
             self.ffmpeg_custom_path.set(normalized_path)
             self.ffmpeg_path_entry.configure(text_color=TEXT_COLOR)
-            self.ffmpeg_path = normalized_path  # Update the actual ffmpeg path
+            self.ffmpeg_path = normalized_path
             
-            # ffprobe
+            self._save_ffmpeg_path(normalized_path)
+            
             ffprobe_path = os.path.join(os.path.dirname(normalized_path), "ffprobe.exe")
             if os.path.exists(ffprobe_path):
                 self.ffprobe_path = ffprobe_path
+            else:
+                self.ffprobe_path = None
 
     def _toggle_encoder_options_frame(self):
         if self.enable_encoder_options.get():
@@ -1521,7 +1708,7 @@ class VideoConverterApp:
             self.is_converting = False
             self.status_text.set("Conversion cancelled")
             self.progress_frame.grid_remove()
-            self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a")
+            self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN)
 
     def _update_progress(self, line):
         if "time=" in line:
@@ -1669,33 +1856,33 @@ class VideoConverterApp:
                 self.master.after(0, lambda: self.status_text.set("Conversion complete!"))
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a"))
+                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN))
                 self.master.after(0, lambda: messagebox.showinfo("Done", "Video converted successfully!"))
             elif not self.is_converting:
                 self.master.after(0, lambda: self.status_text.set("Conversion cancelled by user"))
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a"))
+                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN))
                 self.master.after(0, lambda: messagebox.showinfo("Cancelled", "Conversion was cancelled"))
             else:
                 self.master.after(0, lambda: self.status_text.set("Conversion error!"))
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a"))
+                self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN))
                 self.master.after(0, lambda: messagebox.showerror("Error", f"FFmpeg exited with error code {self.conversion_process.returncode}.\nLast output: {last_line}"))
             self.is_converting = False
         except FileNotFoundError:
             self.master.after(0, lambda: self.status_text.set("Error: ffmpeg.exe not found."))
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
-            self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a"))
+            self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN))
             self.master.after(0, lambda: messagebox.showerror("Error", "ffmpeg.exe not found. Ensure it's in the program folder or system PATH."))
             self.is_converting = False
         except Exception as e:
             self.master.after(0, lambda: self.status_text.set(f"An unexpected error occurred: {e}"))
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
-            self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color="#47a32a"))
+            self.master.after(0, lambda: self.convert_button.configure(text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN))
             self.master.after(0, lambda: messagebox.showerror("Unexpected Error", f"An unexpected error occurred:\n{e}"))
             self.is_converting = False
 
@@ -1726,8 +1913,8 @@ class VideoConverterApp:
             text="Close",
             command=help_window.destroy,
             fg_color=ACCENT_GREEN,
-            hover_color="#47a32a",
-            text_color="black",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
         )
         close_btn.pack(pady=10)
         
@@ -1857,7 +2044,7 @@ class VideoConverterApp:
             
             # Reset all settings to their initial values
             self.bitrate.set("6000")
-            self.audio_option.set("aac_96k")
+            self.audio_option.set("copy")
             self.custom_abitrate.set("160")
             
             # Reset encoder options
@@ -1938,7 +2125,7 @@ class VideoConverterApp:
             self.strict_gop.set(False)
             
             # Audio
-            self.audio_option.set("aac_96k")
+            self.audio_option.set("aac_160k")
             
             # Filters
             #self.additional_filter_options.set("unsharp=5:5:1.25:3:3:0.0,eq=saturation=1.25")
@@ -2018,7 +2205,7 @@ class VideoConverterApp:
             self.strict_gop.set(False)
             
             # Audio
-            self.audio_option.set("aac_96k")
+            self.audio_option.set("aac_160k")
             
             # Filters
             #self.additional_filter_options.set("unsharp=5:5:1.25:3:3:0.0,eq=saturation=1.25")
