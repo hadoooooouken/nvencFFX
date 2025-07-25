@@ -22,7 +22,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ---
 
-## Features
+## Features 🎥
 
 * **Intuitive GUI:** Easy-to-use interface built with `customtkinter` for a smooth user experience.
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
@@ -47,7 +47,7 @@ To use the nvencFF Toolbox, you will need:
 
 ### Installation
 
-#### 1. Download the Executable (Recommended)
+#### 1. Download the Executable (Recommended) 🚀
 
 The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFF-Toolbox/-/releases) page.
 
@@ -55,7 +55,7 @@ The easiest way to get started is to download the latest release executable (`.e
 2.  Download the `nvencFF_Toolbox.exe` file.
 3.  Run the executable.
 
-#### 2. Run from Source (For Developers)
+#### 2. Run from Source (For Developers) 🔧
 
 If you want to run the application from its Python source code:
 
@@ -74,7 +74,7 @@ If you want to run the application from its Python source code:
     python "nvencFF Toolbox.py"
     ```
 
-### Building Executable (For Developers)
+### Building Executable (For Developers) 🔧
 
 You can compile the Python script into a standalone Windows executable (`.exe`) using **Nuitka**.
 
@@ -102,7 +102,7 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
 
 ---
 
-## Usage
+## Usage 🎥
 
 1.  **Launch the application:** Run the `.exe` file or `nvencFF Toolbox.py`.
 2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
@@ -113,6 +113,19 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
     * **Additional FFmpeg Options:** Add any extra FFmpeg commands you need (e.g., `-aq-strength 8; -cq 0; -bf 0 or -bf 4; -intra-refresh 1; -forced-idr 1`).
 5.  **Start Processing:** Click the "Convert" button to begin the video encoding.
 6.  **Monitor Progress:** The console output within the application will show the FFmpeg progress.
+
+---
+
+##  Easy access via Windows "Send to" context menu 📁
+
+![sendto](screenshots/sendto.png)
+
+1. Press **Win+R**, type:
+   ```
+   %APPDATA%\Microsoft\Windows\SendTo
+   ```
+2. Modify APP_PATH in "Send to nvencFF Toolbox.bat" script and create shortcut to it here.
+3. You can rename it and set custom icon.
 
 ---
 
