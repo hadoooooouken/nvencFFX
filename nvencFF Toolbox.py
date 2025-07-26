@@ -13,16 +13,6 @@ import win32gui
 import win32api
 
 
-# Set DPI awareness for proper scaling on high-DPI displays
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except:
-        pass
-
-
 # UI Theme and Colors
 ctk.set_appearance_mode("dark")
 PRIMARY_BG = "#0e1113"
@@ -1035,6 +1025,17 @@ class VideoConverterApp:
             width=100
         ).pack(side="left", padx=(10, 0))
 
+        # Add HDR to SDR button here
+        ctk.CTkButton(
+            speed_buttons_frame_2,
+            text="HDR to SDR",
+            command=self._apply_hdr_to_sdr,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_BUTTON,
+            width=100
+        ).pack(side="left", padx=(10, 0))
+
         # Presets Section
         presets_frame_toggle = ctk.CTkCheckBox(
             main_frame,
@@ -1125,48 +1126,103 @@ class VideoConverterApp:
         try:
             command = self._build_ffmpeg_command(preview=True)
             output_window = ctk.CTkToplevel(self.master)
-            output_window.title("FFmpeg Command Preview")
-            output_window.geometry("800x400")
+            output_window.title("FFmpeg Command Preview - Editable")
+            output_window.geometry("850x550")
             output_window.transient(self.master)
             output_window.grab_set()
             
             text_frame = ctk.CTkFrame(output_window)
             text_frame.pack(fill="both", expand=True, padx=10, pady=10)
             
-            text_scroll = ctk.CTkScrollableFrame(text_frame)
-            text_scroll.pack(fill="both", expand=True)
-            
-            command_text = ctk.CTkLabel(
-                text_scroll,
-                text=" ".join(command),
-                justify="left",
-                wraplength=750,
-                anchor="w"
-            )
-            command_text.pack(fill="both", expand=True, padx=5, pady=5)
-            
-            copy_btn = ctk.CTkButton(
+            ctk.CTkLabel(
                 text_frame,
+                text="You can edit the command below:",
+                font=("", 14, "bold")
+            ).pack(pady=(0, 5))
+            
+            self.command_textbox = ctk.CTkTextbox(
+                text_frame,
+                wrap="word",
+                font=("Consolas", 14),
+                height=300
+            )
+            self.command_textbox.pack(fill="both", expand=True, padx=5, pady=5)
+            self.command_textbox.insert("1.0", " ".join(command))
+                        
+            button_frame = ctk.CTkFrame(text_frame)
+            button_frame.pack(fill="x", pady=10)
+            
+            ctk.CTkButton(
+                button_frame,
                 text="Copy to Clipboard",
-                command=lambda: self.master.clipboard_clear() or self.master.clipboard_append(" ".join(command)),
+                command=self._copy_command_to_clipboard,
                 fg_color=ACCENT_GREEN,
                 hover_color=HOVER_GREEN,
-                text_color=TEXT_BUTTON
-            )
-            copy_btn.pack(pady=10)
+                text_color=TEXT_BUTTON,
+                width=150
+            ).pack(side="left", padx=5)
             
-            close_btn = ctk.CTkButton(
-                text_frame,
+            ctk.CTkButton(
+                button_frame,
+                text="Apply Changes",
+                command=lambda: self._apply_command_changes(output_window),
+                fg_color=ACCENT_GREEN,
+                hover_color=HOVER_GREEN,
+                text_color=TEXT_BUTTON,
+                width=150
+            ).pack(side="left", padx=5)
+            
+            ctk.CTkButton(
+                button_frame,
                 text="Close",
                 command=output_window.destroy,
-                fg_color=ACCENT_GREEN,
-                hover_color=HOVER_GREEN,
-                text_color=TEXT_BUTTON
-            )
-            close_btn.pack(pady=5)
+                fg_color="#b2b2b2",
+                hover_color="#8e8e8e",
+                text_color=TEXT_BUTTON,
+                width=100
+            ).pack(side="right", padx=5)
             
         except Exception as e:
             messagebox.showerror("Error", f"Could not generate command: {str(e)}")
+
+    def _copy_command_to_clipboard(self):
+        command = self.command_textbox.get("1.0", "end-1c")
+        self.master.clipboard_clear()
+        self.master.clipboard_append(command)
+        messagebox.showinfo("Copied", "Command copied to clipboard!")
+
+    def _apply_command_changes(self, window):
+        new_command = self.command_textbox.get("1.0", "end-1c").strip()
+        if not new_command:
+            messagebox.showwarning("Warning", "Command is empty!")
+            return
+        
+        try:
+            import shlex
+            args = shlex.split(new_command)
+            
+            if len(args) < 3:
+                raise ValueError("Command too short - not a valid FFmpeg command")
+                
+            has_input = False
+            has_output = False
+            for i, arg in enumerate(args):
+                if arg == "-i" and i < len(args)-1:
+                    has_input = True
+                if not arg.startswith("-") and i > 0 and args[i-1] != "-i":
+                    has_output = True
+                    
+            if not has_input:
+                raise ValueError("Missing input file (-i option)")
+            if not has_output:
+                raise ValueError("Missing output file")
+                
+            self.ffmpeg_output.set("Custom command applied: " + " ".join(args))
+            messagebox.showinfo("Success", "Command changes applied!")
+            window.destroy()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid command: {str(e)}\n\nPlease check:\n1. Input file (-i option)\n2. Output file path\n3. Valid FFmpeg arguments")
 
     def _build_ffmpeg_command(self, preview=False):
         # Use custom path if specified, otherwise use found path
@@ -1186,7 +1242,7 @@ class VideoConverterApp:
         command = [
             ffmpeg_path,
             "-hwaccel", "cuda",
-            "-hwaccel_output_format", "nv12",
+            "-hwaccel_output_format", "p010le" if hasattr(self, 'hdr_mode') and self.hdr_mode else "nv12",
             "-threads", "4",
             "-y", "-i", input_f,
         ]
@@ -2307,6 +2363,12 @@ class VideoConverterApp:
         options_str = re.sub(r'-c\s+copy', '', options_str)
         options_str = ' '.join(options_str.split())
         return options_str.strip()
+    
+    def _apply_hdr_to_sdr(self):
+        """Apply HDR to SDR conversion settings"""
+        hdr_filter = "zscale=transfer=linear:npl=100,tonemap=tonemap=hable:desat=0,zscale=transfer=bt709:matrix=bt709:primaries=bt709"
+        self._add_video_filter(hdr_filter)
+        self.hdr_mode = True
 
 def get_icon_path():
     if getattr(sys, 'frozen', False):
@@ -2324,4 +2386,5 @@ if os.path.exists(icon_path):
 else:
     print(f"icon not found: {icon_path}")
 
+root.protocol("WM_DELETE_WINDOW", root.quit)
 root.mainloop()
