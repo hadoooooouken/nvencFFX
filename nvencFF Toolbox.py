@@ -1351,7 +1351,6 @@ class VideoConverterApp:
             "-multipass:v", self.multipass.get(),
             "-rc:v", self.rc.get(),
             "-lookahead_level:v", self.lookahead_level.get(),
-            *(["-b_adapt", "0"] if self.lookahead_level.get() != "-1" and self.video_codec.get() in ["h264", "h264_nvenc","av1","av1_nvenc"] else []),
             "-b:v", f"{bitrate_val}k",
             "-maxrate:v", f"{maxrate_val}k",
             "-bufsize:v", f"{bufsize_val}k",
@@ -2026,6 +2025,10 @@ class VideoConverterApp:
             # Show profile menu for HEVC
             self.profile_option_menu.grid()
             ctk.CTkLabel(self.encoder_options_frame.winfo_children()[0], text="Profile:").grid(row=2, column=0, sticky="w", padx=5, pady=2)
+
+            # Show lookahead controls for HEVC
+            self.lookahead_level_label.grid()
+            self.lookahead_level_menu.grid()
             
         elif self.video_codec.get() == "av1":
             # AV1 settings
@@ -2045,6 +2048,10 @@ class VideoConverterApp:
             for child in self.encoder_options_frame.winfo_children()[0].winfo_children():
                 if isinstance(child, ctk.CTkLabel) and child.cget("text") == "Profile:":
                     child.grid_remove()
+
+            # Show lookahead controls for AV1
+            self.lookahead_level_label.grid()
+            self.lookahead_level_menu.grid()
                     
         else:
             # H.264 settings
@@ -2061,6 +2068,11 @@ class VideoConverterApp:
             # Show profile menu for H.264
             self.profile_option_menu.grid()
             ctk.CTkLabel(self.encoder_options_frame.winfo_children()[0], text="Profile:").grid(row=2, column=0, sticky="w", padx=5, pady=2)
+
+            # Hide lookahead controls for H.264 and force -1
+            self.lookahead_level_label.grid_remove()
+            self.lookahead_level_menu.grid_remove()
+            self.lookahead_level.set("-1")
 
     def _update_output_filename(self, *args):
         if self.input_file.get() and not self.input_file.get().startswith("Drag and drop"):
@@ -2210,7 +2222,8 @@ class VideoConverterApp:
             self.tier.set("1")
             self.multipass.set("fullres")
             self.rc.set("vbr")
-            self.lookahead_level.set("3")
+            if self.video_codec.get() != "h264":
+                self.lookahead_level.set("3")
             
             # Flags
             self.spatial_aq.set(True)
@@ -2290,7 +2303,8 @@ class VideoConverterApp:
             self.tier.set("1")
             self.multipass.set("fullres")
             self.rc.set("vbr")
-            self.lookahead_level.set("3")
+            if self.video_codec.get() != "h264":
+                self.lookahead_level.set("3")
             
             # Flags
             self.spatial_aq.set(True)
