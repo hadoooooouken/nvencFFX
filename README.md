@@ -86,17 +86,17 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
     Navigate to the project's root directory in your terminal and run the following command. This command configures Nuitka to create a standalone, single-file executable with disabled console mode, include necessary packages, set application metadata, and specify an icon.
 
     ```
-    nuitka --msvc=latest --standalone --onefile --windows-console-mode=disable ^
-    --include-package=customtkinter --enable-plugin=tk-inter ^
-    --windows-icon-from-ico="icon.ico" ^
-    --include-data-file=icon.ico=./ ^
-    --product-name="nvencFF Toolbox" ^
-    --product-version="1.0.2.2" ^
-    --file-version="1.0.2.2" ^
-    --file-description="nvencFF Toolbox" ^
-    --company-name="Deepseek Enjoyer" ^
-    --copyright="Copyright (C) 2025 hadouken" ^
-    --output-dir=build "nvencFF Toolbox.py"
+        E:\Python\python310\python.exe -m nuitka --msvc=latest --standalone --onefile --windows-console-mode=disable ^
+        --include-package=customtkinter --enable-plugin=tk-inter ^
+        --windows-icon-from-ico="icon.ico" ^
+        --include-data-file=icon.ico=./ ^
+        --product-name="nvencFF Toolbox" ^
+        --product-version="1.0.3.0" ^
+        --file-version="1.0.3.0" ^
+        --file-description="nvencFF Toolbox" ^
+        --company-name="Deepseek Enjoyer" ^
+        --copyright="Copyright (C) 2025 hadouken" ^
+        --output-dir=build "nvencFF Toolbox.py"
     ```
     The compiled executable will be found in the `build` directory specified by `--output-dir`.
 

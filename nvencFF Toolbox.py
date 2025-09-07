@@ -6,7 +6,6 @@ import os
 import threading
 import sys
 import math
-import ctypes
 from CTkToolTip import CTkToolTip
 import win32con
 import win32gui
@@ -220,6 +219,9 @@ class VideoConverterApp:
         self.trim_start = ctk.StringVar(value="00:00:00")
         self.trim_end = ctk.StringVar(value="00:00:00")
         self.trim_streamcopy = ctk.BooleanVar(value=False)
+        self.constant_qp_mode = ctk.BooleanVar(value=False)
+        self.quality_level = ctk.StringVar(value="30")
+        self.quality_level.trace_add("write", lambda *args: self._calculate_estimated_size())
 
     def _setup_keyboard_shortcuts(self):
         self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
@@ -333,15 +335,43 @@ class VideoConverterApp:
             text_color=TEXT_BUTTON,
         ).grid(row=2, column=2, padx=5, pady=5)
 
-        # Video Bitrate
-        ctk.CTkLabel(main_frame, text="Video Bitrate (k):").grid(row=3, column=0, sticky="w", padx=10, pady=5)
-        ctk.CTkEntry(
-            main_frame,
+        # Video Bitrate/Quality Level
+        self.bitrate_label = ctk.CTkLabel(main_frame, text="Video Bitrate (k):")
+        self.bitrate_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
+        
+        # Frame for bitrate/quality controls
+        bitrate_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        bitrate_frame.grid(row=3, column=1, sticky="w", padx=5, pady=5)
+        
+        self.bitrate_entry = ctk.CTkEntry(
+            bitrate_frame,
             textvariable=self.bitrate,
             width=80,
             fg_color=SECONDARY_BG,
             text_color=TEXT_COLOR,
-        ).grid(row=3, column=1, sticky="w", padx=5, pady=5)
+        )
+        self.bitrate_entry.pack(side="left")
+        
+        # Constant QP mode checkbox
+        self.constant_qp_checkbox = ctk.CTkCheckBox(
+            bitrate_frame,
+            text="Constant QP mode",
+            variable=self.constant_qp_mode,
+            command=self._toggle_constant_qp_mode,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+        )
+        self.constant_qp_checkbox.pack(side="left", padx=(10, 0))
+        
+        # Quality Level label and entry (hidden by default)
+        self.quality_level_label = ctk.CTkLabel(bitrate_frame, text="Quality Level:")
+        self.quality_level_entry = ctk.CTkEntry(
+            bitrate_frame,
+            textvariable=self.quality_level,
+            width=80,
+            fg_color=SECONDARY_BG,
+            text_color=TEXT_COLOR,
+        )
 
         ctk.CTkButton(
             main_frame,
@@ -1118,6 +1148,26 @@ class VideoConverterApp:
         self._toggle_additional_options_frame()
         self._toggle_presets_frame()
 
+    def _toggle_constant_qp_mode(self):
+        if self.constant_qp_mode.get():
+            # Switch to Constant QP mode - replace bitrate with quality
+            self.bitrate_label.configure(text="Quality Level:")
+            self.bitrate_entry.configure(textvariable=self.quality_level)
+            self.bitrate_entry.delete(0, "end")
+            self.bitrate_entry.insert(0, "30")
+            
+            # Disable file size estimation
+            self.estimated_file_size.set("Estimated size: Not available for CQP")
+        else:
+            # Switch back to normal mode - replace quality with bitrate
+            self.bitrate_label.configure(text="Video Bitrate (k):")
+            self.bitrate_entry.configure(textvariable=self.bitrate)
+            self.bitrate_entry.delete(0, "end")
+            self.bitrate_entry.insert(0, "6000")
+            
+            # Enable file size estimation
+            self._calculate_estimated_size()
+
     def _show_output_command(self):
         if not self.input_file.get():
             messagebox.showerror("Error", "Please select an input file first.")
@@ -1187,9 +1237,57 @@ class VideoConverterApp:
 
     def _copy_command_to_clipboard(self):
         command = self.command_textbox.get("1.0", "end-1c")
-        self.master.clipboard_clear()
-        self.master.clipboard_append(command)
-        messagebox.showinfo("Copied", "Command copied to clipboard!")
+        
+        # More reliable method: add quotes around file paths
+        import shlex
+        try:
+            # Parse command into parts while preserving quotes
+            parts = shlex.split(command, posix=False)
+            
+            # Rebuild with quotes around file paths
+            quoted_parts = []
+            i = 0
+            while i < len(parts):
+                part = parts[i]
+                
+                # Check if this looks like a file path (contains path separators or file extensions)
+                is_file_path = ('\\' in part or '/' in part or 
+                            part.endswith(('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', '.exe')))
+                
+                # Check if next part might be continuation of this path (like filename without extension)
+                if (i + 1 < len(parts) and 
+                    not parts[i+1].startswith('-') and 
+                    (parts[i+1].endswith(('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', '.exe')) or
+                    '\\' in parts[i] or '/' in parts[i])):
+                    # Combine path parts
+                    combined_path = f'{part} {parts[i+1]}'
+                    if not (combined_path.startswith('"') and combined_path.endswith('"')):
+                        combined_path = f'"{combined_path}"'
+                    quoted_parts.append(combined_path)
+                    i += 2
+                    continue
+                
+                if is_file_path:
+                    # Add quotes if not already quoted
+                    if not (part.startswith('"') and part.endswith('"')):
+                        part = f'"{part}"'
+                
+                quoted_parts.append(part)
+                i += 1
+            
+            command_with_quotes = ' '.join(quoted_parts)
+            self.master.clipboard_clear()
+            self.master.clipboard_append(command_with_quotes)
+            messagebox.showinfo("Copied", "Command copied to clipboard!")
+            
+        except Exception as e:
+            # Fallback if parsing fails - use simple regex approach
+            import re
+            # Find paths that look like file paths and add quotes
+            command_with_quotes = re.sub(r'([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})', r'"\1"', command)
+            self.master.clipboard_clear()
+            self.master.clipboard_append(command_with_quotes)
+            messagebox.showinfo("Copied", "Command copied to clipboard!")
 
     def _apply_command_changes(self, window):
         new_command = self.command_textbox.get("1.0", "end-1c").strip()
@@ -1281,13 +1379,24 @@ class VideoConverterApp:
             return command
         
         # Normal encoding path
-        bitrate_val = self.bitrate.get()
-        try:
-            bitrate_int = int(bitrate_val)
-            maxrate_val = math.ceil(bitrate_int * 1.2)
-            bufsize_val = math.ceil(maxrate_val * 2)
-        except ValueError:
-            raise ValueError("Video bitrate must be a number.")
+        if self.constant_qp_mode.get():
+            # Constant QP mode
+            quality_val = self.quality_level.get()
+            try:
+                quality_int = int(quality_val)
+                if not (0 <= quality_int <= 51):
+                    raise ValueError("Quality level must be between 0 and 51")
+            except ValueError:
+                raise ValueError("Quality level must be a number between 0 and 51")
+        else:
+            # Normal VBR/CBR mode
+            bitrate_val = self.bitrate.get()
+            try:
+                bitrate_int = int(bitrate_val)
+                maxrate_val = math.ceil(bitrate_int * 1.2)
+                bufsize_val = math.ceil(maxrate_val * 2)
+            except ValueError:
+                raise ValueError("Video bitrate must be a number.")
 
         profile_map = {
             "main": "nv12",
@@ -1324,6 +1433,7 @@ class VideoConverterApp:
         if vf_filters:
             command.extend(["-vf", ",".join(vf_filters)])
             
+        # Add encoder settings based on mode
         command.extend([
             "-c:v", "hevc_nvenc" if self.video_codec.get() == "hevc" else "av1_nvenc" if self.video_codec.get() == "av1" else "h264_nvenc",
             "-preset:v", self.preset.get(),
@@ -1338,6 +1448,21 @@ class VideoConverterApp:
                 
         else:
             command.extend(["-coder:v", self.coder.get()])
+        
+        # Add rate control parameters based on mode
+        if self.constant_qp_mode.get():
+            command.extend([
+                "-rc:v", "constqp",
+                "-qp:v", quality_val,
+            ])
+        else:
+            command.extend([
+                "-multipass:v", self.multipass.get(),
+                "-rc:v", self.rc.get(),
+                "-b:v", f"{bitrate_val}k",
+                "-maxrate:v", f"{maxrate_val}k",
+                "-bufsize:v", f"{bufsize_val}k",
+            ])
             
         command.extend([
             "-profile:v", self.profile.get(),
@@ -1348,12 +1473,7 @@ class VideoConverterApp:
             "-weighted_pred:v", "1" if self.weighted_pred.get() else "0",
             *(["-bf", "0"] if self.weighted_pred.get() else []),
             "-highbitdepth:v", "1" if self.highbitdepth.get() else "0",
-            "-multipass:v", self.multipass.get(),
-            "-rc:v", self.rc.get(),
             "-lookahead_level:v", self.lookahead_level.get(),
-            "-b:v", f"{bitrate_val}k",
-            "-maxrate:v", f"{maxrate_val}k",
-            "-bufsize:v", f"{bufsize_val}k",
         ])
         
         if self.enable_additional_options.get():
@@ -1804,6 +1924,10 @@ class VideoConverterApp:
             self.total_duration = 0
 
     def _calculate_estimated_size(self):
+        if self.constant_qp_mode.get():
+            self.estimated_file_size.set("Estimated size: Not available for CQP")
+            return
+            
         input_f = self.input_file.get()
         bitrate_val = self.bitrate.get()
         
