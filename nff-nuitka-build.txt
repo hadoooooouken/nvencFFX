@@ -3,8 +3,8 @@ E:\Python\python310\python.exe -m nuitka --msvc=latest --standalone --onefile --
 --windows-icon-from-ico="icon.ico" ^
 --include-data-file=icon.ico=./ ^
 --product-name="nvencFF Toolbox" ^
---product-version="1.0.3.0" ^
---file-version="1.0.3.0" ^
+--product-version="1.0.3.1" ^
+--file-version="1.0.3.1" ^
 --file-description="nvencFF Toolbox" ^
 --company-name="Deepseek Enjoyer" ^
 --copyright="Copyright (C) 2025 hadouken" ^
