@@ -2345,7 +2345,7 @@ class VideoConverterApp:
                 try:
                     duration = float(duration_str)
                     audio_bitrate_for_estimation = 160
-                    # Используем переданные аргументы вместо .get()
+                    
                     if audio_option == "custom":
                         try:
                             audio_bitrate_for_estimation = int(custom_abitrate)
