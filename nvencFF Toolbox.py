@@ -4,12 +4,13 @@ import subprocess
 import os
 import threading
 import sys
-import math
-from CTkToolTip import CTkToolTip
 import win32con
 import win32gui
 import win32api
 import re
+from PIL import Image
+import tempfile
+import shlex
 
 # UI Theme and Colors
 ctk.set_appearance_mode("dark")
@@ -76,10 +77,11 @@ class VideoConverterApp:
             )
             self.output_file.set(output_path)
             self.trim_start.set("00:00:00")
-            if hasattr(self, "total_duration"):
-                delattr(self, "total_duration")
+            self.total_duration = 0
             self.status_text.set("File selected. Ready for conversion.")
             self._calculate_estimated_size()
+            self._set_trim_end_to_duration()
+
         else:
             messagebox.showwarning(
                 "Unsupported File", "Please drop a video file (.mp4, .mkv, .avi, etc.)"
@@ -118,6 +120,8 @@ class VideoConverterApp:
             self.master.geometry(f"800x{required_height}")
 
     def __init__(self, master):
+        self.preview_job = None  # used for debouncing preview creation
+        self.video_metadata_cache = {}
         self.master = master
         master.title("nvencFF Toolbox")
         master.geometry("800x600")
@@ -176,7 +180,7 @@ class VideoConverterApp:
 
         self._center_window()
         self.drop_target = DropTarget(self.master.winfo_id(), self._handle_dropped_file)
-
+        self._create_thumbnail_preview()
         self._setup_keyboard_shortcuts()
 
         if len(sys.argv) > 1:
@@ -280,7 +284,7 @@ class VideoConverterApp:
                 if hasattr(widget, "delete"):
                     widget.delete(0, "end")
                 widget.insert("insert", text)
-            except tk.TclError:
+            except ctk.TclError:
                 pass
 
     def _create_widgets(self):
@@ -948,6 +952,10 @@ class VideoConverterApp:
             text_color=TEXT_COLOR,
         )
         start_entry.grid(row=2, column=3, padx=5)
+        start_entry.bind(
+            "<Return>",
+            lambda e: self._validate_and_update_trim_time(self.trim_start, True),
+        )
 
         # End time
         ctk.CTkLabel(trim_frame, text="To:").grid(row=2, column=4, padx=10)
@@ -959,6 +967,18 @@ class VideoConverterApp:
             text_color=TEXT_COLOR,
         )
         end_entry.grid(row=2, column=5)
+        end_entry.bind(
+            "<Return>",
+            lambda e: self._validate_and_update_trim_time(self.trim_end, False),
+        )
+
+        # Add validation on focus out
+        start_entry.bind(
+            "<FocusOut>", lambda e: self._validate_trim_time(self.trim_start, True)
+        )
+        end_entry.bind(
+            "<FocusOut>", lambda e: self._validate_trim_time(self.trim_end, False)
+        )
 
         # Trim button
         ctk.CTkButton(
@@ -1364,9 +1384,6 @@ class VideoConverterApp:
     def _copy_command_to_clipboard(self):
         command = self.command_textbox.get("1.0", "end-1c")
 
-        # More reliable method: add quotes around file paths
-        import shlex
-
         try:
             # Parse command into parts while preserving quotes
             parts = shlex.split(command, posix=False)
@@ -1455,7 +1472,6 @@ class VideoConverterApp:
             return
 
         try:
-            import shlex
 
             args = shlex.split(new_command)
 
@@ -1566,8 +1582,8 @@ class VideoConverterApp:
             bitrate_val = self.bitrate.get()
             try:
                 bitrate_int = int(bitrate_val)
-                maxrate_val = math.ceil(bitrate_int * 1.2)
-                bufsize_val = math.ceil(maxrate_val * 2)
+                maxrate_val = (bitrate_int * 12 + 9) // 10
+                bufsize_val = maxrate_val * 2
             except ValueError:
                 raise ValueError("Video bitrate must be a number.")
 
@@ -2079,16 +2095,11 @@ class VideoConverterApp:
                 )
             )
             self.output_file.set(output_path)
-
             self.trim_start.set("00:00:00")
-
-            if hasattr(self, "total_duration"):
-                delattr(self, "total_duration")
-
+            self.total_duration = 0
             self.status_text.set("File selected. Ready for conversion.")
             self._calculate_estimated_size()
             self._set_trim_end_to_duration()
-            self._update_trim_slider()
 
     def _browse_output(self):
         default_name = (
@@ -2228,6 +2239,18 @@ class VideoConverterApp:
     def _get_video_duration(self):
         if not self.ffprobe_path:
             return
+
+        input_file = self.input_file.get()
+        if not input_file or input_file.startswith("Drag and drop"):
+            return
+
+        # Check cache first
+        if input_file in self.video_metadata_cache:
+            self.total_duration = self.video_metadata_cache[input_file]
+            if hasattr(self, "trim_canvas"):
+                self.master.after(100, self._update_trim_slider)
+            return
+
         command = [
             self.ffprobe_path,
             "-v",
@@ -2236,8 +2259,9 @@ class VideoConverterApp:
             "format=duration",
             "-of",
             "default=noprint_wrappers=1:nokey=1",
-            self.input_file.get(),
+            input_file,
         ]
+
         try:
             result = subprocess.run(
                 command,
@@ -2247,6 +2271,9 @@ class VideoConverterApp:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             self.total_duration = float(result.stdout.strip())
+            # Cache the result
+            self.video_metadata_cache[input_file] = self.total_duration
+
             if hasattr(self, "trim_canvas"):
                 self.master.after(100, self._update_trim_slider)
         except:
@@ -2274,11 +2301,17 @@ class VideoConverterApp:
             self.estimated_file_size.set("")
             return
 
+        audio_opt = self.audio_option.get()
+        custom_ab = self.custom_abitrate.get()
+
         threading.Thread(
-            target=self._run_ffprobe_for_size, args=(input_f, bitrate_int)
+            target=self._run_ffprobe_for_size,
+            args=(input_f, bitrate_int, audio_opt, custom_ab),
         ).start()
 
-    def _run_ffprobe_for_size(self, input_f, bitrate_int):
+    def _run_ffprobe_for_size(
+        self, input_f, bitrate_int, audio_option, custom_abitrate
+    ):
         command = [
             self.ffprobe_path,
             "-v",
@@ -2312,19 +2345,19 @@ class VideoConverterApp:
                 try:
                     duration = float(duration_str)
                     audio_bitrate_for_estimation = 160
-                    if self.audio_option.get() == "custom":
+                    # Используем переданные аргументы вместо .get()
+                    if audio_option == "custom":
                         try:
-                            audio_bitrate_for_estimation = int(
-                                self.custom_abitrate.get()
-                            )
+                            audio_bitrate_for_estimation = int(custom_abitrate)
                         except ValueError:
                             pass
-                    elif self.audio_option.get() == "aac_256k":
+                    elif audio_option == "aac_256k":
                         audio_bitrate_for_estimation = 256
-                    elif self.audio_option.get() == "aac_96k":
+                    elif audio_option == "aac_96k":
                         audio_bitrate_for_estimation = 96
-                    elif self.audio_option.get() == "disable":
+                    elif audio_option == "disable":
                         audio_bitrate_for_estimation = 0
+
                     filesize_mb = (
                         (bitrate_int + audio_bitrate_for_estimation)
                         * duration
@@ -2986,15 +3019,14 @@ class VideoConverterApp:
 
     def _add_trim_options(self):
         """Add trim options to the additional options field"""
+        # Validate both times first
+        if not self._validate_trim_time(
+            self.trim_start, True
+        ) or not self._validate_trim_time(self.trim_end, False):
+            return
+
         start_time = self.trim_start.get()
         end_time = self.trim_end.get()
-
-        if not (
-            self._validate_time_format(start_time)
-            and self._validate_time_format(end_time)
-        ):
-            messagebox.showerror("Error", "Time format should be HH:MM:SS")
-            return
 
         trim_options = f"-ss {start_time} -to {end_time}"
 
@@ -3024,6 +3056,57 @@ class VideoConverterApp:
             return 0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60
         except ValueError:
             return False
+
+    def _validate_trim_time(self, time_var, is_start):
+        """Validate time input only when field loses focus"""
+        time_str = time_var.get()
+
+        # Skip validation if field is empty or doesn't contain colons
+        if not time_str or ":" not in time_str:
+            return True
+
+        # Validate time format
+        if not self._validate_time_format(time_str):
+            messagebox.showerror("Error", "Time format should be HH:MM:SS")
+            return False
+
+        # Convert to seconds
+        time_seconds = self._time_str_to_seconds(time_str)
+
+        # Get video duration
+        duration = self._get_video_duration_safe()
+
+        # Check if time exceeds video duration
+        if duration > 0 and time_seconds > duration:
+            messagebox.showerror(
+                "Error",
+                f"Time exceeds video duration ({self._seconds_to_time_str(duration)})",
+            )
+            return False
+
+        # Get the other time value
+        other_time_str = self.trim_end.get() if is_start else self.trim_start.get()
+
+        # Only validate against other time if it's also valid
+        if (
+            other_time_str
+            and ":" in other_time_str
+            and self._validate_time_format(other_time_str)
+        ):
+            other_time_seconds = self._time_str_to_seconds(other_time_str)
+
+            if is_start and time_seconds >= other_time_seconds:
+                messagebox.showerror("Error", "Start time must be before end time")
+                return False
+            elif not is_start and time_seconds <= other_time_seconds:
+                messagebox.showerror("Error", "End time must be after start time")
+                return False
+
+        # Update slider if it exists
+        if hasattr(self, "trim_canvas"):
+            self.master.after(100, self._draw_trim_slider)
+
+        return True
 
     def _remove_existing_trim_options(self, options_str):
         """Remove any existing trim-related options from the string"""
@@ -3063,7 +3146,6 @@ class VideoConverterApp:
             fg_color="#1f6aa5",
             hover_color="#2a7ab9",
             text_color=TEXT_COLOR,
-            corner_radius=8,
         )
         self.trim_reset_btn.pack(side="right", padx=(0, 4))
 
@@ -3073,6 +3155,119 @@ class VideoConverterApp:
         # Bind mouse events
         self.trim_canvas.bind("<Button-1>", self._on_slider_click)
         self.trim_canvas.bind("<B1-Motion>", self._on_slider_drag)
+
+        # Add preview bindings
+        self.trim_canvas.bind("<ButtonRelease-1>", self._on_slider_release)
+        self.trim_canvas.bind("<Leave>", lambda e: self._hide_thumbnail_preview())
+
+    def _create_thumbnail_preview(self):
+        """Create a thumbnail preview window"""
+        self.preview_window = None
+        self.preview_label = None
+        self.preview_visible = False
+
+    def _show_thumbnail_preview(self, x_pos, time_seconds):
+        """Show thumbnail preview at specified position and time"""
+        self.preview_job = None
+        if not self.input_file.get() or self.input_file.get().startswith(
+            "Drag and drop"
+        ):
+            return
+
+        if not self.ffmpeg_path:
+            return
+
+        # Create preview window if it doesn't exist
+        if not self.preview_window:
+            self.preview_window = ctk.CTkToplevel(self.master)
+            self.preview_window.title("Preview")
+            self.preview_window.overrideredirect(True)
+            self.preview_window.attributes("-topmost", True)
+            self.preview_window.configure(fg_color=PRIMARY_BG)
+
+            self.preview_label = ctk.CTkLabel(
+                self.preview_window,
+                text="",
+                width=352,
+                height=198,
+                fg_color=SECONDARY_BG,
+                corner_radius=0,
+            )
+            self.preview_label.pack(padx=0, pady=0)
+            self.preview_window.geometry("352x198")
+
+        # Generate thumbnail
+        try:
+            temp_dir = tempfile.gettempdir()
+            temp_thumb = os.path.join(temp_dir, "nvencff_thumb.jpg")
+
+            # Use ffmpeg to extract frame
+            cmd = [
+                self.ffmpeg_path,
+                "-ss",
+                str(time_seconds),
+                "-i",
+                self.input_file.get(),
+                "-vframes",
+                "1",
+                "-vf",
+                "scale=352:-1",
+                "-q:v",
+                "2",
+                "-y",
+                temp_thumb,
+            ]
+
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+
+            # Load and display thumbnail
+            if os.path.exists(temp_thumb):
+                thumb_image = ctk.CTkImage(
+                    light_image=Image.open(temp_thumb), size=(352, 198)
+                )
+                self.preview_label.configure(image=thumb_image, text="")
+
+                # Position preview above slider handle
+                slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
+                slider_y = self.trim_canvas.winfo_rooty() - 208
+
+                self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
+                self.preview_window.deiconify()
+                self.preview_visible = True
+
+                # Clean up temporary file
+                try:
+                    os.remove(temp_thumb)
+                except:
+                    pass
+
+        except Exception as e:
+            print(f"Error generating preview: {e}")
+            self.preview_label.configure(text="Preview\nunavailable")
+
+    def _schedule_thumbnail_preview(self, x_pos, time_seconds, delay=200):
+        """Debounce thumbnail generation: cancel previous and schedule new one."""
+        try:
+            # cancel any pending scheduled preview
+            if getattr(self, "preview_job", None):
+                self.master.after_cancel(self.preview_job)
+        except Exception:
+            pass
+
+        # schedule a new preview after `delay` ms
+        self.preview_job = self.master.after(
+            delay, lambda: self._show_thumbnail_preview(x_pos, time_seconds)
+        )
+
+    def _hide_thumbnail_preview(self):
+        """Hide the thumbnail preview"""
+        if self.preview_window and self.preview_visible:
+            self.preview_window.withdraw()
+            self.preview_visible = False
 
     def _draw_trim_slider(self):
         """Draw the trim slider with current positions"""
@@ -3151,6 +3346,113 @@ class VideoConverterApp:
         except:
             return 0
 
+    def _validate_time_format(self, time_str):
+        """Simple validation for HH:MM:SS format"""
+        if not time_str or not isinstance(time_str, str):
+            return False
+
+        parts = time_str.split(":")
+        if len(parts) != 3:
+            return False
+
+        try:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+            return 0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60
+        except ValueError:
+            return False
+
+    def _get_video_duration_safe(self):
+        """Safely get video duration without blocking the UI"""
+        if (
+            not self.ffprobe_path
+            or not self.input_file.get()
+            or self.input_file.get().startswith("Drag and drop")
+        ):
+            return 0
+
+        # Check cache first
+        input_file = self.input_file.get()
+        if input_file in self.video_metadata_cache:
+            return self.video_metadata_cache[input_file]
+
+        # If not in cache, try to get it
+        try:
+            command = [
+                self.ffprobe_path,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                input_file,
+            ]
+
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+
+            duration = float(result.stdout.strip())
+            self.video_metadata_cache[input_file] = duration
+            return duration
+        except:
+            return 0
+
+    def _validate_and_update_trim_time(self, time_var, is_start):
+        """Validate time input when Enter is pressed and update slider"""
+        time_str = time_var.get()
+
+        # Skip validation if field is empty or doesn't contain colons
+        if not time_str or ":" not in time_str:
+            return
+
+        # Validate time format
+        if not self._validate_time_format(time_str):
+            messagebox.showerror("Error", "Time format should be HH:MM:SS")
+            return
+
+        # Convert to seconds
+        time_seconds = self._time_str_to_seconds(time_str)
+
+        # Get video duration
+        duration = self._get_video_duration_safe()
+
+        # Check if time exceeds video duration
+        if duration > 0 and time_seconds > duration:
+            messagebox.showerror(
+                "Error",
+                f"Time exceeds video duration ({self._seconds_to_time_str(duration)})",
+            )
+            return
+
+        # Get the other time value
+        other_time_str = self.trim_end.get() if is_start else self.trim_start.get()
+
+        # Only validate against other time if it's also valid
+        if (
+            other_time_str
+            and ":" in other_time_str
+            and self._validate_time_format(other_time_str)
+        ):
+            other_time_seconds = self._time_str_to_seconds(other_time_str)
+
+            if is_start and time_seconds >= other_time_seconds:
+                messagebox.showerror("Error", "Start time must be before end time")
+                return
+            elif not is_start and time_seconds <= other_time_seconds:
+                messagebox.showerror("Error", "End time must be after start time")
+                return
+
+        # Update slider if it exists
+        if hasattr(self, "trim_canvas"):
+            self.master.after(100, self._draw_trim_slider)
+
     def _seconds_to_time_str(self, seconds):
         """Convert seconds to HH:MM:SS"""
         hours = int(seconds // 3600)
@@ -3171,6 +3473,26 @@ class VideoConverterApp:
         else:
             self.dragging_handle = None
 
+        # Show preview immediately
+        fraction = (x - 10) / (self.trim_canvas.winfo_width() - 20)
+        time_seconds = fraction * (getattr(self, "total_duration", 0) or 0)
+        self._show_thumbnail_preview(x, time_seconds)
+
+    def _on_slider_release(self, event):
+        # Mark slider as released
+        self.is_slider_dragging = False
+
+        # Cancel any scheduled preview job
+        if getattr(self, "preview_job", None):
+            try:
+                self.master.after_cancel(self.preview_job)
+            except Exception:
+                pass
+            self.preview_job = None
+
+        # Hide preview popup
+        self._hide_thumbnail_preview()
+
     def _on_slider_drag(self, event):
         """Handle drag on slider"""
         if not hasattr(self, "dragging_handle") or not self.dragging_handle:
@@ -3187,6 +3509,8 @@ class VideoConverterApp:
         # Calculate new time value
         fraction = (x - 10) / (width - 20)
         new_seconds = fraction * self.total_duration
+        # Show preview
+        self._schedule_thumbnail_preview(x, new_seconds)
 
         if self.dragging_handle == "start":
             # Ensure start doesn't go past end
