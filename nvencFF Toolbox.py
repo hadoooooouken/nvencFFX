@@ -1394,62 +1394,40 @@ class VideoConverterApp:
             while i < len(parts):
                 part = parts[i]
 
-                # Check if this looks like a file path (contains path separators or file extensions)
-                is_file_path = (
+                # Check if this is a flag (starts with -)
+                if part.startswith("-"):
+                    quoted_parts.append(part)
+                    i += 1
+                    continue
+
+                # Check if previous part was -i flag (input file)
+                if i > 0 and parts[i - 1] == "-i":
+                    # Add quotes around input file path
+                    if not (part.startswith('"') and part.endswith('"')):
+                        part = f'"{part}"'
+                    quoted_parts.append(part)
+                    i += 1
+                    continue
+
+                # Check if this looks like an output file path (last argument or contains path separators)
+                is_output_file = (i == len(parts) - 1) or (
                     "\\" in part
                     or "/" in part
                     or part.endswith(
-                        (
-                            ".mp4",
-                            ".mkv",
-                            ".avi",
-                            ".mov",
-                            ".flv",
-                            ".wmv",
-                            ".webm",
-                            ".exe",
-                        )
+                        (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
                     )
                 )
 
-                # Check if next part might be continuation of this path (like filename without extension)
-                if (
-                    i + 1 < len(parts)
-                    and not parts[i + 1].startswith("-")
-                    and (
-                        parts[i + 1].endswith(
-                            (
-                                ".mp4",
-                                ".mkv",
-                                ".avi",
-                                ".mov",
-                                ".flv",
-                                ".wmv",
-                                ".webm",
-                                ".exe",
-                            )
-                        )
-                        or "\\" in parts[i]
-                        or "/" in parts[i]
-                    )
-                ):
-                    # Combine path parts
-                    combined_path = f"{part} {parts[i+1]}"
-                    if not (
-                        combined_path.startswith('"') and combined_path.endswith('"')
-                    ):
-                        combined_path = f'"{combined_path}"'
-                    quoted_parts.append(combined_path)
-                    i += 2
-                    continue
-
-                if is_file_path:
-                    # Add quotes if not already quoted
+                if is_output_file:
+                    # Add quotes around output file path
                     if not (part.startswith('"') and part.endswith('"')):
                         part = f'"{part}"'
-
-                quoted_parts.append(part)
-                i += 1
+                    quoted_parts.append(part)
+                    i += 1
+                else:
+                    # Regular argument (not a file path)
+                    quoted_parts.append(part)
+                    i += 1
 
             command_with_quotes = " ".join(quoted_parts)
             self.master.clipboard_clear()
@@ -1457,9 +1435,16 @@ class VideoConverterApp:
             messagebox.showinfo("Copied", "Command copied to clipboard!")
 
         except Exception as e:
-            # Find paths that look like file paths and add quotes
+            # Fallback: simple regex-based quoting for file paths
+            import re
+
             command_with_quotes = re.sub(
-                r"([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})", r'"\1"', command
+                r'(-i\s+)([^"\s]+)', r'\1"\2"', command  # Quote input files
+            )
+            command_with_quotes = re.sub(
+                r"(\s)([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})(\s|$)",
+                r'\1"\2"\3',
+                command_with_quotes,  # Quote output files
             )
             self.master.clipboard_clear()
             self.master.clipboard_append(command_with_quotes)
@@ -2345,7 +2330,7 @@ class VideoConverterApp:
                 try:
                     duration = float(duration_str)
                     audio_bitrate_for_estimation = 160
-                    
+
                     if audio_option == "custom":
                         try:
                             audio_bitrate_for_estimation = int(custom_abitrate)
