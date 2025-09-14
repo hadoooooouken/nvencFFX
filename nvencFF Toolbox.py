@@ -2380,13 +2380,13 @@ class VideoConverterApp:
             )
         except Exception as e:
             self.master.after(
-                0, lambda: self.status_text.set(f"Error estimating size: {e}")
+                0, lambda: self.status_text.set("Error estimating size: Could not get duration")
             )
             self.master.after(
                 0,
                 lambda: messagebox.showerror(
                     "Unexpected Error",
-                    f"An unexpected error occurred during size estimation:\n{e}",
+                    "An unexpected error occurred during size estimation",
                 ),
             )
 
@@ -2494,7 +2494,7 @@ class VideoConverterApp:
             self.is_converting = False
         except Exception as e:
             self.master.after(
-                0, lambda: self.status_text.set(f"An unexpected error occurred: {e}")
+                0, lambda: self.status_text.set("An unexpected error occurred during conversion")
             )
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
@@ -2507,7 +2507,7 @@ class VideoConverterApp:
             self.master.after(
                 0,
                 lambda: messagebox.showerror(
-                    "Unexpected Error", f"An unexpected error occurred:\n{e}"
+                    "Unexpected Error", "An unexpected error occurred during conversion"
                 ),
             )
             self.is_converting = False
