@@ -55,7 +55,6 @@ class DropTarget:
 
 
 class VideoConverterApp:
-
     def _handle_dropped_file(self, file_path):
         if file_path.lower().endswith(
             (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
@@ -67,7 +66,9 @@ class VideoConverterApp:
             codec_suffix = (
                 "_hevc"
                 if self.video_codec.get() == "hevc"
-                else "_h264" if self.video_codec.get() == "h264" else "_av1"
+                else "_h264"
+                if self.video_codec.get() == "h264"
+                else "_av1"
             )
             output_path = os.path.normpath(
                 os.path.join(
@@ -220,7 +221,10 @@ class VideoConverterApp:
         self.additional_options = ctk.StringVar(value="")
         self.additional_filter_options = ctk.StringVar(value="")
         self.additional_audio_filter_options = ctk.StringVar(value="")
-        self.additional_options_placeholder = "e.g. -aq-strength 8; -cq 0; -bf 0 or -bf 4; -intra-refresh 1; -forced-idr 1"
+        self.additional_options_placeholder = (
+            "e.g. -aq-strength 8; -cq 0; -bf 0 or -bf 4;"
+            " -intra-refresh 1; -forced-idr 1"
+        )
         self.additional_filter_options_placeholder = (
             "e.g.setpts=0.5*PTS - speed up video x2; crop=iw:min(ih\\,iw*9/16)"
         )
@@ -1409,7 +1413,8 @@ class VideoConverterApp:
                     i += 1
                     continue
 
-                # Check if this looks like an output file path (last argument or contains path separators)
+                # Check if this looks like an output file path
+                # (last argument or contains path separators)
                 is_output_file = (i == len(parts) - 1) or (
                     "\\" in part
                     or "/" in part
@@ -1438,7 +1443,9 @@ class VideoConverterApp:
             # Fallback: simple regex-based quoting for file paths
 
             command_with_quotes = re.sub(
-                r'(-i\s+)([^"\s]+)', r'\1"\2"', command  # Quote input files
+                r'(-i\s+)([^"\s]+)',
+                r'\1"\2"',
+                command,  # Quote input files
             )
             command_with_quotes = re.sub(
                 r"(\s)([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})(\s|$)",
@@ -1456,7 +1463,6 @@ class VideoConverterApp:
             return
 
         try:
-
             args = shlex.split(new_command)
 
             if len(args) < 3:
@@ -1485,7 +1491,7 @@ class VideoConverterApp:
                 f"Invalid command: {str(e)}\n\nPlease check:\n"
                 "1. Input file (-i option)\n"
                 "2. Output file path\n"
-                "3. Valid FFmpeg arguments"
+                "3. Valid FFmpeg arguments",
             )
 
     def _build_ffmpeg_command(self, preview=False):
@@ -1747,7 +1753,7 @@ class VideoConverterApp:
             if speed <= 0:
                 raise ValueError("Speed factor must be positive")
 
-            video_filter = f"setpts={1/speed}*PTS"
+            video_filter = f"setpts={1 / speed}*PTS"
             self.additional_filter_options.set(video_filter)
             self.additional_filter_options_entry.configure(text_color=TEXT_COLOR)
             if self.audio_option.get() in ("disable", "copy"):
@@ -1782,7 +1788,6 @@ class VideoConverterApp:
         self.additional_filter_options_entry.configure(text_color=TEXT_COLOR)
 
     def _add_audio_filter(self, filter_str):
-
         if self.audio_option.get() in ("disable", "copy"):
             self.audio_option.set("aac_160k")
 
@@ -2073,7 +2078,9 @@ class VideoConverterApp:
             codec_suffix = (
                 "_hevc"
                 if self.video_codec.get() == "hevc"
-                else "_av1" if self.video_codec.get() == "av1" else "_h264"
+                else "_av1"
+                if self.video_codec.get() == "av1"
+                else "_h264"
             )
             output_path = os.path.normpath(
                 os.path.join(
@@ -2219,7 +2226,7 @@ class VideoConverterApp:
                 if hasattr(self, "total_duration") and self.total_duration > 0:
                     progress = total_seconds / self.total_duration
                     self.progress_value.set(progress)
-                    self.progress_label.configure(text=f"{progress*100:.1f}%")
+                    self.progress_label.configure(text=f"{progress * 100:.1f}%")
             except Exception:
                 pass
 
@@ -2377,12 +2384,16 @@ class VideoConverterApp:
                 0,
                 lambda: messagebox.showerror(
                     "Error",
-                    "ffprobe.exe not found. Ensure it's in the program folder or system PATH.",
+                    "ffprobe.exe not found. Ensure it's in the program folder "
+                    "or system PATH.",
                 ),
             )
         except Exception:
             self.master.after(
-                0, lambda: self.status_text.set("Error estimating size: Could not get duration")
+                0,
+                lambda: self.status_text.set(
+                    "Error estimating size: Could not get duration"
+                ),
             )
             self.master.after(
                 0,
@@ -2470,7 +2481,11 @@ class VideoConverterApp:
                     0,
                     lambda: messagebox.showerror(
                         "Error",
-                        f"FFmpeg exited with error code {self.conversion_process.returncode}.\nLast output: {last_line}",
+                        (
+                            f"FFmpeg exited with error code "
+                            f"{self.conversion_process.returncode}.\n"
+                            f"Last output: {last_line}"
+                        ),
                     ),
                 )
             self.is_converting = False
@@ -2490,13 +2505,19 @@ class VideoConverterApp:
                 0,
                 lambda: messagebox.showerror(
                     "Error",
-                    "ffmpeg.exe not found. Ensure it's in the program folder or system PATH.",
+                    (
+                        "ffmpeg.exe not found. Ensure it's in the program folder "
+                        "or system PATH."
+                    ),
                 ),
             )
             self.is_converting = False
         except Exception:
             self.master.after(
-                0, lambda: self.status_text.set("An unexpected error occurred during conversion")
+                0,
+                lambda: self.status_text.set(
+                    "An unexpected error occurred during conversion"
+                ),
             )
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
@@ -2762,7 +2783,9 @@ class VideoConverterApp:
             codec_suffix = (
                 "_hevc"
                 if self.video_codec.get() == "hevc"
-                else "_h264" if self.video_codec.get() == "h264" else "_av1"
+                else "_h264"
+                if self.video_codec.get() == "h264"
+                else "_av1"
             )
             new_filename = f"{base_name}{codec_suffix}_custom.mp4"
             new_output = os.path.normpath(os.path.join(dir_name, new_filename))
