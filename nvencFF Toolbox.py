@@ -1436,7 +1436,6 @@ class VideoConverterApp:
 
         except Exception:
             # Fallback: simple regex-based quoting for file paths
-            import re
 
             command_with_quotes = re.sub(
                 r'(-i\s+)([^"\s]+)', r'\1"\2"', command  # Quote input files
