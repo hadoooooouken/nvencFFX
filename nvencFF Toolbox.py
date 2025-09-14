@@ -272,7 +272,7 @@ class VideoConverterApp:
             if hasattr(widget, "selection_get"):
                 try:
                     text = widget.selection_get()
-                except:
+                except Exception:
                     pass
             self.master.clipboard_append(text)
 
@@ -1434,7 +1434,7 @@ class VideoConverterApp:
             self.master.clipboard_append(command_with_quotes)
             messagebox.showinfo("Copied", "Command copied to clipboard!")
 
-        except Exception as e:
+        except Exception:
             # Fallback: simple regex-based quoting for file paths
             import re
 
@@ -1483,7 +1483,10 @@ class VideoConverterApp:
         except Exception as e:
             messagebox.showerror(
                 "Error",
-                f"Invalid command: {str(e)}\n\nPlease check:\n1. Input file (-i option)\n2. Output file path\n3. Valid FFmpeg arguments",
+                f"Invalid command: {str(e)}\n\nPlease check:\n"
+                "1. Input file (-i option)\n"
+                "2. Output file path\n"
+                "3. Valid FFmpeg arguments"
             )
 
     def _build_ffmpeg_command(self, preview=False):
@@ -2218,7 +2221,7 @@ class VideoConverterApp:
                     progress = total_seconds / self.total_duration
                     self.progress_value.set(progress)
                     self.progress_label.configure(text=f"{progress*100:.1f}%")
-            except:
+            except Exception:
                 pass
 
     def _get_video_duration(self):
@@ -2261,7 +2264,7 @@ class VideoConverterApp:
 
             if hasattr(self, "trim_canvas"):
                 self.master.after(100, self._update_trim_slider)
-        except:
+        except Exception:
             self.total_duration = 0
 
     def _calculate_estimated_size(self):
@@ -2378,7 +2381,7 @@ class VideoConverterApp:
                     "ffprobe.exe not found. Ensure it's in the program folder or system PATH.",
                 ),
             )
-        except Exception as e:
+        except Exception:
             self.master.after(
                 0, lambda: self.status_text.set("Error estimating size: Could not get duration")
             )
@@ -2415,8 +2418,8 @@ class VideoConverterApp:
                 line = line.strip()
                 if line:
                     last_line = line
-                    self.master.after(0, lambda l=line: self.ffmpeg_output.set(l))
-                    self.master.after(0, lambda l=line: self._update_progress(l))
+                    self.master.after(0, lambda: self.ffmpeg_output.set(line))
+                    self.master.after(0, lambda: self._update_progress(line))
             self.conversion_process.wait()
             if self.conversion_process.returncode == 0:
                 self.master.after(
@@ -2492,7 +2495,7 @@ class VideoConverterApp:
                 ),
             )
             self.is_converting = False
-        except Exception as e:
+        except Exception:
             self.master.after(
                 0, lambda: self.status_text.set("An unexpected error occurred during conversion")
             )
@@ -3029,19 +3032,6 @@ class VideoConverterApp:
         self.additional_options.set(new_options)
         self.additional_options_entry.configure(text_color=TEXT_COLOR)
 
-    def _validate_time_format(self, time_str):
-        """Simple validation for HH:MM:SS format"""
-        parts = time_str.split(":")
-        if len(parts) != 3:
-            return False
-        try:
-            hours = int(parts[0])
-            minutes = int(parts[1])
-            seconds = int(parts[2])
-            return 0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60
-        except ValueError:
-            return False
-
     def _validate_trim_time(self, time_var, is_start):
         """Validate time input only when field loses focus"""
         time_str = time_var.get()
@@ -3227,7 +3217,7 @@ class VideoConverterApp:
                 # Clean up temporary file
                 try:
                     os.remove(temp_thumb)
-                except:
+                except Exception:
                     pass
 
         except Exception as e:
@@ -3311,7 +3301,7 @@ class VideoConverterApp:
                 10, min(width - 10, end_pos)
             )
 
-        except:
+        except Exception:
             return 10, (
                 self.trim_canvas.winfo_width() - 10
                 if self.trim_canvas.winfo_width() > 20
@@ -3328,7 +3318,7 @@ class VideoConverterApp:
             minutes = int(parts[1])
             seconds = int(parts[2])
             return hours * 3600 + minutes * 60 + seconds
-        except:
+        except Exception:
             return 0
 
     def _validate_time_format(self, time_str):
@@ -3386,7 +3376,7 @@ class VideoConverterApp:
             duration = float(result.stdout.strip())
             self.video_metadata_cache[input_file] = duration
             return duration
-        except:
+        except Exception:
             return 0
 
     def _validate_and_update_trim_time(self, time_var, is_start):
@@ -3531,10 +3521,13 @@ class VideoConverterApp:
 
     def _apply_hdr_to_sdr(self):
         """Apply HDR to SDR conversion settings"""
-        hdr_filter = "zscale=transfer=linear:npl=100,tonemap=tonemap=hable:desat=0,zscale=transfer=bt709:matrix=bt709:primaries=bt709"
+        hdr_filter = (
+            "zscale=transfer=linear:npl=100,"
+            "tonemap=tonemap=hable:desat=0,"
+            "zscale=transfer=bt709:matrix=bt709:primaries=bt709"
+        )
         self._add_video_filter(hdr_filter)
         self.hdr_mode = True
-
 
 def get_icon_path():
     if getattr(sys, "frozen", False):
