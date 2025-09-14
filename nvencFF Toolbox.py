@@ -1830,7 +1830,7 @@ class VideoConverterApp:
         option_name = option_str.split()[0]
         for i, opt in enumerate(existing_options):
             if opt == option_name:
-                existing_options[i : i + 2] = option_str.split()
+                existing_options[i: i + 2] = option_str.split()
                 break
         else:
             existing_options.extend(option_str.split())
@@ -2211,7 +2211,7 @@ class VideoConverterApp:
     def _update_progress(self, line):
         if "time=" in line:
             time_pos = line.find("time=")
-            time_str = line[time_pos + 5 :].split()[0]
+            time_str = line[time_pos + 5:].split()[0]
             try:
                 h, m, s = time_str.split(":")
                 total_seconds = int(h) * 3600 + int(m) * 60 + float(s)
@@ -3528,6 +3528,7 @@ class VideoConverterApp:
         )
         self._add_video_filter(hdr_filter)
         self.hdr_mode = True
+
 
 def get_icon_path():
     if getattr(sys, "frozen", False):
