@@ -2110,7 +2110,12 @@ class VideoConverterApp:
                 if os.path.dirname(default_name)
                 else os.getcwd()
             ),
-            filetypes=(("MP4 Files", "*.mp4"), ("All Files", "*.*")),
+            filetypes=(
+                ("MP4 Files", "*.mp4"),
+                ("MKV Files", "*.mkv"),
+                ("MOV Files", "*.mov"),
+                ("All Files", "*.*")
+            )
         )
         if filename:
             self.output_file.set(os.path.normpath(filename))

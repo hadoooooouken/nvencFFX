@@ -91,8 +91,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --windows-icon-from-ico="icon.ico" ^
         --include-data-file=icon.ico=./ ^
         --product-name="nvencFF Toolbox" ^
-        --product-version="1.0.3.3" ^
-        --file-version="1.0.3.3" ^
+        --product-version="1.0.3.4" ^
+        --file-version="1.0.3.4" ^
         --file-description="nvencFF Toolbox" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2025 hadouken" ^
