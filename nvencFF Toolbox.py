@@ -125,7 +125,7 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFF Toolbox 1.4.0")
+        master.title("nvencFF Toolbox 1.4.1")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -3063,6 +3063,7 @@ class VideoConverterApp:
 
             # Reset all settings to their initial values
             self.bitrate.set("6000")
+            self.quality_level.set ("30")
             self.audio_option.set("copy")
             self.custom_abitrate.set("160")
 
@@ -3124,10 +3125,10 @@ class VideoConverterApp:
             # FHD Fast preset
             self.enable_encoder_options.set(True)
             self.enable_fps_scale_options.set(True)
-            self.enable_additional_options.set(True)
 
             # Video settings
             self.bitrate.set("6000")
+            self.quality_level.set ("30")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("bicubic")
 
@@ -3162,10 +3163,10 @@ class VideoConverterApp:
             # FHD Quality preset
             self.enable_encoder_options.set(True)
             self.enable_fps_scale_options.set(True)
-            self.enable_additional_options.set(True)
 
             # Video settings
-            self.bitrate.set("6000")
+            self.bitrate.set("8000")
+            self.quality_level.set ("27")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("spline")
 
@@ -3201,10 +3202,10 @@ class VideoConverterApp:
             # HD Fast preset
             self.enable_encoder_options.set(True)
             self.enable_fps_scale_options.set(True)
-            self.enable_additional_options.set(True)
 
             # Video settings
-            self.bitrate.set("6000")
+            self.bitrate.set("4000")
+            self.quality_level.set ("30")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("bicubic")
 
@@ -3239,10 +3240,10 @@ class VideoConverterApp:
             # HD Quality preset
             self.enable_encoder_options.set(True)
             self.enable_fps_scale_options.set(True)
-            self.enable_additional_options.set(True)
 
             # Video settings
             self.bitrate.set("6000")
+            self.quality_level.set ("27")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("spline")
 
