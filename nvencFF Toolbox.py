@@ -3063,7 +3063,7 @@ class VideoConverterApp:
 
             # Reset all settings to their initial values
             self.bitrate.set("6000")
-            self.quality_level.set ("30")
+            self.quality_level.set("30")
             self.audio_option.set("copy")
             self.custom_abitrate.set("160")
 
@@ -3128,7 +3128,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("6000")
-            self.quality_level.set ("30")
+            self.quality_level.set("30")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("bicubic")
 
@@ -3166,7 +3166,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("8000")
-            self.quality_level.set ("27")
+            self.quality_level.set("27")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("spline")
 
@@ -3205,7 +3205,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("4000")
-            self.quality_level.set ("30")
+            self.quality_level.set("30")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("bicubic")
 
@@ -3243,7 +3243,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("6000")
-            self.quality_level.set ("27")
+            self.quality_level.set("27")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("spline")
 
