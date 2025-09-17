@@ -1,16 +1,19 @@
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
-import subprocess
 import os
-import threading
+import subprocess
 import sys
-import win32con
-import win32gui
-import win32api
-import re
-from PIL import Image
 import tempfile
-import shlex
+from io import BytesIO
+from re import sub
+from shlex import split
+from threading import Thread
+from tkinter import filedialog, messagebox
+from winsound import MB_ICONASTERISK, MessageBeep
+
+import customtkinter as ctk
+from PIL import Image
+from win32api import DragFinish, DragQueryFile
+from win32con import GWL_WNDPROC, WM_DROPFILES
+from win32gui import CallWindowProc, DragAcceptFiles, SetWindowLong
 
 # UI Theme and Colors
 ctk.set_appearance_mode("dark")
@@ -28,30 +31,28 @@ class DropTarget:
     def __init__(self, hwnd, callback):
         self.hwnd = hwnd
         self.callback = callback
-        win32gui.DragAcceptFiles(self.hwnd, True)
+        DragAcceptFiles(self.hwnd, True)
 
         # Use SetWindowLong for compatibility
-        self.old_wnd_proc = win32gui.SetWindowLong(
-            self.hwnd, win32con.GWL_WNDPROC, self._wnd_proc
-        )
+        self.old_wnd_proc = SetWindowLong(self.hwnd, GWL_WNDPROC, self._wnd_proc)
         self._self_ref = self  # important
 
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
-        if msg == win32con.WM_DROPFILES:
+        if msg == WM_DROPFILES:
             try:
                 hdrop = wparam
-                file_path = win32api.DragQueryFile(hdrop, 0)
+                file_path = DragQueryFile(hdrop, 0)
                 if self.callback:
                     self.callback(file_path)
-                win32api.DragFinish(hdrop)
+                DragFinish(hdrop)
             except Exception as e:
                 print(f"Error handling drop: {e}")
             return 0
-        return win32gui.CallWindowProc(self.old_wnd_proc, hwnd, msg, wparam, lparam)
+        return CallWindowProc(self.old_wnd_proc, hwnd, msg, wparam, lparam)
 
     def __del__(self):
         if hasattr(self, "old_wnd_proc"):
-            win32gui.SetWindowLong(self.hwnd, win32con.GWL_WNDPROC, self.old_wnd_proc)
+            SetWindowLong(self.hwnd, GWL_WNDPROC, self.old_wnd_proc)
 
 
 class VideoConverterApp:
@@ -100,7 +101,7 @@ class VideoConverterApp:
     def _update_window_size(self):
         self.master.update_idletasks()
         current_height = self.master.winfo_height()
-        required_height = 600
+        required_height = 700
 
         if self.enable_audio_options.get():
             required_height += self.audio_frame.winfo_reqheight() + 10
@@ -124,9 +125,9 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFF Toolbox")
-        master.geometry("800x600")
-        master.minsize(800, 600)
+        master.title("nvencFF Toolbox 1.4.0")
+        master.geometry("800x700")
+        master.minsize(800, 700)
         master.maxsize(800, 900)
         master.resizable(False, True)
         master.configure(fg_color=PRIMARY_BG)
@@ -145,6 +146,7 @@ class VideoConverterApp:
 
         self._setup_variables()
         self._create_widgets()
+        self._toggle_constant_qp_mode()  # Enabled CQP by default
 
         # Find FFmpeg executables (critical dependency)
         self.ffmpeg_path = self._find_executable("ffmpeg.exe")
@@ -186,6 +188,171 @@ class VideoConverterApp:
 
         if len(sys.argv) > 1:
             self._handle_dropped_file(sys.argv[1])
+
+        self.preview_temp_files = []  # Add list for preview temporary files
+
+    def _create_10s_preview(self):
+        """Create a 10-second preview with current settings"""
+        if self.is_converting or self.is_creating_preview:
+            messagebox.showerror("Error", "Please wait until current process completes")
+            return
+
+        if not self.input_file.get() or self.input_file.get().startswith(
+            "Drag and drop"
+        ):
+            messagebox.showerror("Error", "Please select input file first")
+            return
+
+        # Get video duration
+        if not hasattr(self, "total_duration") or self.total_duration <= 0:
+            self._get_video_duration()
+
+        if not hasattr(self, "total_duration") or self.total_duration <= 0:
+            messagebox.showerror("Error", "Could not get video duration")
+            return
+
+        # Calculate video midpoint
+        duration = self.total_duration
+        mid_point = max(0, (duration - 10) / 2)
+
+        # Create temporary files
+        input_path = self.input_file.get()
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        temp_dir = tempfile.gettempdir()
+
+        # Clean up previous temporary files
+        self._cleanup_preview_files()
+
+        # Temporary file for streamcopy
+        temp_streamcopy = os.path.join(temp_dir, f"{base_name}_streamcopy10s.mp4")
+        self.preview_temp_files.append(temp_streamcopy)
+
+        # Temporary file for encoded preview
+        temp_encoded = os.path.join(temp_dir, f"{base_name}_encoded10s.mp4")
+        self.preview_temp_files.append(temp_encoded)
+
+        # Command to create streamcopy
+        streamcopy_cmd = [
+            self.ffmpeg_path,
+            "-ss",
+            str(mid_point),
+            "-i",
+            input_path,
+            "-t",
+            "10",
+            "-c",
+            "copy",
+            "-y",
+            temp_streamcopy,
+        ]
+
+        # Execute streamcopy
+        try:
+            subprocess.run(
+                streamcopy_cmd, check=True, creationflags=subprocess.CREATE_NO_WINDOW
+            )
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"Streamcopy failed: {e}")
+            return
+
+        # Build encoding command with current settings (without trimming)
+        try:
+            # Save original values
+            original_input = self.input_file.get()
+            original_output = self.output_file.get()
+
+            # Temporarily substitute values to build the command
+            self.input_file.set(temp_streamcopy)
+            self.output_file.set(temp_encoded)
+
+            encode_cmd = self._build_ffmpeg_command(preview=True)
+
+            # Restore original values
+            self.input_file.set(original_input)
+            self.output_file.set(original_output)
+
+            # Start preview encoding with progress
+            self.is_creating_preview = True
+            self.status_text.set("Creating 10-second preview...")
+            self.ffmpeg_output.set("Starting preview encoding...")
+            self.progress_value.set(0.0)
+            self.progress_label.configure(text="0%")
+            self.progress_frame.grid()
+
+            # Start encoding in separate thread
+            preview_thread = Thread(
+                target=self._run_preview_encoding, args=(encode_cmd, temp_encoded)
+            )
+            preview_thread.start()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Preview encoding failed: {e}")
+            self.is_creating_preview = False
+
+    def _run_preview_encoding(self, command, output_path):
+        """Run preview encoding with progress tracking"""
+        startupinfo = None
+        creationflags = 0
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            # Process output in real-time
+            for line in process.stdout:
+                if line:
+                    self.master.after(0, lambda: self.ffmpeg_output.set(line))
+                    self.master.after(0, lambda: self._update_preview_progress(line))
+
+            process.wait()
+
+            if process.returncode == 0:
+                self.master.after(
+                    0, lambda: self.status_text.set("Preview created successfully!")
+                )
+                self.master.after(0, lambda: self.ffmpeg_output.set(""))
+                # Play the result
+                os.startfile(output_path)
+            else:
+                self.master.after(
+                    0, lambda: self.status_text.set("Preview creation failed!")
+                )
+
+        except Exception as e:
+            error_message = f"Preview error: {str(e)}"
+            self.master.after(0, lambda: self.status_text.set(error_message))
+        finally:
+            self.master.after(0, lambda: self.progress_frame.grid_remove())
+            self.is_creating_preview = False
+
+    def _update_preview_progress(self, line):
+        """Update progress for preview encoding"""
+        if "time=" in line:
+            time_pos = line.find("time=")
+            time_str = line[time_pos + 5:].split()[0]
+            try:
+                h, m, s = time_str.split(":")
+                total_seconds = int(h) * 3600 + int(m) * 60 + float(s)
+                # Preview is always 10 seconds long
+                progress = min(1.0, total_seconds / 10.0)
+                self.progress_value.set(progress)
+                self.progress_label.configure(text=f"{progress * 100:.1f}%")
+            except Exception:
+                pass
 
     def _setup_variables(self):
         # Initialize all Tkinter control variables
@@ -248,11 +415,12 @@ class VideoConverterApp:
         self.trim_start = ctk.StringVar(value="00:00:00")
         self.trim_end = ctk.StringVar(value="00:00:00")
         self.trim_streamcopy = ctk.BooleanVar(value=False)
-        self.constant_qp_mode = ctk.BooleanVar(value=False)
+        self.constant_qp_mode = ctk.BooleanVar(value=True)  # Enabled CQP by default
         self.quality_level = ctk.StringVar(value="30")
         self.quality_level.trace_add(
             "write", lambda *args: self._calculate_estimated_size()
         )
+        self.is_creating_preview = False
 
     def _setup_keyboard_shortcuts(self):
         self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
@@ -779,7 +947,7 @@ class VideoConverterApp:
             ("Source", "source"),
             ("HD", "1280"),
             ("FHD", "1920"),
-            ("2K", "2560"),
+            ("QHD", "2560"),
             ("4K", "3840"),
             ("Custom", "custom"),
         ]
@@ -1117,8 +1285,8 @@ class VideoConverterApp:
         # Preview button
         ctk.CTkButton(
             speed_buttons_frame,
-            text="Preview 10s",
-            command=lambda: self._add_preview_option(),
+            text="Denoise",
+            command=lambda: self._add_video_filter("hqdn3d=2:1:3:3"),
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
             text_color=TEXT_BUTTON,
@@ -1276,6 +1444,43 @@ class VideoConverterApp:
         self.progress_label.pack()
         self.progress_frame.grid_remove()
 
+        # Play buttons
+        self.play_buttons_frame = ctk.CTkFrame(self.button_frame, fg_color=PRIMARY_BG)
+        self.play_buttons_frame.pack(fill="x", pady=(0, 5))
+
+        self.play_input_button = ctk.CTkButton(
+            self.play_buttons_frame,
+            text="Play Input File",
+            fg_color="#b2b2b2",
+            hover_color="#8e8e8e",
+            text_color=TEXT_BUTTON,
+            height=40,
+        )
+        self.play_input_button.pack(side="left", expand=True, fill="x", padx=(0, 2))
+        self.play_input_button.configure(command=self._play_input_file)
+
+        self.play10s_button = ctk.CTkButton(
+            self.play_buttons_frame,
+            text="Play 10s Preview",
+            fg_color="#b2b2b2",
+            hover_color="#8e8e8e",
+            text_color=TEXT_BUTTON,
+            height=40,
+        )
+        self.play10s_button.pack(side="left", expand=True, fill="x", padx=2)
+        self.play10s_button.configure(command=self._create_10s_preview)
+
+        self.play_output_button = ctk.CTkButton(
+            self.play_buttons_frame,
+            text="Play Output File",
+            fg_color="#b2b2b2",
+            hover_color="#8e8e8e",
+            text_color=TEXT_BUTTON,
+            height=40,
+        )
+        self.play_output_button.pack(side="left", expand=True, fill="x", padx=(2, 0))
+        self.play_output_button.configure(command=self._play_output_file)
+
         # Convert Button
         self.convert_button = ctk.CTkButton(
             self.button_frame,
@@ -1300,6 +1505,52 @@ class VideoConverterApp:
         self._toggle_audio_options_frame()
         self._toggle_additional_options_frame()
         self._toggle_presets_frame()
+
+    def _play_input_file(self):
+        input_path = self.input_file.get()
+
+        # Check if file is selected
+        if (
+            not input_path
+            or input_path
+            == "Drag and drop a video file here or use the 'Browse' button."
+        ):
+            messagebox.showerror(
+                "Error", "Please select input file using Browse button"
+            )
+            return
+
+        # Normalize path and check if file exists
+        normalized_path = os.path.normpath(input_path)
+        if not os.path.exists(normalized_path):
+            messagebox.showerror("Error", "Input file does not exist")
+            return
+
+        try:
+            # Open file in system default player
+            os.startfile(normalized_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not play file: {str(e)}")
+
+    def _play_output_file(self):
+        output_path = self.output_file.get()
+
+        # Check if output file is specified
+        if not output_path:
+            messagebox.showerror("Error", "Output file is not specified")
+            return
+
+        # Normalize path and check if file exists
+        normalized_path = os.path.normpath(output_path)
+        if not os.path.exists(normalized_path):
+            messagebox.showerror("Error", "Output file does not exist")
+            return
+
+        try:
+            # Open file in system default player
+            os.startfile(normalized_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not play file: {str(e)}")
 
     def _toggle_constant_qp_mode(self):
         if self.constant_qp_mode.get():
@@ -1390,7 +1641,7 @@ class VideoConverterApp:
 
         try:
             # Parse command into parts while preserving quotes
-            parts = shlex.split(command, posix=False)
+            parts = split(command, posix=False)
 
             # Rebuild with quotes around file paths
             quoted_parts = []
@@ -1437,17 +1688,16 @@ class VideoConverterApp:
             command_with_quotes = " ".join(quoted_parts)
             self.master.clipboard_clear()
             self.master.clipboard_append(command_with_quotes)
-            messagebox.showinfo("Copied", "Command copied to clipboard!")
 
         except Exception:
             # Fallback: simple regex-based quoting for file paths
 
-            command_with_quotes = re.sub(
+            command_with_quotes = sub(
                 r'(-i\s+)([^"\s]+)',
                 r'\1"\2"',
                 command,  # Quote input files
             )
-            command_with_quotes = re.sub(
+            command_with_quotes = sub(
                 r"(\s)([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})(\s|$)",
                 r'\1"\2"\3',
                 command_with_quotes,  # Quote output files
@@ -1463,7 +1713,7 @@ class VideoConverterApp:
             return
 
         try:
-            args = shlex.split(new_command)
+            args = split(new_command)
 
             if len(args) < 3:
                 raise ValueError("Command too short - not a valid FFmpeg command")
@@ -1482,7 +1732,6 @@ class VideoConverterApp:
                 raise ValueError("Missing output file")
 
             self.ffmpeg_output.set("Custom command applied: " + " ".join(args))
-            messagebox.showinfo("Success", "Command changes applied!")
             window.destroy()
 
         except Exception as e:
@@ -1528,7 +1777,7 @@ class VideoConverterApp:
         ]
 
         # Handle Streamcopy option
-        if self.trim_streamcopy.get():
+        if self.trim_streamcopy.get() and not preview:
             command.extend(["-c:v", "copy"])
 
             # Audio handling - allow user selection even in copy mode
@@ -1552,7 +1801,7 @@ class VideoConverterApp:
                     raise ValueError("Custom audio bitrate must be a number.")
 
             # Add FF Options field should still be appended
-            if self.enable_additional_options.get():
+            if self.enable_additional_options.get() and not preview:
                 add_val = self.additional_options.get().strip()
                 if add_val and add_val != self.additional_options_placeholder:
                     command.extend(add_val.split())
@@ -1725,6 +1974,21 @@ class VideoConverterApp:
 
         return command
 
+    def _cleanup_preview_files(self):
+        """Clean up preview temporary files"""
+        for file_path in self.preview_temp_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Error deleting temp file {file_path}: {e}")
+        self.preview_temp_files = []
+
+    def _on_close(self):
+        """Application close handler"""
+        self._cleanup_preview_files()
+        self.master.quit()
+
     def _start_conversion(self):
         try:
             command = self._build_ffmpeg_command()
@@ -1742,9 +2006,7 @@ class VideoConverterApp:
 
         self.status_text.set("Conversion in progress...")
         self.ffmpeg_output.set("Starting conversion...")
-        self.conversion_thread = threading.Thread(
-            target=self._run_ffmpeg, args=(command,)
-        )
+        self.conversion_thread = Thread(target=self._run_ffmpeg, args=(command,))
         self.conversion_thread.start()
 
     def _set_speed_filter(self, speed_factor):
@@ -1807,21 +2069,6 @@ class VideoConverterApp:
 
         self.additional_audio_filter_options.set(new_filters)
         self.additional_audio_filter_options_entry.configure(text_color=TEXT_COLOR)
-
-    def _add_preview_option(self):
-        current_options = self.additional_options.get()
-        if current_options == self.additional_options_placeholder:
-            current_options = ""
-
-        preview_option = "-ss 00:00:05 -t 10"
-
-        if current_options:
-            new_options = f"{current_options} {preview_option}"
-        else:
-            new_options = preview_option
-
-        self.additional_options.set(new_options)
-        self.additional_options_entry.configure(text_color=TEXT_COLOR)
 
     def _add_additional_option(self, option_str):
         current_options = self.additional_options.get()
@@ -1996,8 +2243,8 @@ class VideoConverterApp:
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             path_file = os.path.join(script_dir, "ffmpeg_path.txt")
-            with open(path_file, "w") as f:
-                f.write(path)
+            with open(path_file, "w") as file:
+                file.write(path)
         except Exception as e:
             print(f"Error saving FFmpeg path: {e}")
 
@@ -2008,8 +2255,8 @@ class VideoConverterApp:
             path_file = os.path.join(script_dir, "ffmpeg_path.txt")
 
             if os.path.exists(path_file):
-                with open(path_file, "r") as f:
-                    saved_path = f.read().strip()
+                with open(path_file, "r") as file:
+                    saved_path = file.read().strip()
 
                 if os.path.exists(saved_path) and os.path.isfile(saved_path):
                     self.ffmpeg_path = saved_path
@@ -2114,8 +2361,8 @@ class VideoConverterApp:
                 ("MP4 Files", "*.mp4"),
                 ("MKV Files", "*.mkv"),
                 ("MOV Files", "*.mov"),
-                ("All Files", "*.*")
-            )
+                ("All Files", "*.*"),
+            ),
         )
         if filename:
             self.output_file.set(os.path.normpath(filename))
@@ -2204,6 +2451,12 @@ class VideoConverterApp:
         self._update_window_size()
 
     def _toggle_conversion(self):
+        if self.is_creating_preview:
+            messagebox.showerror(
+                "Error", "Please wait until preview creation completes"
+            )
+            return
+
         if self.is_converting:
             self._cancel_conversion()
         else:
@@ -2303,7 +2556,7 @@ class VideoConverterApp:
         audio_opt = self.audio_option.get()
         custom_ab = self.custom_abitrate.get()
 
-        threading.Thread(
+        Thread(
             target=self._run_ffprobe_for_size,
             args=(input_f, bitrate_int, audio_opt, custom_ab),
         ).start()
@@ -2448,12 +2701,7 @@ class VideoConverterApp:
                         text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
                     ),
                 )
-                self.master.after(
-                    0,
-                    lambda: messagebox.showinfo(
-                        "Done", "Video converted successfully!"
-                    ),
-                )
+                self.master.after(0, lambda: MessageBeep(MB_ICONASTERISK))
             elif not self.is_converting:
                 self.master.after(
                     0, lambda: self.status_text.set("Conversion cancelled by user")
@@ -2572,7 +2820,7 @@ class VideoConverterApp:
         )
         close_btn.pack(pady=10)
 
-        threading.Thread(
+        Thread(
             target=self._fetch_help_info,
             args=(help_type, help_text, help_window),
             daemon=True,
@@ -3112,9 +3360,9 @@ class VideoConverterApp:
 
     def _remove_existing_trim_options(self, options_str):
         """Remove any existing trim-related options from the string"""
-        options_str = re.sub(r"-ss\s+\S+", "", options_str)
-        options_str = re.sub(r"-to\s+\S+", "", options_str)
-        options_str = re.sub(r"-c\s+copy", "", options_str)
+        options_str = sub(r"-ss\s+\S+", "", options_str)
+        options_str = sub(r"-to\s+\S+", "", options_str)
+        options_str = sub(r"-c\s+copy", "", options_str)
         options_str = " ".join(options_str.split())
         return options_str.strip()
 
@@ -3198,12 +3446,8 @@ class VideoConverterApp:
             self.preview_label.pack(padx=0, pady=0)
             self.preview_window.geometry("352x198")
 
-        # Generate thumbnail
+        # Generate thumbnail in memory
         try:
-            temp_dir = tempfile.gettempdir()
-            temp_thumb = os.path.join(temp_dir, "nvencff_thumb.jpg")
-
-            # Use ffmpeg to extract frame
             cmd = [
                 self.ffmpeg_path,
                 "-ss",
@@ -3216,22 +3460,24 @@ class VideoConverterApp:
                 "scale=352:-1",
                 "-q:v",
                 "2",
-                "-y",
-                temp_thumb,
+                "-f",
+                "mjpeg",
+                "pipe:1",
             ]
 
-            subprocess.run(
+            process = subprocess.run(
                 cmd,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
 
-            # Load and display thumbnail
-            if os.path.exists(temp_thumb):
-                thumb_image = ctk.CTkImage(
-                    light_image=Image.open(temp_thumb), size=(352, 198)
-                )
-                self.preview_label.configure(image=thumb_image, text="")
+            if process.returncode == 0 and process.stdout:
+                img_buffer = BytesIO(process.stdout)
+                thumb_image = Image.open(img_buffer)
+                ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
+                self.preview_label.configure(image=ctk_thumb, text="")
 
                 # Position preview above slider handle
                 slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
@@ -3240,12 +3486,8 @@ class VideoConverterApp:
                 self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
                 self.preview_window.deiconify()
                 self.preview_visible = True
-
-                # Clean up temporary file
-                try:
-                    os.remove(temp_thumb)
-                except Exception:
-                    pass
+            else:
+                self.preview_label.configure(text="Preview\nunavailable")
 
         except Exception as e:
             print(f"Error generating preview: {e}")
@@ -3574,5 +3816,5 @@ if os.path.exists(icon_path):
 else:
     print(f"icon not found: {icon_path}")
 
-root.protocol("WM_DELETE_WINDOW", root.quit)
+root.protocol("WM_DELETE_WINDOW", app._on_close)
 root.mainloop()
