@@ -1232,16 +1232,16 @@ class VideoConverterApp:
             "<FocusOut>", self._on_audio_filters_entry_focus_out
         )
 
-        # Speed and Color Controls
-        speed_buttons_frame = ctk.CTkFrame(
+        # Quick filter buttons
+        quick_buttons_frame = ctk.CTkFrame(
             self.additional_options_frame, fg_color="transparent"
         )
-        speed_buttons_frame.grid(
+        quick_buttons_frame.grid(
             row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Speed up X2",
             command=lambda: self._set_speed_filter("2.0"),
             fg_color=ACCENT_GREEN,
@@ -1251,7 +1251,7 @@ class VideoConverterApp:
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Slow down X2",
             command=lambda: self._set_speed_filter("0.5"),
             fg_color=ACCENT_GREEN,
@@ -1262,7 +1262,7 @@ class VideoConverterApp:
 
         # Sharpness button
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Sharpness",
             command=lambda: self._add_video_filter("unsharp=5:5:1.15:3:3:0.0"),
             fg_color=ACCENT_GREEN,
@@ -1273,7 +1273,7 @@ class VideoConverterApp:
 
         # Saturation button
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Saturation",
             command=lambda: self._add_video_filter("eq=saturation=1.15"),
             fg_color=ACCENT_GREEN,
@@ -1284,7 +1284,7 @@ class VideoConverterApp:
 
         # Denoise button
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Denoise",
             command=lambda: self._add_video_filter("hqdn3d=2:1:3:3"),
             fg_color=ACCENT_GREEN,
@@ -1295,7 +1295,7 @@ class VideoConverterApp:
 
         # Reset button
         ctk.CTkButton(
-            speed_buttons_frame,
+            quick_buttons_frame,
             text="Clear",
             command=self._clear_all_filters,
             fg_color=ACCENT_RED,
@@ -1304,16 +1304,16 @@ class VideoConverterApp:
             width=100,
         ).pack(side="left", padx=(10, 0))
 
-        speed_buttons_frame_2 = ctk.CTkFrame(
+        quick_buttons_frame_2 = ctk.CTkFrame(
             self.additional_options_frame, fg_color="transparent"
         )
-        speed_buttons_frame_2.grid(
+        quick_buttons_frame_2.grid(
             row=7, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
         # FPS passtrough button
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="FPS Pass",
             command=lambda: self._add_additional_option("-fps_mode passthrough"),
             fg_color=ACCENT_GREEN,
@@ -1324,7 +1324,7 @@ class VideoConverterApp:
 
         # Frame drop threshold button
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="Drop thresh",
             command=lambda: self._add_additional_option("-frame_drop_threshold 0.5"),
             fg_color=ACCENT_GREEN,
@@ -1335,7 +1335,7 @@ class VideoConverterApp:
 
         # Gamma RGB
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="Gamma RGB",
             command=lambda: self._add_video_filter(
                 "eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0"
@@ -1348,7 +1348,7 @@ class VideoConverterApp:
 
         # Brightness button
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="Brightness",
             command=lambda: self._add_video_filter("eq=brightness=-0.15"),
             fg_color=ACCENT_GREEN,
@@ -1359,7 +1359,7 @@ class VideoConverterApp:
 
         # Audio fix button
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="Audio fix",
             command=lambda: self._add_audio_filter("loudnorm=I=-16:TP=-1.5:LRA=11"),
             fg_color=ACCENT_GREEN,
@@ -1370,7 +1370,7 @@ class VideoConverterApp:
 
         # Add HDR to SDR button here
         ctk.CTkButton(
-            speed_buttons_frame_2,
+            quick_buttons_frame_2,
             text="HDR to SDR",
             command=self._apply_hdr_to_sdr,
             fg_color=ACCENT_GREEN,
