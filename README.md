@@ -22,7 +22,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ---
 
-## Features 🎥
+## Features
 
 * **Intuitive GUI:** Easy-to-use interface built with `customtkinter` for a smooth user experience.
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
@@ -74,7 +74,7 @@ If you want to run the application from its Python source code:
     python "nvencFF Toolbox.py"
     ```
 
-### Building Executable (For Developers) 🔧
+### Building Executable (For Developers)
 
 You can compile the Python script into a standalone Windows executable (`.exe`) using **Nuitka**.
 
@@ -102,7 +102,7 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
 
 ---
 
-## Usage 🎥
+## Usage
 
 1.  **Launch the application:** Run the `.exe` file or `nvencFF Toolbox.py`.
 2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
