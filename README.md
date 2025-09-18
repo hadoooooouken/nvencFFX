@@ -133,3 +133,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
 
 If you have a suggestion that would make this better, you can simply open an issue with the tag "enhancement" or "bug".
 
+## Notes
+
+- This app is designed for NVIDIA GPUs that support **NVENC hardware encoding**.
+- For AMD GPUs use [RedFFmpegatron](https://gitlab.com/hadoukez/redffmpegatron).
+- The tool is intended for Windows only.
