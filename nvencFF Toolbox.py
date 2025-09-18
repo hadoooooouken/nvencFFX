@@ -1282,7 +1282,7 @@ class VideoConverterApp:
             width=100,
         ).pack(side="left")
 
-        # Preview button
+        # Denoise button
         ctk.CTkButton(
             speed_buttons_frame,
             text="Denoise",
