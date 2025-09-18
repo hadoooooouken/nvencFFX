@@ -47,7 +47,7 @@ If you want to run the application from its Python source code:
 
 1.  **Clone the repository:**
     ```
-    git clone [https://gitlab.com/hadoukez/nvencFF-Toolbox.git](https://gitlab.com/hadoukez/nvencFF-Toolbox.git)
+    git clone https://gitlab.com/hadoukez/nvencFF-Toolbox.git
     cd nvencFF-Toolbox
     ```
 2.  **Install dependencies:**
