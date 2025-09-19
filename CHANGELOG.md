@@ -1,5 +1,8 @@
 # nvencFF Toolbox - Changelog
 
+## [1.4.2] - 2025-09-25
+- Cosmetic UI fixes
+
 ## [1.4.1] - 2025-09-18
 - Presets updated.
 

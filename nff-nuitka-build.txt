@@ -1,10 +1,10 @@
-python -m nuitka --msvc=latest --standalone --onefile --windows-console-mode=disable ^
+python -m nuitka --msvc=latest --standalone --windows-console-mode=disable ^
 --include-package=customtkinter --enable-plugin=tk-inter ^
 --windows-icon-from-ico="icon.ico" ^
 --include-data-file=icon.ico=./ ^
 --product-name="nvencFF Toolbox" ^
---product-version="1.4.1" ^
---file-version="1.4.1" ^
+--product-version="1.4.2" ^
+--file-version="1.4.2" ^
 --file-description="nvencFF Toolbox" ^
 --company-name="Deepseek Enjoyer" ^
 --copyright="Copyright (C) 2025 hadouken" ^
