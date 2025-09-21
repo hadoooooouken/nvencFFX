@@ -1,6 +1,19 @@
 # nvencFF Toolbox - Changelog
 
-## [1.4.2] - 2025-09-25
+## [1.4.3] - 2025-09-25
+- Fixed Drag n Drop;
+- Removed "highbitdepth";
+- Added "Split Encode Mode" option;
+- Added "HW Accel" option;
+- Improved copypaste (Ctrl+C/V) handling;
+- Added "Help" button with a file describing the program parameters;
+- Added "Force 8 bit button";
+- Added "Force 10 bit button";
+- Added "Crop to 16:9";
+- Added "Rotate";
+- Presets updated.
+
+## [1.4.2] - 2025-09-20
 - Cosmetic UI fixes
 
 ## [1.4.1] - 2025-09-18

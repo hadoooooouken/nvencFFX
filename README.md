@@ -77,9 +77,10 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-package=customtkinter --enable-plugin=tk-inter ^
         --windows-icon-from-ico="icon.ico" ^
         --include-data-file=icon.ico=./ ^
+        --include-data-file=nff-help.txt=./nff-help.txt ^
         --product-name="nvencFF Toolbox" ^
-        --product-version="1.4.2" ^
-        --file-version="1.4.2" ^
+        --product-version="1.4.3" ^
+        --file-version="1.4.3" ^
         --file-description="nvencFF Toolbox" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2025 hadouken" ^
