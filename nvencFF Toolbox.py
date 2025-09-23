@@ -146,7 +146,7 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFF Toolbox 1.4.3")
+        master.title("nvencFF Toolbox 1.4.4")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -210,6 +210,10 @@ class VideoConverterApp:
         if len(sys.argv) > 1:
             self._handle_dropped_file(sys.argv[1])
         self.preview_temp_files = []  # Add list for preview temporary files
+
+        # Help windows
+        self.output_window_open = False
+        self.open_help_windows = {}
 
     def _create_10s_preview(self):
         """Create a 10-second preview with current settings"""
@@ -1706,6 +1710,11 @@ class VideoConverterApp:
             self._calculate_estimated_size()
 
     def _show_output_command(self):
+        if getattr(self, "output_window_open", False):
+            return
+
+        self.output_window_open = True
+
         if not self.input_file.get():
             messagebox.showerror("Error", "Please select an input file first.")
             return
@@ -1715,9 +1724,14 @@ class VideoConverterApp:
             output_window = ctk.CTkToplevel(self.master)
             output_window.title("FFmpeg Command Preview - Editable")
             output_window.geometry("850x550")
-            output_window.transient(self.master)
-            output_window.grab_set()
+            output_window.after(100, output_window.focus_force)
             output_window.configure(fg_color=PRIMARY_BG)
+
+            def on_close():
+                self.output_window_open = False
+                output_window.destroy()
+
+            output_window.protocol("WM_DELETE_WINDOW", on_close)
 
             text_frame = ctk.CTkFrame(output_window)
             text_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -1729,7 +1743,11 @@ class VideoConverterApp:
             text_frame.configure(fg_color=PRIMARY_BG)
 
             self.command_textbox = ctk.CTkTextbox(
-                text_frame, wrap="word", font=("Consolas", 14), height=300
+                text_frame,
+                wrap="word",
+                font=("Consolas", 14),
+                height=300,
+                fg_color=SECONDARY_BG,
             )
             self.command_textbox.pack(fill="both", expand=True, padx=5, pady=5)
             self.command_textbox.insert("1.0", " ".join(command))
@@ -1761,7 +1779,7 @@ class VideoConverterApp:
             ctk.CTkButton(
                 button_frame,
                 text="Close",
-                command=output_window.destroy,
+                command=on_close,
                 fg_color=ACCENT_GREY,
                 hover_color=HOVER_GREY,
                 text_color=TEXT_COLOR_B,
@@ -2916,10 +2934,22 @@ class VideoConverterApp:
             self.is_converting = False
 
     def _show_main_help(self):
-        help_window = ctk.CTkToplevel(self.master)
-        help_window.title("nvencFF Toolbox Help")
-        help_window.geometry("800x700")
-        help_window.configure(fg_color=PRIMARY_BG)
+        if self.open_help_windows.get("main_help", False):
+            return
+
+        self.open_help_windows["main_help"] = True
+
+        main_help_window = ctk.CTkToplevel(self.master)
+        main_help_window.title("nvencFF Toolbox Help")
+        main_help_window.geometry("800x700")
+        main_help_window.after(100, main_help_window.focus_force)
+        main_help_window.configure(fg_color=PRIMARY_BG)
+
+        def on_close():
+            self.open_help_windows["main_help"] = False
+            main_help_window.destroy()
+
+        main_help_window.protocol("WM_DELETE_WINDOW", on_close)
 
         if getattr(sys, "frozen", False):
             base_path = sys._MEIPASS
@@ -2934,10 +2964,12 @@ class VideoConverterApp:
         except Exception as e:
             help_text = f"Help file not found at: {help_file_path}\nError: {str(e)}"
 
-        text_frame = ctk.CTkFrame(help_window, fg_color=PRIMARY_BG)
+        text_frame = ctk.CTkFrame(main_help_window, fg_color=PRIMARY_BG)
         text_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        textbox = ctk.CTkTextbox(text_frame, wrap="word", fg_color=SECONDARY_BG)
+        textbox = ctk.CTkTextbox(
+            text_frame, wrap="word", font=("Consolas", 14), fg_color=SECONDARY_BG
+        )
         textbox.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Configure text tags
@@ -2954,13 +2986,33 @@ class VideoConverterApp:
 
         textbox.configure(state="disabled")
 
+        close_btn = ctk.CTkButton(
+            text_frame,
+            text="Close",
+            command=on_close,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_COLOR_B,
+        )
+        close_btn.pack(pady=10)
+
     def _show_help_window(self, title, help_type):
+        if self.open_help_windows.get(help_type, False):
+            return
+
+        self.open_help_windows[help_type] = True
+
         help_window = ctk.CTkToplevel(self.master)
         help_window.title(title)
         help_window.geometry("800x600")
-        help_window.transient(self.master)
-        help_window.grab_set()
+        help_window.after(100, help_window.focus_force)
         help_window.configure(fg_color=PRIMARY_BG)
+
+        def on_close():
+            self.open_help_windows[help_type] = False
+            help_window.destroy()
+
+        help_window.protocol("WM_DELETE_WINDOW", on_close)
 
         content_frame = ctk.CTkFrame(help_window, fg_color=PRIMARY_BG)
         content_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -2973,14 +3025,14 @@ class VideoConverterApp:
             text="Loading help information...",
             justify="left",
             anchor="nw",
-            wraplength=750,
+            font=("Consolas", 14),
         )
         help_text.pack(fill="both", expand=True, padx=10, pady=10)
 
         close_btn = ctk.CTkButton(
             content_frame,
             text="Close",
-            command=help_window.destroy,
+            command=on_close,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
             text_color=TEXT_COLOR_B,

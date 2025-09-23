@@ -7,7 +7,7 @@ Set the encoding preset:
 p1 - fastest (lowest quality)
 p7 - slowest (best quality)
 
-nFF default: p3 (good balance between speed and quality).
+nvencFF default: p3 (good balance between speed and quality).
 
 #Tune
 hq, uhq, ll, ull, lossless
@@ -223,14 +223,13 @@ Values <1.0 speed up, >1.0 slow down.
 
 atempo=2.0
 Doubles audio playback speed (2x faster) without changing pitch.
-atempo supports 0.5–2.0. For larger changes, chain filters (e.g., atempo=2.0,atempo=2.0 for 4x).
 
 #Slow down X2
 setpts=2.0*PTS
 
 Halves video playback speed (2x slower)..
 
-atempo=2.0
+atempo=0.5
 Halves audio playback speed (2x slower).
 
 #Sharpness

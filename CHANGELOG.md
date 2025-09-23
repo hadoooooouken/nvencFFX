@@ -1,6 +1,10 @@
 # nvencFF Toolbox - Changelog
 
-## [1.4.3] - 2025-09-25
+## [1.4.4] - 2025-09-23
+- UI improvements;
+- Help file information corrections.
+
+## [1.4.3] - 2025-09-22
 - Fixed Drag n Drop;
 - Removed "highbitdepth";
 - Added "Split Encode Mode" option;
