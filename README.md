@@ -52,9 +52,9 @@ If you want to run the application from its Python source code:
     cd nvencFF-Toolbox
     ```
 2.  **Install dependencies:**
-    The project uses `customtkinter`, `CTkToolTip`, `pywin32` (for `win32gui`, `win32con`, `win32api`).
+    The project uses `customtkinter`, `pillow`, `pywin32` (for `win32gui`, `win32con`, `win32api`).
     ```bash
-    pip install customtkinter CTkToolTip pywin32
+    pip install customtkinter pillow pywin32
     ```
 3.  **Run the application:**
     ```
