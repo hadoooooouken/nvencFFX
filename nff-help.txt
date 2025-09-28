@@ -1,5 +1,18 @@
 #ADVANCED ENCODER SETTINGS
 
+#Auto Button
+Resets all encoder settings to automatic (auto) values and disables all checkboxes.
+Useful for quickly returning to default settings.
+
+#FF Threads
+auto, 1-16
+
+Sets the number of threads used by FFmpeg for processing:
+auto = Automatic thread detection
+1-16 = Specific number of threads
+
+Higher values can improve performance on multi-core systems.
+
 #Preset
 p1-p7
 
@@ -337,3 +350,20 @@ The transpose filter accepts the values from 0-3:
     1 = 90° clockwise
     2 = 90° counter-clockwise
     3 = 90° clockwise and vertical flip
+
+#Trim Slider
+Visual timeline for setting trim points with thumbnail preview.
+Drag handles to set start and end times accurately.
+
+#Streamcopy mode
+Enabled/Disabled
+When enabled, uses stream copy instead of re-encoding for trimmed sections.
+
+#Custom Command Editor
+Enables direct editing of the FFmpeg command line.
+Useful for advanced users who need specific parameters.
+
+#Playback Controls
+Play Input File = Opens original file in system default player
+Play 10s Preview = Opens encoded preview in system player  
+Play Output File = Opens converted file in system player
