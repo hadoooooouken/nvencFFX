@@ -75,8 +75,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
     ```
         python -m nuitka --msvc=latest --standalone --windows-console-mode=disable ^
         --include-package=customtkinter --enable-plugin=tk-inter ^
-        --windows-icon-from-ico="icon.ico" ^
-        --include-data-file=icon.ico=./ ^
+        --windows-icon-from-ico="nff.ico" ^
+        --include-data-file=nff.ico=./ ^
         --include-data-file=nff-help.txt=./nff-help.txt ^
         --product-name="nvencFF Toolbox" ^
         --product-version="1.4.5" ^
