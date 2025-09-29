@@ -125,4 +125,5 @@ If you have a suggestion that would make this better, you can simply open an iss
 
 - This app is designed for NVIDIA GPUs that support **NVENC hardware encoding**.
 - For AMD GPUs use [RedFFmpegatron](https://gitlab.com/hadoukez/redffmpegatron).
+- For Intel Arc GPUs and integrated graphics use [QuickFFSync](https://gitlab.com/hadoukez/quickffsync).
 - The tool is intended for Windows only.
