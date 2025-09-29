@@ -79,8 +79,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-data-file=nff.ico=./ ^
         --include-data-file=nff-help.txt=./nff-help.txt ^
         --product-name="nvencFF Toolbox" ^
-        --product-version="1.4.5" ^
-        --file-version="1.4.5" ^
+        --product-version="1.4.6" ^
+        --file-version="1.4.6" ^
         --file-description="nvencFF Toolbox" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2025 hadouken" ^

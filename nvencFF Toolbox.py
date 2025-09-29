@@ -146,7 +146,7 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFF Toolbox 1.4.5")
+        master.title("nvencFF Toolbox 1.4.6")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -1197,45 +1197,16 @@ class VideoConverterApp:
         additional_options_toggle.grid(row=11, column=0, sticky="w", padx=10, pady=5)
         self.additional_options_frame = ctk.CTkFrame(main_frame, fg_color=SECONDARY_BG)
 
-        # Options
-        ctk.CTkLabel(self.additional_options_frame, text="Add FF Options:").grid(
-            row=3, column=0, sticky="w", padx=10, pady=10
-        )
-        self.additional_options_entry = ctk.CTkEntry(
-            self.additional_options_frame,
-            textvariable=self.additional_options,
-            width=450,
-            fg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-        )
-        self.additional_options_entry.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        self.additional_options_entry.insert(0, self.additional_options_placeholder)
-        self.additional_options_entry.configure(text_color=PLACEHOLDER_COLOR)
-        self.additional_options_entry.bind("<FocusIn>", self._on_options_entry_focus_in)
-        self.additional_options_entry.bind(
-            "<FocusOut>", self._on_options_entry_focus_out
-        )
-
-        ctk.CTkButton(
-            self.additional_options_frame,
-            text="?",
-            width=30,
-            fg_color=ACCENT_GREY,
-            hover_color=HOVER_GREY,
-            text_color=TEXT_COLOR_B,
-            command=lambda: self._show_help_window("NVENC Encoder Options", "encoder"),
-        ).grid(row=3, column=2, padx=(0, 10))
-
         # Trimming controls
         trim_frame = ctk.CTkFrame(self.additional_options_frame, fg_color="transparent")
-        trim_frame.grid(row=2, column=0, columnspan=3, sticky="w")
+        trim_frame.grid(row=1, column=0, columnspan=3, sticky="w")
 
         ctk.CTkLabel(trim_frame, text="Trimming:").grid(
-            row=2, column=1, sticky="w", padx=10, pady=10
+            row=1, column=1, sticky="w", padx=10, pady=10
         )
 
         # Start time
-        ctk.CTkLabel(trim_frame, text="From:").grid(row=2, column=2, padx=(85, 5))
+        ctk.CTkLabel(trim_frame, text="From:").grid(row=1, column=2, padx=(85, 5))
         start_entry = ctk.CTkEntry(
             trim_frame,
             textvariable=self.trim_start,
@@ -1243,14 +1214,14 @@ class VideoConverterApp:
             fg_color=SECONDARY_BG,
             text_color=TEXT_COLOR_W,
         )
-        start_entry.grid(row=2, column=3, padx=5)
+        start_entry.grid(row=1, column=3, padx=5)
         start_entry.bind(
             "<Return>",
             lambda e: self._validate_and_update_trim_time(self.trim_start, True),
         )
 
         # End time
-        ctk.CTkLabel(trim_frame, text="To:").grid(row=2, column=4, padx=10)
+        ctk.CTkLabel(trim_frame, text="To:").grid(row=1, column=4, padx=10)
         end_entry = ctk.CTkEntry(
             trim_frame,
             textvariable=self.trim_end,
@@ -1258,7 +1229,7 @@ class VideoConverterApp:
             fg_color=SECONDARY_BG,
             text_color=TEXT_COLOR_W,
         )
-        end_entry.grid(row=2, column=5)
+        end_entry.grid(row=1, column=5)
         end_entry.bind(
             "<Return>",
             lambda e: self._validate_and_update_trim_time(self.trim_end, False),
@@ -1281,7 +1252,7 @@ class VideoConverterApp:
             hover_color=HOVER_GREEN,
             text_color=TEXT_COLOR_B,
             width=100,
-        ).grid(row=2, column=6, padx=15)
+        ).grid(row=1, column=6, padx=15)
 
         # Streamcopy checkbox
         ctk.CTkCheckBox(
@@ -1291,12 +1262,41 @@ class VideoConverterApp:
             variable=self.trim_streamcopy,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=2, column=7)
+        ).grid(row=1, column=7)
+
+        # FF Options
+        ctk.CTkLabel(self.additional_options_frame, text="Add FF Options:").grid(
+            row=2, column=0, sticky="w", padx=10, pady=10
+        )
+        self.additional_options_entry = ctk.CTkEntry(
+            self.additional_options_frame,
+            textvariable=self.additional_options,
+            width=450,
+            fg_color=SECONDARY_BG,
+            text_color=TEXT_COLOR_W,
+        )
+        self.additional_options_entry.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+        self.additional_options_entry.insert(0, self.additional_options_placeholder)
+        self.additional_options_entry.configure(text_color=PLACEHOLDER_COLOR)
+        self.additional_options_entry.bind("<FocusIn>", self._on_options_entry_focus_in)
+        self.additional_options_entry.bind(
+            "<FocusOut>", self._on_options_entry_focus_out
+        )
+
+        ctk.CTkButton(
+            self.additional_options_frame,
+            text="?",
+            width=30,
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            command=lambda: self._show_help_window("NVENC Encoder Options", "encoder"),
+        ).grid(row=2, column=2, padx=(0, 10))
 
         # Video Filters
         ctk.CTkLabel(
             self.additional_options_frame, text="Add Video Filters (-vf):"
-        ).grid(row=4, column=0, sticky="w", padx=10, pady=2)
+        ).grid(row=3, column=0, sticky="w", padx=10, pady=2)
         self.additional_filter_options_entry = ctk.CTkEntry(
             self.additional_options_frame,
             textvariable=self.additional_filter_options,
@@ -1305,7 +1305,7 @@ class VideoConverterApp:
             text_color=TEXT_COLOR_W,
         )
         self.additional_filter_options_entry.grid(
-            row=4, column=1, sticky="ew", padx=5, pady=10
+            row=3, column=1, sticky="ew", padx=5, pady=10
         )
         self.additional_filter_options_entry.insert(
             0, self.additional_filter_options_placeholder
@@ -1326,12 +1326,12 @@ class VideoConverterApp:
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             command=lambda: self._show_help_window("FFmpeg Video Filters", "filters"),
-        ).grid(row=4, column=2, padx=(0, 10))
+        ).grid(row=3, column=2, padx=(0, 10))
 
         # Audio Filters
         ctk.CTkLabel(
             self.additional_options_frame, text="Add Audio Filters (-af):"
-        ).grid(row=5, column=0, sticky="w", padx=10, pady=2)
+        ).grid(row=4, column=0, sticky="w", padx=10, pady=2)
         self.additional_audio_filter_options_entry = ctk.CTkEntry(
             self.additional_options_frame,
             textvariable=self.additional_audio_filter_options,
@@ -1340,7 +1340,7 @@ class VideoConverterApp:
             text_color=TEXT_COLOR_W,
         )
         self.additional_audio_filter_options_entry.grid(
-            row=5, column=1, sticky="ew", padx=5, pady=10
+            row=4, column=1, sticky="ew", padx=5, pady=10
         )
         self.additional_audio_filter_options_entry.insert(
             0, self.additional_audio_filter_options_placeholder
@@ -1360,7 +1360,7 @@ class VideoConverterApp:
             self.additional_options_frame, fg_color="transparent"
         )
         quick_buttons_frame.grid(
-            row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
+            row=5, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
         ctk.CTkButton(
@@ -1431,7 +1431,7 @@ class VideoConverterApp:
             self.additional_options_frame, fg_color="transparent"
         )
         quick_buttons_frame_2.grid(
-            row=7, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
+            row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
         # FPS passtrough button
@@ -1495,7 +1495,7 @@ class VideoConverterApp:
             self.additional_options_frame, fg_color="transparent"
         )
         quick_buttons_frame_3.grid(
-            row=8, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
+            row=7, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
         # Force 8 bit button
@@ -3680,7 +3680,7 @@ class VideoConverterApp:
             return False
 
         # Convert to seconds
-        time_seconds = max(0, round(self._time_str_to_seconds(time_str), 3))
+        time_seconds = max(0, int(self._time_str_to_seconds(time_str)))
 
         # Get video duration
         duration = self._get_video_duration_safe()
@@ -3805,29 +3805,10 @@ class VideoConverterApp:
             self.preview_label.pack(padx=0, pady=0)
             self.preview_window.geometry("352x198")
 
-        # Try GPU methods first, fallback to CPU if they fail
-        gpu_success = self._try_gpu_thumbnail_nv12(time_seconds)
-
-        if not gpu_success:
-            # Try alternative GPU format
-            gpu_success = self._try_gpu_thumbnail_p010le(time_seconds)
-
-        if not gpu_success:
-            # Fallback to CPU method
-            self._try_cpu_thumbnail(time_seconds)
-
-        # Position preview above slider handle
-        slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
-        slider_y = self.trim_canvas.winfo_rooty() - 208
-
-        self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
-        self.preview_window.deiconify()
-        self.preview_visible = True
-
-    def _try_gpu_thumbnail_nv12(self, time_seconds):
-        """Try GPU thumbnail generation with nv12 format, return True if successful"""
+        # Generate thumbnail in memory
+        # NV12 try
         try:
-            cmd = [
+            cmd_nv12 = [
                 self.ffmpeg_path,
                 "-threads",
                 "1",
@@ -3851,106 +3832,91 @@ class VideoConverterApp:
             ]
 
             process = subprocess.run(
-                cmd,
+                cmd_nv12,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=3,  # Shorter timeout for GPU
+                timeout=3,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
+
+            # P010LE try
+            if process.returncode != 0 or not process.stdout:
+                cmd_p10 = [
+                    self.ffmpeg_path,
+                    "-threads",
+                    "1",
+                    "-hwaccel",
+                    "cuda",
+                    "-hwaccel_output_format",
+                    "cuda",
+                    "-ss",
+                    str(time_seconds),
+                    "-i",
+                    self.input_file.get(),
+                    "-vframes",
+                    "1",
+                    "-vf",
+                    "scale_cuda=352:-2:interp_algo=bilinear,hwdownload,format=p010le",
+                    "-q:v",
+                    "2",
+                    "-f",
+                    "mjpeg",
+                    "pipe:1",
+                ]
+
+                process = subprocess.run(
+                    cmd_p10,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=3,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
+
+            # CPU Fallback
+            if process.returncode != 0 or not process.stdout:
+                cmd_cpu = [
+                    self.ffmpeg_path,
+                    "-ss",
+                    str(time_seconds),
+                    "-i",
+                    self.input_file.get(),
+                    "-vframes",
+                    "1",
+                    "-vf",
+                    "scale=352:-1",
+                    "-q:v",
+                    "2",
+                    "-f",
+                    "mjpeg",
+                    "pipe:1",
+                ]
+
+                process = subprocess.run(
+                    cmd_cpu,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
 
             if process.returncode == 0 and process.stdout:
                 img_buffer = BytesIO(process.stdout)
                 thumb_image = Image.open(img_buffer)
                 ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
                 self.preview_label.configure(image=ctk_thumb, text="")
-                return True
-        except (subprocess.TimeoutExpired, Exception) as e:
-            print(f"GPU preview (nv12) failed: {e}")
 
-        return False
+                # Position preview above slider handle
+                slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
+                slider_y = self.trim_canvas.winfo_rooty() - 208
 
-    def _try_gpu_thumbnail_p010le(self, time_seconds):
-        """Try GPU thumbnail generation with p010le format, return True if successful"""
-        try:
-            cmd = [
-                self.ffmpeg_path,
-                "-threads",
-                "1",
-                "-hwaccel",
-                "cuda",
-                "-hwaccel_output_format",
-                "cuda",
-                "-ss",
-                str(time_seconds),
-                "-i",
-                self.input_file.get(),
-                "-vframes",
-                "1",
-                "-vf",
-                "scale_cuda=352:-2:interp_algo=bilinear,hwdownload,format=p010le",
-                "-q:v",
-                "2",
-                "-f",
-                "mjpeg",
-                "pipe:1",
-            ]
-
-            process = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=3,  # Shorter timeout for GPU
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-
-            if process.returncode == 0 and process.stdout:
-                img_buffer = BytesIO(process.stdout)
-                thumb_image = Image.open(img_buffer)
-                ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
-                self.preview_label.configure(image=ctk_thumb, text="")
-                return True
-        except (subprocess.TimeoutExpired, Exception) as e:
-            print(f"GPU preview (p010le) failed: {e}")
-
-        return False
-
-    def _try_cpu_thumbnail(self, time_seconds):
-        """Fallback CPU thumbnail generation"""
-        try:
-            cmd = [
-                self.ffmpeg_path,
-                "-ss",
-                str(time_seconds),
-                "-i",
-                self.input_file.get(),
-                "-vframes",
-                "1",
-                "-vf",
-                "scale=352:-1",
-                "-q:v",
-                "2",
-                "-f",
-                "mjpeg",
-                "pipe:1",
-            ]
-
-            process = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-
-            if process.returncode == 0 and process.stdout:
-                img_buffer = BytesIO(process.stdout)
-                thumb_image = Image.open(img_buffer)
-                ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
-                self.preview_label.configure(image=ctk_thumb, text="")
+                self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
+                self.preview_window.deiconify()
+                self.preview_visible = True
             else:
                 self.preview_label.configure(text="Preview\nunavailable")
+
         except Exception as e:
-            print(f"CPU preview failed: {e}")
+            print(f"Error generating preview: {e}")
             self.preview_label.configure(text="Preview\nunavailable")
 
     def _schedule_thumbnail_preview(self, x_pos, time_seconds, delay=200):
@@ -4122,7 +4088,7 @@ class VideoConverterApp:
             return
 
         # Convert to seconds
-        time_seconds = self._time_str_to_seconds(time_str)
+        time_seconds = max(0, int(self._time_str_to_seconds(time_str)))
 
         # Get video duration
         duration = self._get_video_duration_safe()
