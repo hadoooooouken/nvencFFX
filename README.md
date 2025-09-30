@@ -1,6 +1,6 @@
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
-# nvencFF Toolbox 🚀
+# nvencFFX 🚀
 
 The **nvencFF Toolbox** is a convenient graphical user interface (GUI) application designed to simplify video processing tasks using **FFmpeg** and leveraging **NVIDIA's NVENC hardware encoder**.
 
