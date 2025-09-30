@@ -1,4 +1,9 @@
-# nvencFF Toolbox - Changelog
+# nvencFFX - Changelog
+
+## [1.4.7] - 2025-09-29
+- Renamed to nvencFFX;
+- Added automatic session saving (ffmpeg path, last input directory, last output directory, codec selection, encoder settings);
+- UI cosmetic fixes.
 
 ## [1.4.6] - 2025-09-29
 - The preview generation mechanism in the Trimming section has been updated.

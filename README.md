@@ -2,7 +2,7 @@
 
 # nvencFFX 🚀
 
-The **nvencFF Toolbox** is a convenient graphical user interface (GUI) application designed to simplify video processing tasks using **FFmpeg** and leveraging **NVIDIA's NVENC hardware encoder**.
+The **nvencFFX** is a convenient graphical user interface (GUI) application designed to simplify video processing tasks using **FFmpeg** and leveraging **NVIDIA's NVENC hardware encoder**.
 
 This project was primarily developed to explore the capabilities of FFmpeg and NVIDIA's hardware encoders, resulting in a user-friendly tool that streamlines common video manipulation workflows, such as encoding and trimming.
 
@@ -25,7 +25,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ### Prerequisites
 
-To use the nvencFF Toolbox, you will need:
+To use the nvencFFX, you will need:
 
 * **Windows Operating System:** The application is built for Windows 10/11.
 * **FFmpeg:** You need to have FFmpeg installed on your system and its executable (`ffmpeg.exe`) accessible in your system's PATH, or specify its path within the application.
@@ -36,10 +36,10 @@ FFmpeg Windows builds links: [Windows builds from gyan.dev](https://www.gyan.dev
 
 #### 1. Download the Executable (Recommended) 🚀
 
-The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFF-Toolbox/-/releases) page.
+The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) page.
 
-1.  Go to the [Releases](https://gitlab.com/hadoukez/nvencFF-Toolbox/-/releases) section of this GitLab repository.
-2.  Download the `nvencFF_Toolbox.exe` file.
+1.  Go to the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) section of this GitLab repository.
+2.  Download the `nvencFFX.exe` file.
 3.  Run the executable.
 
 #### 2. Run from Source (For Developers) 🔧
@@ -48,8 +48,8 @@ If you want to run the application from its Python source code:
 
 1.  **Clone the repository:**
     ```
-    git clone https://gitlab.com/hadoukez/nvencFF-Toolbox.git
-    cd nvencFF-Toolbox
+    git clone https://gitlab.com/hadoukez/nvencFFX.git
+    cd nvencFFX
     ```
 2.  **Install dependencies:**
     The project uses `customtkinter`, `pillow`, `pywin32` (for `win32gui`, `win32con`, `win32api`).
@@ -58,7 +58,7 @@ If you want to run the application from its Python source code:
     ```
 3.  **Run the application:**
     ```
-    python "nvencFF Toolbox.py"
+    python "nvencFFX.py"
     ```
 
 ### Building Executable (For Developers) 🔧
@@ -73,18 +73,19 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
     Navigate to the project's root directory in your terminal and run the following command. This command configures Nuitka to create a standalone, single-file executable with disabled console mode, include necessary packages, set application metadata, and specify an icon.
 
     ```
-        python -m nuitka --msvc=latest --standalone --windows-console-mode=disable ^
+        python -m nuitka --msvc=latest --lto=yes ^
+        --standalone --windows-console-mode=disable ^
         --include-package=customtkinter --enable-plugin=tk-inter ^
         --windows-icon-from-ico="nff.ico" ^
         --include-data-file=nff.ico=./ ^
         --include-data-file=nff-help.txt=./nff-help.txt ^
-        --product-name="nvencFF Toolbox" ^
-        --product-version="1.4.6" ^
-        --file-version="1.4.6" ^
-        --file-description="nvencFF Toolbox" ^
+        --product-name="nvencFFX" ^
+        --product-version="1.4.7" ^
+        --file-version="1.4.7" ^
+        --file-description="nvencFFX" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2025 hadouken" ^
-        --output-dir=build "nvencFF Toolbox.py"
+        --output-dir=build "nvencFFX.py"
     ```
     The compiled executable will be found in the `build` directory specified by `--output-dir`.
 
@@ -92,7 +93,7 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
 
 ## Usage 🎥
 
-1.  **Launch the application:** Run the `.exe` file or `nvencFF Toolbox.py`.
+1.  **Launch the application:** Run the `.exe` file or `nvencFFX.py`.
 2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
 3.  **Specify Output File:** Click "Browse Output" to choose where to save your processed video and what to name it.
 4.  **Configure Options:**
@@ -112,7 +113,7 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
    ```
    %APPDATA%\Microsoft\Windows\SendTo
    ```
-2. Modify APP_PATH in "Send to nvencFF Toolbox.bat" script and create shortcut to it here.
+2. Modify APP_PATH in "Send to nvencFFX.bat" script and create shortcut to it here.
 3. You can rename it and set custom icon.
 
 ---
