@@ -1,5 +1,12 @@
 # nvencFFX - Changelog
 
+## [1.4.8] - 2025-10-02
+- Fixed and updated trim;
+- Added new checkboxes: Copy (same as old Streamcopy) and Precise (-ss after -i):
+- Added "Default" button in Encoder section (copy of Default preset):
+- Presets updated;
+- Some UI/UX improvements.
+
 ## [1.4.7] - 2025-09-29
 - Renamed to nvencFFX;
 - Added automatic session saving (ffmpeg path, last input directory, last output directory, codec selection, encoder settings);

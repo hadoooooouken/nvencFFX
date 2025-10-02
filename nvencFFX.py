@@ -159,7 +159,7 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.4.7")
+        master.title("nvencFFX 1.4.8")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -224,6 +224,9 @@ class VideoConverterApp:
         if len(sys.argv) > 1:
             self._handle_dropped_file(sys.argv[1])
         self.preview_temp_files = []  # Add list for preview temporary files
+        self.trim_streamcopy.trace_add(
+            "write", lambda *args: self._update_preview_button_state()
+        )
 
         # Help windows
         self.output_window_open = False
@@ -263,14 +266,26 @@ class VideoConverterApp:
         self.split_encode_mode.trace_add(
             "write", lambda *args: self._on_setting_changed()
         )
+        # Encoder Flags
         self.spatial_aq.trace_add("write", lambda *args: self._on_setting_changed())
         self.temporal_aq.trace_add("write", lambda *args: self._on_setting_changed())
         self.strict_gop.trace_add("write", lambda *args: self._on_setting_changed())
         self.no_scenecut.trace_add("write", lambda *args: self._on_setting_changed())
         self.weighted_pred.trace_add("write", lambda *args: self._on_setting_changed())
 
+    def _update_preview_button_state(self):
+        """Update preview button state based on streamcopy setting"""
+        if self.trim_streamcopy.get():
+            self.play10s_button.configure(state="disabled", fg_color=SECONDARY_BG)
+        else:
+            self.play10s_button.configure(state="normal", fg_color=ACCENT_GREY)
+
     def _create_10s_preview(self):
         """Create a 10-second preview with current settings"""
+        if self.trim_streamcopy.get():
+            messagebox.showerror("Error", "Preview is not available in Streamcopy mode")
+            return
+
         if self.is_converting or self.is_creating_preview:
             messagebox.showerror("Error", "Please wait until current process completes")
             return
@@ -335,9 +350,22 @@ class VideoConverterApp:
 
         # Build encoding command
         try:
-            # if custom command exist
+            # if custom command exists
             if self.custom_command is not None:
                 encode_cmd = self.custom_command.copy()
+
+                # Remove any existing -ss and -to parameters from custom command
+                filtered_cmd = []
+                i = 0
+                while i < len(encode_cmd):
+                    if encode_cmd[i] in ["-ss", "-to"]:
+                        i += 2  # Skip the parameter and its value
+                    else:
+                        filtered_cmd.append(encode_cmd[i])
+                        i += 1
+                encode_cmd = filtered_cmd
+
+                # Replace input file and output file
                 try:
                     i_index = encode_cmd.index("-i")
                     if i_index + 1 < len(encode_cmd):
@@ -348,13 +376,26 @@ class VideoConverterApp:
                 if len(encode_cmd) > 0:
                     encode_cmd[-1] = temp_encoded
             else:
+                # Build command using GUI settings but remove trim options
                 original_input = self.input_file.get()
                 original_output = self.output_file.get()
 
                 self.input_file.set(temp_streamcopy)
                 self.output_file.set(temp_encoded)
 
+                # Build the command and remove -ss and -to parameters
                 encode_cmd = self._build_ffmpeg_command(preview=True)
+
+                # Remove any -ss and -to parameters from the built command
+                filtered_cmd = []
+                i = 0
+                while i < len(encode_cmd):
+                    if encode_cmd[i] in ["-ss", "-to"]:
+                        i += 2  # Skip the parameter and its value
+                    else:
+                        filtered_cmd.append(encode_cmd[i])
+                        i += 1
+                encode_cmd = filtered_cmd
 
                 self.input_file.set(original_input)
                 self.output_file.set(original_output)
@@ -515,6 +556,7 @@ class VideoConverterApp:
         self.custom_command = None
         self.last_input_dir = ctk.StringVar(value="")
         self.last_output_dir = ctk.StringVar(value="")
+        self.precise_trim = ctk.BooleanVar(value=False)
 
     def _setup_keyboard_shortcuts(self):
         self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
@@ -773,6 +815,19 @@ class VideoConverterApp:
         )
         self.auto_button.grid(row=5, column=1, sticky="w", padx=5)
         self.auto_button.grid_remove()
+
+        # Default button
+        self.default_button = ctk.CTkButton(
+            main_frame,
+            text="Default",
+            command=lambda: self._apply_preset("none"),
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_COLOR_B,
+            width=80,
+        )
+        self.default_button.grid(row=5, column=1, sticky="w", padx=95)
+        self.default_button.grid_remove()
 
         self.encoder_options_frame = ctk.CTkFrame(main_frame, fg_color=SECONDARY_BG)
 
@@ -1265,22 +1320,22 @@ class VideoConverterApp:
         start_entry = ctk.CTkEntry(
             trim_frame,
             textvariable=self.trim_start,
-            width=80,
+            width=65,
             fg_color=SECONDARY_BG,
             text_color=TEXT_COLOR_W,
         )
-        start_entry.grid(row=1, column=3, padx=5)
+        start_entry.grid(row=1, column=3)
         start_entry.bind(
             "<Return>",
             lambda e: self._validate_and_update_trim_time(self.trim_start, True),
         )
 
         # End time
-        ctk.CTkLabel(trim_frame, text="To:").grid(row=1, column=4, padx=10)
+        ctk.CTkLabel(trim_frame, text="To:").grid(row=1, column=4, padx=(10, 5))
         end_entry = ctk.CTkEntry(
             trim_frame,
             textvariable=self.trim_end,
-            width=80,
+            width=65,
             fg_color=SECONDARY_BG,
             text_color=TEXT_COLOR_W,
         )
@@ -1306,18 +1361,28 @@ class VideoConverterApp:
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
             text_color=TEXT_COLOR_B,
-            width=100,
-        ).grid(row=1, column=6, padx=15)
+            width=80,
+        ).grid(row=1, column=6, padx=10)
 
         # Streamcopy checkbox
         ctk.CTkCheckBox(
             trim_frame,
-            text="Streamcopy",
+            text="Copy",
             command=lambda: self.audio_option.set("copy"),
             variable=self.trim_streamcopy,
+            width=70,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
         ).grid(row=1, column=7)
+
+        # Precise trim checkbox
+        ctk.CTkCheckBox(
+            trim_frame,
+            text="Precise",
+            variable=self.precise_trim,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+        ).grid(row=1, column=8)
 
         # FF Options
         ctk.CTkLabel(self.additional_options_frame, text="Add FF Options:").grid(
@@ -1830,7 +1895,7 @@ class VideoConverterApp:
             for (
                 sub_child
             ) in child.winfo_children():  # Renamed from 'sub' to 'sub_child'
-                # OptionMenus
+                # Option Menus
                 if isinstance(sub_child, ctk.CTkOptionMenu):
                     try:
                         if "auto" in sub_child._values:
@@ -2103,25 +2168,49 @@ class VideoConverterApp:
         # Basic command structure
         command = [ffmpeg_path]
 
-        if self.hwaccel.get() != "auto":
-            command.extend(["-hwaccel:v", self.hwaccel.get()])
-
-        if self.threads.get() != "auto":
-            command.extend(["-threads", self.threads.get()])
-
-        command.extend(
-            [
-                "-y",
-                "-i",
-                input_f,
-            ]
-        )
-
         # Handle Streamcopy option
-        if self.trim_streamcopy.get() and not preview:
+        if self.trim_streamcopy.get():
+            # Extract trim options from additional_options if not in precise mode
+            trim_options = []
+            other_additional_options = []
+
+            if self.enable_additional_options.get() and not self.precise_trim.get():
+                add_val = self.additional_options.get().strip()
+                if add_val and add_val != self.additional_options_placeholder:
+                    # Split the additional options string
+                    parts = add_val.split()
+                    i = 0
+                    while i < len(parts):
+                        if parts[i] == "-ss" and i + 1 < len(parts):
+                            trim_options.extend([parts[i], parts[i + 1]])
+                            i += 2
+                        elif parts[i] == "-to" and i + 1 < len(parts):
+                            trim_options.extend([parts[i], parts[i + 1]])
+                            i += 2
+                        else:
+                            other_additional_options.append(parts[i])
+                            i += 1
+            else:
+                # In precise mode or when additional options are disabled, use all additional options as-is
+                if self.enable_additional_options.get():
+                    add_val = self.additional_options.get().strip()
+                    if add_val and add_val != self.additional_options_placeholder:
+                        other_additional_options.extend(add_val.split())
+
+            # Add trim options at the beginning if we have any
+            if trim_options:
+                command.extend(trim_options)
+
+            command.extend(["-y", "-i", input_f])
+
+            # Add other additional options (excluding trim options that were already added)
+            if other_additional_options:
+                command.extend(other_additional_options)
+
+            # Video stream copy
             command.extend(["-c:v", "copy"])
 
-            # Audio handling - allow user selection even in copy mode
+            # Audio handling
             audio_opt = self.audio_option.get()
             if audio_opt == "disable":
                 command.append("-an")
@@ -2141,14 +2230,53 @@ class VideoConverterApp:
                 except ValueError:
                     raise ValueError("Custom audio bitrate must be a number.")
 
-            # Add FF Options field should still be appended
-            if self.enable_additional_options.get() and not preview:
-                add_val = self.additional_options.get().strip()
-                if add_val and add_val != self.additional_options_placeholder:
-                    command.extend(add_val.split())
-
             command.append(output_f)
             return command
+
+        # Initialize variables for trim options and other additional options
+        trim_options = []
+        other_additional_options = []
+
+        # Extract trim options from additional_options if not in precise mode
+        if (
+            self.enable_additional_options.get()
+            and not self.precise_trim.get()
+            and not self.trim_streamcopy.get()
+        ):
+            add_val = self.additional_options.get().strip()
+            if add_val and add_val != self.additional_options_placeholder:
+                # Split the additional options string
+                parts = add_val.split()
+                i = 0
+                while i < len(parts):
+                    if parts[i] == "-ss" and i + 1 < len(parts):
+                        trim_options.extend([parts[i], parts[i + 1]])
+                        i += 2
+                    elif parts[i] == "-to" and i + 1 < len(parts):
+                        trim_options.extend([parts[i], parts[i + 1]])
+                        i += 2
+                    else:
+                        other_additional_options.append(parts[i])
+                        i += 1
+        else:
+            # In precise mode or when additional options are disabled, use all additional options as-is
+            if self.enable_additional_options.get():
+                add_val = self.additional_options.get().strip()
+                if add_val and add_val != self.additional_options_placeholder:
+                    other_additional_options.extend(add_val.split())
+
+        # Add trim options at the beginning if we have any
+        if trim_options:
+            command.extend(trim_options)
+
+        # Continue with hardware acceleration and threads
+        if self.hwaccel.get() != "auto":
+            command.extend(["-hwaccel:v", self.hwaccel.get()])
+
+        if self.threads.get() != "auto":
+            command.extend(["-threads", self.threads.get()])
+
+        command.extend(["-y", "-i", input_f])
 
         # Normal encoding path
         if self.constant_qp_mode.get():
@@ -2246,14 +2374,7 @@ class VideoConverterApp:
 
         # Add rate control parameters based on mode
         if self.constant_qp_mode.get():
-            command.extend(
-                [
-                    "-rc:v",
-                    "constqp",
-                    "-qp:v",
-                    quality_val,
-                ]
-            )
+            command.extend(["-rc:v", "constqp", "-qp:v", quality_val])
         else:
             command.extend(
                 [
@@ -2268,11 +2389,12 @@ class VideoConverterApp:
                 ]
             )
 
-        if self.enable_additional_options.get():
-            add_val = self.additional_options.get().strip()
-            if add_val and add_val != self.additional_options_placeholder:
-                command.extend(add_val.split())
+        # Add other additional options (excluding trim options that were already added)
+        if other_additional_options:
+            command.extend(other_additional_options)
 
+        # Add audio filters if any
+        if self.enable_additional_options.get():
             add_af_val = self.additional_audio_filter_options.get().strip()
             if (
                 add_af_val
@@ -2280,6 +2402,7 @@ class VideoConverterApp:
             ):
                 command.extend(["-af", add_af_val])
 
+        # Audio settings
         audio_opt = self.audio_option.get()
         if audio_opt == "disable":
             command.append("-an")
@@ -2600,12 +2723,13 @@ class VideoConverterApp:
                 "encoder_rc": self.rc.get(),
                 "encoder_lookahead_level": self.lookahead_level.get(),
                 "encoder_split_encode_mode": self.split_encode_mode.get(),
+                # Encoder Flags
                 "encoder_spatial_aq": self.spatial_aq.get(),
                 "encoder_temporal_aq": self.temporal_aq.get(),
                 "encoder_strict_gop": self.strict_gop.get(),
                 "encoder_no_scenecut": self.no_scenecut.get(),
                 "encoder_weighted_pred": self.weighted_pred.get(),
-                "version": "1.4.7",
+                "version": "1.4.8",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -2760,9 +2884,7 @@ class VideoConverterApp:
         if hasattr(self, "_save_settings_job"):
             self.master.after_cancel(self._save_settings_job)
 
-        self._save_settings_job = self.master.after(
-            1000, self._save_settings
-        )
+        self._save_settings_job = self.master.after(1000, self._save_settings)
 
     def _set_trim_end_to_duration(self):
         if (
@@ -2913,9 +3035,11 @@ class VideoConverterApp:
                 row=6, column=0, columnspan=3, padx=10, pady=5, sticky="ew"
             )
             self.auto_button.grid()
+            self.default_button.grid()
         else:
             self.encoder_options_frame.grid_remove()
             self.auto_button.grid_remove()
+            self.default_button.grid_remove()
         self._update_window_size()
 
     def _toggle_custom_fps_entry(self):
@@ -3682,18 +3806,19 @@ class VideoConverterApp:
     def _apply_preset(self, preset_name):
         if preset_name == "none":
             # Reset to default settings
-            self.enable_encoder_options.set(False)
-            self.enable_fps_scale_options.set(False)
-            self.enable_additional_options.set(False)
+            self.enable_encoder_options.set(True)
 
             # Reset all settings to their initial values
             self.bitrate.set("6000")
+            self.constant_qp_mode.set(True)
             self.quality_level.set("30")
             self.audio_option.set("copy")
             self.custom_abitrate.set("160")
 
             # Reset encoder options
-            self.preset.set("p5")
+            self.threads.set("4")
+            self.hwaccel.set("cuda")
+            self.preset.set("p3")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
                 self.profile.set("main")
@@ -3752,6 +3877,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("6000")
+            self.constant_qp_mode.set(True)
             self.quality_level.set("30")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("bicubic")
@@ -3789,6 +3915,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("8000")
+            self.constant_qp_mode.set(True)
             self.quality_level.set("27")
             self.video_format_option.set("1920")
             self.interpolation_algo.set("spline")
@@ -3827,6 +3954,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("5000")
+            self.constant_qp_mode.set(True)
             self.quality_level.set("30")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("bicubic")
@@ -3864,6 +3992,7 @@ class VideoConverterApp:
 
             # Video settings
             self.bitrate.set("6000")
+            self.constant_qp_mode.set(True)
             self.quality_level.set("27")
             self.video_format_option.set("1280")
             self.interpolation_algo.set("spline")

@@ -1,8 +1,13 @@
 #ADVANCED ENCODER SETTINGS
 
 #Auto Button
-Resets all encoder settings to automatic (auto) values and disables all checkboxes.
-Useful for quickly returning to default settings.
+The Auto button automatically sets all encoder options to their "auto" values and disables all encoder flags.
+This lets FFmpeg use its default settings and intelligent algorithms to determine the optimal encoding parameters for your specific content.
+Useful when you want to leverage FFmpeg's built-in optimizations without manual configuration.
+
+#Default Button
+The Default button resets all encoder settings to their original default values (the same as when the application first starts).
+This provides a clean slate with balanced settings that work well for most common encoding scenarios, ensuring reliable performance and good quality output.
 
 #FF Threads
 auto, 1-16
@@ -355,9 +360,17 @@ The transpose filter accepts the values from 0-3:
 Visual timeline for setting trim points with thumbnail preview.
 Drag handles to set start and end times accurately.
 
-#Streamcopy mode
-Enabled/Disabled
-When enabled, uses stream copy instead of re-encoding for trimmed sections.
+#Copy Checkbox
+The Copy checkbox enables stream copy mode for trimming operations.
+When enabled, the video and audio streams are copied directly without re-encoding,
+making the trimming process extremely fast and completely lossless.
+This is ideal for simple cutting operations where you don't need to change the video quality or format.
+
+#Precise Checkbox
+The Precise checkbox enables accurate frame-by-frame trimming.
+When enabled, FFmpeg uses more precise seeking methods to ensure the trim points land exactly on the specified frames.
+This is slightly slower but guarantees frame-accurate cutting, which is essential for professional editing work or when precise timing is critical.
+Usable for stream copy mode (eliminates freezing at the beginning of the video).
 
 #Custom Command Editor
 Enables direct editing of the FFmpeg command line.
