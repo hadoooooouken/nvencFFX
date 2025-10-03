@@ -159,7 +159,7 @@ class VideoConverterApp:
         self.preview_job = None  # used for debouncing preview creation
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.4.8")
+        master.title("nvencFFX 1.4.9")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -1743,6 +1743,7 @@ class VideoConverterApp:
         self.progress_label = ctk.CTkLabel(self.progress_frame, text="0%")
         self.progress_label.pack()
         self.progress_frame.grid_remove()
+        self.master.after(100, self._startup_ui_fix)
 
         # Play buttons
         self.play_buttons_frame = ctk.CTkFrame(self.button_frame, fg_color=PRIMARY_BG)
@@ -1805,6 +1806,12 @@ class VideoConverterApp:
         self._toggle_audio_options_frame()
         self._toggle_additional_options_frame()
         self._toggle_presets_frame()
+
+    def _startup_ui_fix(self):
+        self.progress_frame.grid_remove()
+        self.progress_value.set(0.0)
+        self.auto_button.grid_remove()
+        self.default_button.grid_remove()
 
     def _play_input_file(self):
         input_path = self.input_file.get()
@@ -2729,7 +2736,7 @@ class VideoConverterApp:
                 "encoder_strict_gop": self.strict_gop.get(),
                 "encoder_no_scenecut": self.no_scenecut.get(),
                 "encoder_weighted_pred": self.weighted_pred.get(),
-                "version": "1.4.8",
+                "version": "1.4.9",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -4071,7 +4078,7 @@ class VideoConverterApp:
             return False
 
         # Convert to seconds
-        time_seconds = max(0, int(self._time_str_to_seconds(time_str)))
+        time_seconds = max(0, self._time_str_to_seconds(time_str))
 
         # Get video duration
         duration = self._get_video_duration_safe()
@@ -4196,8 +4203,10 @@ class VideoConverterApp:
             self.preview_label.pack(padx=0, pady=0)
             self.preview_window.geometry("352x198")
 
-        # Generate thumbnail in memory
-        # NV12 try
+        process = None
+        success = False
+
+        # Try NV12 first
         try:
             cmd_nv12 = [
                 self.ffmpeg_path,
@@ -4226,12 +4235,20 @@ class VideoConverterApp:
                 cmd_nv12,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=3,
+                timeout=5,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
 
-            # P010LE try
-            if process.returncode != 0 or not process.stdout:
+            if process.returncode == 0 and process.stdout:
+                print("NV12 Success")
+                success = True
+            else:
+                raise Exception(f"NV12 failed with return code {process.returncode}")
+
+        except (subprocess.TimeoutExpired, Exception) as e:
+            print(f"NV12 Failed: {e}")
+            # Try P010LE next
+            try:
                 cmd_p10 = [
                     self.ffmpeg_path,
                     "-threads",
@@ -4259,38 +4276,63 @@ class VideoConverterApp:
                     cmd_p10,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    timeout=3,
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                )
-
-            # CPU Fallback
-            if process.returncode != 0 or not process.stdout:
-                cmd_cpu = [
-                    self.ffmpeg_path,
-                    "-ss",
-                    str(time_seconds),
-                    "-i",
-                    self.input_file.get(),
-                    "-vframes",
-                    "1",
-                    "-vf",
-                    "scale=352:-1",
-                    "-q:v",
-                    "2",
-                    "-f",
-                    "mjpeg",
-                    "pipe:1",
-                ]
-
-                process = subprocess.run(
-                    cmd_cpu,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
                     timeout=5,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
 
-            if process.returncode == 0 and process.stdout:
+                if process.returncode == 0 and process.stdout:
+                    print("P010LE Success")
+                    success = True
+                else:
+                    raise Exception(
+                        f"P010LE failed with return code {process.returncode}"
+                    )
+
+            except (subprocess.TimeoutExpired, Exception) as e:
+                print(f"P010LE failed: {e}")
+                # Try CPU fallback last
+                try:
+                    cmd_cpu = [
+                        self.ffmpeg_path,
+                        "-ss",
+                        str(time_seconds),
+                        "-i",
+                        self.input_file.get(),
+                        "-vframes",
+                        "1",
+                        "-vf",
+                        "scale=352:-1",
+                        "-q:v",
+                        "2",
+                        "-f",
+                        "mjpeg",
+                        "pipe:1",
+                    ]
+
+                    process = subprocess.run(
+                        cmd_cpu,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=5,
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                        if os.name == "nt"
+                        else 0,
+                    )
+
+                    if process.returncode == 0 and process.stdout:
+                        print("CPU Success")
+                        success = True
+                    else:
+                        raise Exception(
+                            f"CPU failed with return code {process.returncode}"
+                        )
+
+                except (subprocess.TimeoutExpired, Exception) as e:
+                    print(f"CPU Failed: {e}")
+
+        # Process result
+        if success and process and process.stdout:
+            try:
                 img_buffer = BytesIO(process.stdout)
                 thumb_image = Image.open(img_buffer)
                 ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
@@ -4303,11 +4345,12 @@ class VideoConverterApp:
                 self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
                 self.preview_window.deiconify()
                 self.preview_visible = True
-            else:
-                self.preview_label.configure(text="Preview\nunavailable")
 
-        except Exception as e:
-            print(f"Error generating preview: {e}")
+            except Exception as e:
+                print(f"Error processing image: {e}")
+                self.preview_label.configure(text="Preview\nunavailable")
+        else:
+            print("All attempts failed")
             self.preview_label.configure(text="Preview\nunavailable")
 
     def _schedule_thumbnail_preview(self, x_pos, time_seconds, delay=200):
@@ -4479,7 +4522,7 @@ class VideoConverterApp:
             return
 
         # Convert to seconds
-        time_seconds = max(0, int(self._time_str_to_seconds(time_str)))
+        time_seconds = max(0, self._time_str_to_seconds(time_str))
 
         # Get video duration
         duration = self._get_video_duration_safe()

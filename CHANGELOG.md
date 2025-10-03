@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.4.9] - 2025-10-04
+- Startup UI fixes for some systems;
+- Better CPU Fallback handling.
+
 ## [1.4.8] - 2025-10-02
 - Fixed and updated trim;
 - Added new checkboxes: Copy (same as old Streamcopy) and Precise (-ss after -i):
