@@ -128,3 +128,21 @@ If you have a suggestion that would make this better, you can simply open an iss
 - For AMD GPUs use [RedFFmpegatron](https://gitlab.com/hadoukez/redffmpegatron).
 - For Intel Arc GPUs and integrated graphics use [QuickFFSync](https://gitlab.com/hadoukez/quickffsync).
 - The tool is intended for Windows only.
+
+## License
+
+nvencFFX is licensed under the MIT License — Modified for nvencFFX.
+
+© 2025 hadouken (GitLab) / hadoooooouken (GitHub)
+
+You are free to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of this software, **provided that**:
+
+1. The above copyright notice and this permission notice are included in
+   all copies or substantial portions of the software.
+2. Any public fork, mirror, or redistribution must include a clear reference
+   to the original repository: https://gitlab.com/hadoukez/nvencffx
+3. The name "nvencFFX", "hadouken", or "hadoooooouken" may not be used to
+   endorse or promote derivative products without explicit written permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
