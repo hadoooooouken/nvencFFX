@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.5.1] - 2025-10-09
+- Added "About" info tab;
+- Added "License" info tab;
+- Build with Python: 3.13.8 + Nuitka 2.8rc16.
+
 ## [1.5.0] - 2025-10-07
 - Bug fixes;
 - UI improvements;
