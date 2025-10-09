@@ -1,0 +1,32 @@
+nvencFFX 1.5.1
+
+Video converter and trimming tool powered by NVIDIA NVENC hardware acceleration.
+
+Features:
+• Hardware-accelerated video encoding and decoding
+• Support for H.264, HEVC (H.265), and AV1 codecs
+• Visual trimming with start/end time controls
+• Resolution scaling and frame rate adjustment
+• Custom audio codec, bitrate, and channel settings
+• Live FFmpeg command preview and size estimation
+• Advanced encoder parameters and presets
+• Real-time process output and encoding progress
+• Save and load configuration profiles
+
+System Requirements:
+• NVIDIA GPU with NVENC support (GeForce 1000 series or newer)
+• FFmpeg with NVENC support
+• Windows 10/11
+
+Credits:
+• FFmpeg — Multimedia framework
+• CustomTkinter — Modern UI components
+• PIL (Pillow) — Image processing
+
+Links:
+• GitLab Repository: https://gitlab.com/hadoukez/nvencffx
+• GitHub Mirror: https://github.com/hadoooooouken/nvencFFX
+• FFmpeg Official: https://ffmpeg.org/
+• NVIDIA Video Codec SDK: https://developer.nvidia.com/nvidia-video-codec-sdk
+
+For support and bug reports, please use the GitLab repository.

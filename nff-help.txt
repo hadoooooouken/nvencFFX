@@ -1,0 +1,382 @@
+#ADVANCED ENCODER SETTINGS
+
+#Auto Button
+The Auto button automatically sets all encoder options to their "auto" values and disables all encoder flags.
+This lets FFmpeg use its default settings and intelligent algorithms to determine the optimal encoding parameters for your specific content.
+Useful when you want to leverage FFmpeg's built-in optimizations without manual configuration.
+
+#Default Button
+The Default button resets all encoder settings to their original default values (the same as when the application first starts).
+This provides a clean slate with balanced settings that work well for most common encoding scenarios, ensuring reliable performance and good quality output.
+
+#FF Threads
+auto, 1-16
+
+Sets the number of threads used by FFmpeg for processing:
+auto = Automatic thread detection
+1-16 = Specific number of threads
+
+Higher values can improve performance on multi-core systems.
+
+#Preset
+p1-p7
+
+Set the encoding preset:
+p1 - fastest (lowest quality)
+p7 - slowest (best quality)
+
+nvencFF default: p3 (good balance between speed and quality).
+
+#Tune
+hq, uhq, ll, ull, lossless
+
+Optimizes encoding for specific content types:
+
+hq = High Quality (general content)
+uhq = Ultra High Quality (high detail preservation)
+ll = Low Latency (streaming)
+ull = Ultra Low Latency (real-time streaming)
+lossless = Lossless encoding (mathematically lossless)
+
+#Profile
+main, main10, rext (HEVC)
+baseline, main, high, high10, high422, high444p (H.264)
+
+Sets the encoding profile which determines supported features and compatibility:
+
+main = Standard profile (good compatibility)
+main10 = 10-bit color depth (HDR support)
+rext = Range Extensions (professional formats)
+
+Higher profiles offer more features but may have reduced device compatibility.
+
+#Level
+auto, 1.0-6.2
+
+Specifies the maximum capabilities of the decoder.
+Higher levels support higher resolutions, bitrates, and processing requirements.
+"auto" lets FFmpeg automatically determine the appropriate level.
+
+#Tier
+0 (Main), 1 (High) - HEVC/AV1 only
+
+Controls the tier within a given level:
+
+Main Tier (0) = for most consumer applications
+High Tier (1) = for professional broadcasting (higher bitrates)
+
+#Coder
+default, auto, cabac, cavlc, ac, vlc - H.264 only
+
+Selects entropy encoding method:
+
+cabac = Context-Adaptive Binary Arithmetic Coding (better compression)
+cavlc = Context-Adaptive Variable-Length Coding (faster decoding)
+
+Default: cabac for best compression efficiency.
+
+#HW Accel
+auto, cuda, d3d11va
+
+Selects hardware acceleration method:
+
+auto = Automatic detection
+cuda = NVIDIA CUDA acceleration
+d3d11va = DirectX 11 Video Acceleration
+
+Recommended: cuda for NVIDIA GPUs
+
+#Multipass
+disabled, qres, fullres
+
+Enables multi-pass encoding for improved quality:
+
+disabled = Single-pass encoding
+qres = Quarter-resolution first pass
+fullres = Full-resolution first pass
+
+Multi-pass provides better rate control but increases encoding time.
+
+#Rate-Control
+constqp, vbr, cbr
+
+Selects rate control method:
+
+constqp = Constant QP mode
+vbr = Variable Bitrate (better quality, variable file size)
+cbr = Constant Bitrate (consistent bandwidth usage)
+
+#Quality level
+qp
+
+Constant quantization parameter rate control method (from -1 to 51)
+
+CQP provides consistent quality but variable file size
+
+-cq - not presented at nFF
+Set target quality level (0 to 51, 0 means automatic)
+for constant quality mode in VBR rate control (from 0 to 51) (default 0)
+
+#Split Encode
+disabled, auto, forced, 2, 3 - HEVC/AV1 only
+
+Controls frame-level parallel encoding:
+
+disabled = No parallel encoding
+auto = Automatic detection
+forced = Force parallel encoding
+2/3 = Specific number of parallel encodes
+
+Useful for high-bitrate, high-resolution encoding on GPUs like the 3080/3090, 
+which can have 2 NVENC engines active simultaneously. For most consumer cards with only one engine, this setting does nothing.
+
+#Lookahead Level
+auto, 0-15
+
+Controls how many future frames are analyzed for rate control.
+Higher values improve quality but increase encoding time and memory usage.
+0 = Disabled, auto = Automatic selection
+
+#Spatial AQ
+Enabled/Disabled
+
+Enables spatial adaptive quantization.
+Improves quality in areas with complex textures and details.
+Recommended: Enabled for most content
+
+#Temporal AQ
+Enabled/Disabled
+
+Enables temporal adaptive quantization.
+Improves quality for moving objects and scene changes.
+Recommended: Enabled for most content
+
+#Strict GOP
+Enabled/Disabled
+
+Forces regular GOP (Group of Pictures) structure.
+Improves seeking accuracy but may reduce compression efficiency.
+Recommended: Disabled unless specific seeking requirements
+
+#No-Scenecut
+Enabled/Disabled
+
+Disables automatic scene cut detection.
+May improve encoding speed but reduces quality at scene changes.
+Recommended: Disabled for most content
+
+#Weighted Prediction
+Enabled/Disabled
+
+Enables weighted prediction for B-frames.
+Improves compression efficiency for fading scenes.
+Note: Automatically sets -bf 0 when enabled.
+
+#FPS AND SCALING SETTINGS
+
+#FPS Options
+source, 60, 50, 30, 23.976, custom
+
+Controls the output frame rate:
+
+source = Maintain original frame rate
+60 = 60 frames per second (smooth motion)
+50 = 50 frames per second (PAL regions)
+30 = 30 frames per second (standard video)
+23.976 = 24p cinematic look (24/1.001)
+custom = Manually specify any frame rate value
+
+#Video Format
+source, HD, FHD, QHD, 4K, custom
+
+Controls output resolution scaling:
+
+source = Maintain original resolution
+HD = 1280x720 (720p)
+FHD = 1920x1080 (1080p)
+QHD = 2560x1440 (1440p)
+4K = 3840x2160 (2160p)
+custom = Manually specify output width (height scales proportionally)
+
+#Interpolation Algorithm
+bilinear, bicubic, neighbor, area, lanczos, spline
+
+Selects the scaling algorithm for resolution changes:
+
+bilinear = Fast, low-quality scaling
+bicubic = Smooth and balanced quality (default)
+neighbor = Blocky, pixelated output (fastest)
+area = Soft result ideal for downscaling
+lanczos = Sharp and high-quality scaling
+spline = Visually best in theory (slowest)
+
+#AUDIO SETTINGS
+
+#Audio Options
+disable, source, AAC 96k, AAC 160k, AAC 256k, custom
+
+Controls audio processing and encoding:
+
+disable = Remove audio track completely
+source = Copy original audio without re-encoding (fastest)
+AAC 96k = Encode to AAC at 96 kbps (small file size)
+AAC 160k = Encode to AAC at 160 kbps (good balance)
+AAC 256k = Encode to AAC at 256 kbps (high quality)
+custom = Manually specify bitrate in kbps
+
+#Audio Bitrate Quality Guide
+
+96k = Acceptable quality for speech podcasts
+160k = Good quality for music and general content
+256k = High quality, transparent for most listeners
+320k = Maximum AAC quality (near transparent)
+
+#ADDITIONAL OPTIONS BUTTONS
+
+#Speed up X2
+setpts=0.5*PTS
+
+Doubles video playback speed (2x faster) by modifying presentation timestamps.
+Values <1.0 speed up, >1.0 slow down.
+
+atempo=2.0
+Doubles audio playback speed (2x faster) without changing pitch.
+
+#Slow down X2
+setpts=2.0*PTS
+
+Halves video playback speed (2x slower)..
+
+atempo=0.5
+Halves audio playback speed (2x slower).
+
+#Sharpness
+unsharp=5:5:1.15:3:3:0.0
+
+Enhances image sharpness using unsharp mask.
+
+Format: luma_msize_x:luma_msize_y:luma_amount:chroma_msize_x:chroma_msize_y:chroma_amount.
+Higher values increase sharpness but may produce halos.
+
+#Saturation
+eq=saturation=1.15
+
+Adjusts saturation.
+1.0 = original, >1.0 = more saturated, <1.0 = desaturated.
+Range: 0.0–3.0.
+
+#Denoise
+hqdn3d=2:1.5:3:2.25
+
+High-quality temporal + spatial denoise filter.
+
+Format: luma_spatial:chroma_spatial:luma_tmp:chroma_tmp.
+Optional: increase temporal params for very noisy video.
+
+luma_spatial
+    A non-negative floating point number which specifies spatial luma strength. It defaults to 4.0.
+chroma_spatial
+    A non-negative floating point number which specifies spatial chroma strength. It defaults to 3.0*luma_spatial/4.0.
+luma_tmp
+    A floating point number which specifies luma temporal strength. It defaults to 6.0*luma_spatial/4.0.
+chroma_tmp
+    A floating point number which specifies chroma temporal strength. It defaults to luma_tmp*chroma_spatial/luma_spatial. 
+
+#FPS Pass
+fps_mode passthrough
+
+Preserve original frame timestamps and pacing.
+Useful when you want to maintain the original variable frame rate characteristics.
+
+#Drop thresh
+frame_drop_threshold 0.5
+
+Determines how aggressively frames may be dropped to maintain quality.
+Range: 0–1; higher = more likely to drop frames.
+
+#Gamma RGB
+eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0
+
+Adjust gamma correction for each color channel separately.
+Values >1.0 make image brighter, <1.0 make image darker.
+
+#Brightness
+eq=brightness=-0.15
+
+Adjust brightness of the video.
+Values range from -1.0 to 1.0. Negative values darken, positive values brighten.
+
+#Audio fix
+loudnorm=I=-16:TP=-1.5:LRA=11
+
+Normalize audio loudness using EBU R128 standards.
+
+I: Integrated loudness target (-16 to -24 LUFS)
+TP: True peak maximum (-1.5 to -9.0 dBTP)
+LRA: Loudness range (1.0 to 20.0 LU)
+
+#Force 8 bit
+pix_fmt:v nv12
+
+Force 8-bit color depth with NV12 pixel format.
+
+#Force 10 bit
+pix_fmt:v p010le
+
+Force 10-bit color depth with P010LE pixel format.
+Better for HDR content and reduces banding, but less compatible.
+
+#HDR to SDR
+zscale=transfer=linear:npl=100,tonemap=tonemap=hable:desat=0,zscale=transfer=bt709:matrix=bt709:primaries=bt709
+
+Convert HDR content to SDR using tonemapping.
+
+The three-stage process:
+
+1. Convert to linear light with specified peak luminance (npl)
+2. Apply Hable tonemapping algorithm with zero desaturation (desat=0)
+3. Convert to BT.709 color space for proper SDR compatibility
+
+This maintains color accuracy and prevents the muted/muddy colors typical of poor HDR conversions.
+
+#Crop to 16:9
+crop=iw:min(ih\,iw*9/16):0:(ih-min(ih\,iw*9/16))/2
+
+Crops video to 16:9 by trimming vertical edges only, keeping full original width.
+
+#Rotate
+transpose=1
+
+Rotate video 90 degrees clockwise.
+
+The transpose filter accepts the values from 0-3:
+
+    0 = 90° counter-clockwise and vertical flip
+    1 = 90° clockwise
+    2 = 90° counter-clockwise
+    3 = 90° clockwise and vertical flip
+
+#Trim Slider
+Visual timeline for setting trim points with thumbnail preview.
+Drag handles to set start and end times accurately.
+
+#Copy Checkbox
+The Copy checkbox enables stream copy mode for trimming operations.
+When enabled, the video and audio streams are copied directly without re-encoding,
+making the trimming process extremely fast and completely lossless.
+This is ideal for simple cutting operations where you don't need to change the video quality or format.
+
+#Precise Checkbox
+The Precise checkbox enables accurate frame-by-frame trimming.
+When enabled, FFmpeg uses more precise seeking methods to ensure the trim points land exactly on the specified frames.
+This is slightly slower but guarantees frame-accurate cutting, which is essential for professional editing work or when precise timing is critical.
+Usable for stream copy mode (eliminates freezing at the beginning of the video).
+
+#Custom Command Editor
+Enables direct editing of the FFmpeg command line.
+Useful for advanced users who need specific parameters.
+
+#Playback Controls
+Play Input File = Opens original file in system default player
+Play 10s Preview = Opens encoded preview in system player  
+Play Output File = Opens converted file in system player

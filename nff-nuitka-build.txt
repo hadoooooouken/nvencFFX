@@ -1,0 +1,15 @@
+python -m nuitka --msvc=latest --lto=yes ^
+--standalone --windows-console-mode=disable ^
+--include-package=customtkinter --enable-plugin=tk-inter ^
+--windows-icon-from-ico="nff.ico" ^
+--include-data-file=nff.ico=./ ^
+--include-data-file=nff-help.txt=./nff-help.txt ^
+--include-data-file=nff-about.txt=./nff-about.txt ^
+--include-data-file=nff-license.txt=./nff-license.txt ^
+--product-name="nvencFFX" ^
+--product-version="1.5.1" ^
+--file-version="1.5.1" ^
+--file-description="nvencFFX" ^
+--company-name="Deepseek Enjoyer" ^
+--copyright="Copyright (C) 2025 hadouken" ^
+--output-dir=build "nvencFFX.py"
