@@ -1,13 +1,15 @@
+# IMPORTS
 import os
 import subprocess
 import sys
 import tempfile
 import tkinter as tk
+from datetime import datetime
 from io import BytesIO
 from json import dump, load
 from re import sub
 from shlex import split
-from threading import Thread
+from threading import Thread, Timer
 from tkinter import filedialog, messagebox
 from winsound import MB_ICONASTERISK, MessageBeep
 
@@ -29,6 +31,7 @@ HOVER_GREEN = "#47a32a"
 ACCENT_GREY = "#b2b2b2"
 HOVER_GREY = "#8e8e8e"
 ACCENT_RED = "#ff5555"
+HOVER_RED = "#d83636"
 TEXT_COLOR_W = "#ffffff"
 TEXT_COLOR_B = "#000000"
 PLACEHOLDER_COLOR = "#a0a0a0"
@@ -57,18 +60,473 @@ class DropTarget:
             return 0
         return CallWindowProc(self.old_wnd_proc, hwnd, msg, wparam, lparam)
 
-    def __del__(self):
-        if hasattr(self, "old_wnd_proc"):
-            SetWindowLong(self.hwnd, GWL_WNDPROC, self.old_wnd_proc)
+    def cleanup(self):
+        """Clean up the drop target - call this before destroying the window"""
+        try:
+            if hasattr(self, "old_wnd_proc") and self.old_wnd_proc:
+                SetWindowLong(self.hwnd, GWL_WNDPROC, self.old_wnd_proc)
+        except Exception:
+            # Silently ignore cleanup errors — not critical
+            pass
+
+
+class BatchConverterWindow:
+    def __init__(self, master, main_app):
+        self.master = master
+        self.main_app = main_app
+        self.is_converting = False
+        self.current_file_index = 0
+        self.files = main_app.batch_files
+        self.files = main_app.batch_files.copy()
+
+        # Create window
+        self.window = ctk.CTkToplevel(master)
+        self.window.title("Batch Converter")
+        self.window.geometry("600x400")
+        self.window.minsize(600, 400)
+        self.window.configure(fg_color=PRIMARY_BG)
+
+        # Center window
+        master.update_idletasks()
+        master_x = master.winfo_x()
+        master_y = master.winfo_y()
+        master_width = master.winfo_width()
+        master_height = master.winfo_height()
+
+        window_width = 600
+        window_height = 400
+
+        x = master_x + (master_width - window_width) // 2
+        y = master_y + (master_height - window_height) // 2
+
+        self.window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        self.window.after(100, self.window.focus_force)
+
+        # Set icon
+        if os.path.exists(icon_path):
+            self.window.after(201, lambda: self.window.iconbitmap(icon_path))
+
+        # Create UI
+        self._create_widgets()
+        self._setup_drag_drop()
+        self._update_files_display()
+        # Update main window convert button
+        self._update_main_convert_button()
+
+        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _create_widgets(self):
+        # Main container
+        main_frame = ctk.CTkFrame(self.window, fg_color=PRIMARY_BG)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Files list frame
+        list_frame = ctk.CTkFrame(main_frame, fg_color=SECONDARY_BG)
+        list_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+        # Scrollable frame for files
+        self.scrollable_frame = ctk.CTkScrollableFrame(
+            list_frame, fg_color=SECONDARY_BG
+        )
+        self.scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Buttons frame
+        buttons_frame = ctk.CTkFrame(main_frame, fg_color=PRIMARY_BG)
+        buttons_frame.pack(fill="x", pady=5)
+
+        # Buttons
+        self.add_btn = ctk.CTkButton(
+            buttons_frame,
+            text="Add Files",
+            command=self._add_files,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_COLOR_B,
+        )
+        self.add_btn.pack(side="left", expand=True, fill="x", padx=(0, 5))
+
+        self.close_btn = ctk.CTkButton(
+            buttons_frame,
+            text="Close",
+            command=self._on_close,
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+        )
+        self.close_btn.pack(side="left", expand=True, fill="x", padx=(0, 5))
+
+        self.remove_all_btn = ctk.CTkButton(
+            buttons_frame,
+            text="Remove All",
+            command=self._remove_all_files,
+            fg_color=ACCENT_RED,
+            hover_color=HOVER_RED,
+            text_color=TEXT_COLOR_B,
+        )
+        self.remove_all_btn.pack(side="left", expand=True, fill="x")
+
+    def _setup_drag_drop(self):
+        # Enable drag and drop for the window
+        self.drop_target = DropTarget(
+            self.window.winfo_id(), self._handle_dropped_files
+        )
+
+    def _handle_dropped_files(self, file_path):
+        """Handle files dropped into the batch converter window"""
+        # Process in separate thread like main window
+        Thread(
+            target=self._process_dropped_file, args=(file_path,), daemon=True
+        ).start()
+
+    def _process_dropped_file(self, file_path):
+        """Process dropped file in separate thread"""
+        if file_path.lower().endswith(
+            (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
+        ):
+            normalized_path = os.path.normpath(file_path)
+
+            # Update GUI from main thread
+            self.window.after(0, lambda: self._add_file_to_list(normalized_path))
+        else:
+            # Show warning in main thread
+            self.window.after(
+                0,
+                lambda: messagebox.showwarning(
+                    "Unsupported File",
+                    "Please drop a video file (.mp4, .mkv, .avi, etc.)",
+                ),
+            )
+
+    def _add_files(self):
+        initial_dir = (
+            self.main_app.last_input_dir.get()
+            if self.main_app.last_input_dir.get()
+            else os.getcwd()
+        )
+
+        filenames = filedialog.askopenfilenames(
+            title="Select Video Files",
+            initialdir=initial_dir,
+            filetypes=(
+                ("Video Files", "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm"),
+                ("All Files", "*.*"),
+            ),
+        )
+
+        self.window.lift()
+        self.window.focus_force()
+
+        if not filenames:
+            return
+
+        for filename in filenames:
+            normalized_path = os.path.normpath(filename)
+            self._add_file_to_list(normalized_path)
+
+    def _add_file_to_list(self, file_path):
+        # Check if file already exists in list
+        for existing_file in self.files:
+            if existing_file["path"] == file_path:
+                return
+
+        # Add to list
+        file_info = {
+            "path": file_path,
+            "status": "Ready",  # Ready, Converting, Done, Failed
+            "widgets": None,
+        }
+        self.files.append(file_info)
+
+        self._update_files_display()
+        self._update_main_convert_button()
+        self.window.lift()
+
+    def _remove_file(self, index):
+        if 0 <= index < len(self.files):
+            # Remove from list
+            self.files.pop(index)
+            self._update_files_display()
+            self._update_main_convert_button()
+
+    def _remove_all_files(self):
+        if self.files:
+            self.files.clear()
+            self._update_files_display()
+            self._update_main_convert_button()
+
+    def _update_files_display(self):
+        # Clear current display
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        # Recreate file entries
+        for i, file_info in enumerate(self.files):
+            self._create_file_entry(i, file_info)
+
+    def _create_file_entry(self, index, file_info):
+        file_frame = ctk.CTkFrame(self.scrollable_frame, fg_color=SECONDARY_BG)
+        file_frame.pack(fill="x", pady=2)
+
+        # Number
+        num_label = ctk.CTkLabel(file_frame, text=f"{index + 1}.", width=30)
+        num_label.pack(side="left", padx=(5, 0))
+
+        # Filename (truncated if too long)
+        filename = os.path.basename(file_info["path"])
+        if len(filename) > 40:
+            filename = filename[:37] + "..."
+
+        name_label = ctk.CTkLabel(file_frame, text=filename, width=300, anchor="w")
+        name_label.pack(side="left", padx=5, fill="x", expand=True)
+
+        # Status
+        status_label = ctk.CTkLabel(file_frame, text=file_info["status"], width=80)
+        status_label.pack(side="left", padx=5)
+
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            file_frame,
+            text="×",
+            width=20,
+            height=20,
+            command=lambda idx=index: self._remove_file(idx),
+            fg_color=ACCENT_RED,
+            hover_color=HOVER_RED,
+            text_color=TEXT_COLOR_B,
+            # font=("", 24, "bold"),
+        )
+        remove_btn.pack(side="right", padx=(0, 5))
+
+        # Store widgets for later updates
+        file_info["widgets"] = {"status_label": status_label}
+
+    def _update_file_status(self, index, status):
+        if 0 <= index < len(self.files):
+            self.files[index]["status"] = status
+            if self.files[index]["widgets"]:
+                self.files[index]["widgets"]["status_label"].configure(text=status)
+
+    def _update_main_convert_button(self):
+        if hasattr(self.main_app, "convert_button"):
+            if self.is_converting:
+                self.main_app.convert_button.configure(
+                    text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
+                )
+            elif self.files:
+                self.main_app.convert_button.configure(
+                    text="Batch Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
+                )
+            else:
+                self.main_app.convert_button.configure(
+                    text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
+                )
+
+    def start_batch_conversion(self):
+        if not self.files or self.is_converting:
+            return
+
+        self.is_converting = True
+        self.current_file_index = 0
+
+        self.main_app.progress_frame.grid()
+        self.main_app.progress_value.set(0.0)
+        self.main_app.progress_label.configure(text="0%")
+        self.main_app.convert_button.configure(
+            text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
+        )
+
+        self._convert_next_file()
+
+    def _convert_next_file(self):
+        if self.current_file_index >= len(self.files) or not self.is_converting:
+            self.is_converting = False
+            self.main_app.progress_frame.grid_remove()
+            self.main_app.ffmpeg_output.set("")
+            self.main_app.status_text.set("Batch conversion completed!")
+            self._update_main_convert_button()
+            return
+
+        current_file = self.files[self.current_file_index]
+        self._update_file_status(self.current_file_index, "Converting")
+
+        # Set up conversion for current file
+        input_path = current_file["path"]
+
+        # Generate output filename based on main app settings
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        codec_suffix = (
+            "_hevc"
+            if self.main_app.video_codec.get() == "hevc"
+            else "_av1"
+            if self.main_app.video_codec.get() == "av1"
+            else "_h264"
+        )
+
+        # Get output directory from main app or use input file directory
+        if self.main_app.last_output_dir.get() and os.path.exists(
+            self.main_app.last_output_dir.get()
+        ):
+            output_dir = self.main_app.last_output_dir.get()
+        else:
+            output_dir = os.path.dirname(input_path)
+
+        # Use the same extension logic as main app
+        current_output = self.main_app.output_file.get()
+        if current_output:
+            original_extension = os.path.splitext(current_output)[1]
+            if not original_extension:
+                original_extension = ".mp4"
+        else:
+            original_extension = ".mp4"
+
+        output_path = os.path.normpath(
+            os.path.join(
+                output_dir, f"{base_name}{codec_suffix}_custom{original_extension}"
+            )
+        )
+
+        try:
+            # Set current file for conversion
+            self.main_app.input_file.set(input_path)
+            self.main_app.output_file.set(output_path)
+            self.main_app._get_video_duration()
+
+            # Build and execute command
+            command = self.main_app._build_ffmpeg_command()
+
+            # Run conversion in thread
+            conversion_thread = Thread(
+                target=self._run_single_conversion,
+                args=(command, self.current_file_index),
+            )
+            conversion_thread.start()
+
+        except Exception as e:
+            self._update_file_status(self.current_file_index, f"Failed: {str(e)}")
+            self.current_file_index += 1
+            self.master.after(100, self._convert_next_file)
+
+    def _run_single_conversion(self, command, file_index):
+        startupinfo = None
+        creationflags = 0
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            # Monitor progress
+            for line in process.stdout:
+                if line and self.is_converting:
+                    self.master.after(
+                        0,
+                        lambda line_text=line: self.main_app.ffmpeg_output.set(
+                            line_text
+                        ),
+                    )
+                    self.master.after(
+                        0,
+                        lambda line_text=line: self.main_app._update_progress(
+                            line_text
+                        ),
+                    )
+                if not self.is_converting:
+                    process.terminate()
+                    break
+
+            process.wait()
+
+            if process.returncode == 0 and self.is_converting:
+                self.master.after(
+                    0, lambda: self._update_file_status(file_index, "Done")
+                )
+            elif self.is_converting:
+                self.master.after(
+                    0, lambda: self._update_file_status(file_index, "Failed")
+                )
+            else:
+                self.master.after(
+                    0, lambda: self._update_file_status(file_index, "Cancelled")
+                )
+
+        except Exception as e:
+            error_msg = str(e)
+            if self.is_converting:
+                self.master.after(
+                    0,
+                    lambda: self._update_file_status(
+                        file_index, f"Failed: {error_msg}"
+                    ),
+                )
+            else:
+                self.master.after(
+                    0, lambda: self._update_file_status(file_index, "Cancelled")
+                )
+
+        finally:
+            if self.is_converting:
+                self.current_file_index += 1
+                self.master.after(100, self._convert_next_file)
+            else:
+                self.master.after(0, lambda: self.main_app.ffmpeg_output.set(""))
+
+    def cancel_batch_conversion(self):
+        self.is_converting = False
+        if 0 <= self.current_file_index < len(self.files):
+            self._update_file_status(self.current_file_index, "Cancelled")
+        self.main_app.ffmpeg_output.set("")
+        self.main_app.status_text.set("Batch conversion cancelled")
+        self._update_main_convert_button()
+        self.main_app.progress_frame.grid_remove()
+        self.main_app.progress_value.set(0.0)
+
+    def _on_close(self):
+        if self.is_converting:
+            if messagebox.askokcancel(
+                "Confirm Close",
+                "Batch conversion is in progress. Closing will cancel the conversion. Continue?",
+            ):
+                self.cancel_batch_conversion()
+                self.main_app.progress_frame.grid_remove()
+                self.main_app.batch_files = self.files
+                # Clean up drop target before destroying window
+                if hasattr(self, "drop_target"):
+                    self.drop_target.cleanup()
+                self.window.destroy()
+            else:
+                return
+        else:
+            self.main_app.progress_frame.grid_remove()
+            self.main_app.batch_files = self.files
+            # Clean up drop target before destroying window
+            if hasattr(self, "drop_target"):
+                self.drop_target.cleanup()
+            self.window.destroy()
+        self._update_main_convert_button()
 
 
 class VideoConverterApp:
     # INITIALIZATION
     def __init__(self, master):
         self.preview_job = None  # used for debouncing preview creation
+        self.batch_converter_window = None
+        self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.5.2")
+        master.title("nvencFFX 1.5.3")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -272,6 +730,9 @@ class VideoConverterApp:
         self.last_input_dir = ctk.StringVar(value="")
         self.last_output_dir = ctk.StringVar(value="")
         self.precise_trim = ctk.BooleanVar(value=False)
+        # Screen recording variables
+        self.is_recording = False
+        self.recording_process = None
 
     def _create_widgets(self):
         # Build the entire GUI interface
@@ -1224,7 +1685,7 @@ class VideoConverterApp:
             text="Clear",
             command=self._clear_all_filters,
             fg_color=ACCENT_RED,
-            hover_color="#FF3333",
+            hover_color=HOVER_RED,
             text_color=TEXT_COLOR_B,
             width=100,
         ).pack(side="left")
@@ -1451,7 +1912,7 @@ class VideoConverterApp:
             text_color=TEXT_COLOR_B,
             height=40,
         )
-        self.play10s_button.pack(side="left", expand=True, fill="x", padx=2)
+        self.play10s_button.pack(side="left", expand=True, fill="x", padx=(2, 2))
         self.play10s_button.configure(command=self._create_10s_preview)
 
         self.play_output_button = ctk.CTkButton(
@@ -1462,8 +1923,30 @@ class VideoConverterApp:
             text_color=TEXT_COLOR_B,
             height=40,
         )
-        self.play_output_button.pack(side="left", expand=True, fill="x", padx=(2, 0))
+        self.play_output_button.pack(side="left", expand=True, fill="x", padx=(2, 2))
         self.play_output_button.configure(command=self._play_output_file)
+
+        self.batch_convert_button = ctk.CTkButton(
+            self.play_buttons_frame,
+            text="Batch Convert",
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            height=40,
+        )
+        self.batch_convert_button.pack(side="left", expand=True, fill="x", padx=(2, 2))
+        self.batch_convert_button.configure(command=self._open_batch_converter)
+
+        self.screen_record_button = ctk.CTkButton(
+            self.play_buttons_frame,
+            text="Screen Record",
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            height=40,
+        )
+        self.screen_record_button.pack(side="left", expand=True, fill="x", padx=(2, 0))
+        self.screen_record_button.configure(command=self._screen_record)
 
         # Convert Button
         self.convert_button = ctk.CTkButton(
@@ -1509,7 +1992,7 @@ class VideoConverterApp:
         self.progress_label.configure(text="0%")
         self.progress_frame.grid()
         self.convert_button.configure(
-            text="Cancel", fg_color=ACCENT_RED, hover_color="#FF3333"
+            text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
         )
         self.is_converting = True
 
@@ -1528,17 +2011,234 @@ class VideoConverterApp:
                 text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
             )
 
-    def _toggle_conversion(self):
-        if self.is_creating_preview:
-            messagebox.showerror(
-                "Error", "Please wait until preview creation completes"
-            )
+        # Also cancel batch conversion if active
+        if (
+            hasattr(self, "batch_converter_window")
+            and self.batch_converter_window
+            and self.batch_converter_window.window.winfo_exists()
+            and self.batch_converter_window.is_converting
+        ):
+            self.batch_converter_window.cancel_batch_conversion()
+
+    def _open_batch_converter(self):
+        if (
+            not hasattr(self, "batch_converter_window")
+            or not self.batch_converter_window
+            or not self.batch_converter_window.window.winfo_exists()
+        ):
+            self.batch_converter_window = BatchConverterWindow(self.master, self)
+        else:
+            self.batch_converter_window.files = self.batch_files.copy()
+            self.batch_converter_window._update_files_display()
+            self.batch_converter_window.window.lift()
+            self.batch_converter_window.window.focus_force()
+
+    def _screen_record(self):
+        if self.is_recording:
+            # Stop recording
+            self._stop_recording()
+        else:
+            # Start recording
+            self._start_recording()
+
+    def _start_recording(self):
+        if not hasattr(self, "original_title"):
+            self.original_title = self.master.title()
+
+        self.master.title("Screen is recording now - nvencFFX")
+        if not self.ffmpeg_path:
+            messagebox.showerror("Error", "FFmpeg path is not specified.")
             return
 
-        if self.is_converting:
+        # Get output file path
+        output_file = self.output_file.get()
+        if not output_file:
+            # Generate default filename on desktop
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            now = datetime.now()
+            date_str = now.strftime("%d_%m_%y-%H_%M")
+
+            # Get extension from current output or use mp4
+            current_output = self.output_file.get()
+            if current_output:
+                ext = os.path.splitext(current_output)[1]
+                if not ext:
+                    ext = ".mp4"
+            else:
+                ext = ".mp4"
+
+            output_file = os.path.join(desktop, f"screen_record-{date_str}{ext}")
+
+        # Get FPS - use 60 if source or not specified
+        fps = self.fps_option.get()
+        if fps == "source" or not fps:
+            fps = "60"
+        elif fps == "custom":
+            fps = self.custom_fps.get()
+
+        # Build screen recording command
+        command = [
+            self.ffmpeg_path,
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"ddagrab=framerate={fps}",
+            "-vf",
+            "setparams=range=limited",
+        ]
+
+        # Add encoder settings
+        codec_map = {"hevc": "hevc_nvenc", "h264": "h264_nvenc", "av1": "av1_nvenc"}
+        codec = codec_map.get(self.video_codec.get(), "hevc_nvenc")
+
+        command.extend(["-c:v", codec])
+
+        # Add quality settings
+        if self.constant_qp_mode.get():
+            command.extend(["-rc:v", "constqp", "-qp:v", self.quality_level.get()])
+        else:
+            command.extend(["-rc:v", self.rc.get(), "-b:v", f"{self.bitrate.get()}k"])
+
+        # Constant FPS + No audio
+        command.extend(["-fps_mode","cfr","-an", output_file])
+
+        # PRINT THE COMMAND TO CONSOLE
+        print("Screen recording command:")
+        print(" ".join(command))
+
+        try:
+            # Update UI first
+            self.is_recording = True
+            self.screen_record_button.configure(
+                text="Stop Recording", fg_color=ACCENT_RED, hover_color=HOVER_RED
+            )
+            self.status_text.set("Screen is recording now...")
+            self.ffmpeg_output.set("Screen recording starting...")
+
+            # Minimize window after 1 second
+            self.master.after(1000, self.master.iconify)
+
+            # Start recording process after 1 second delay using Timer
+            def start_recording():
+                startupinfo = None
+                creationflags = 0
+                if os.name == "nt":
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = subprocess.SW_HIDE
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
+                self.recording_process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    startupinfo=startupinfo,
+                    creationflags=creationflags,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+
+                self.ffmpeg_output.set("Screen recording started...")
+
+                # Start monitoring thread
+                recording_thread = Thread(target=self._monitor_recording)
+                recording_thread.start()
+
+            # Use Timer to delay the recording start by 2 seconds
+            timer = Timer(2.0, start_recording)
+            timer.start()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start screen recording: {str(e)}")
+
+    def _stop_recording(self):
+        if hasattr(self, "original_title"):
+            self.master.title(self.original_title)
+        if not self.recording_process:
+            return
+
+        try:
+            # Send 'q' to gracefully stop FFmpeg
+            self.recording_process.stdin.write("q")
+            self.recording_process.stdin.flush()
+        except (BrokenPipeError, OSError, IOError) as e:
+            # If stdin fails, terminate the process
+            print(f"Failed to send stop signal via stdin: {e}")
+            self.recording_process.terminate()
+
+        # Wait for process to finish
+        try:
+            self.recording_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.recording_process.kill()
+
+        # Update UI
+        self.is_recording = False
+        self.recording_process = None
+        self.screen_record_button.configure(
+            text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
+        )
+        self.status_text.set("Screen recording stopped")
+        self.ffmpeg_output.set("Screen recording completed")
+
+        # Restore window
+        self.master.deiconify()
+
+    def _monitor_recording(self):
+        """Monitor the recording process output"""
+        while self.is_recording and self.recording_process:
+            try:
+                line = self.recording_process.stdout.readline()
+                if not line:
+                    break
+
+                if self.is_recording:  # Check again in case it changed
+                    self.master.after(0, lambda: self.ffmpeg_output.set(line.strip()))
+
+            except Exception:
+                break
+
+        # If we get here and still recording, process ended unexpectedly
+        if self.is_recording:
+            self.master.after(0, self._stop_recording)
+
+    def _toggle_conversion(self):
+        # Check if batch conversion should be started or cancelled
+        batch_active = (
+            hasattr(self, "batch_converter_window")
+            and self.batch_converter_window
+            and self.batch_converter_window.window.winfo_exists()
+        )
+
+        # Check if batch conversion is in progress
+        batch_running = batch_active and self.batch_converter_window.is_converting
+
+        # Check if single conversion is in progress
+        single_running = self.is_converting
+
+        if batch_running or single_running:
+            # If any conversion is running, cancel both
             self._cancel_conversion()
         else:
-            self._start_conversion()
+            # Otherwise, start conversion
+            if (
+                batch_active
+                and self.batch_converter_window.files
+                and not self.batch_converter_window.is_converting
+            ):
+                self.batch_converter_window.start_batch_conversion()
+            else:
+                if self.is_creating_preview:
+                    messagebox.showerror(
+                        "Error", "Please wait until preview creation completes"
+                    )
+                    return
+
+                self._start_conversion()
 
     def _create_10s_preview(self):
         """Create a 10-second preview with current settings"""
@@ -1795,10 +2495,18 @@ class VideoConverterApp:
             self.custom_command = None
 
     def _browse_output(self):
+        codec_suffix = (
+            "_hevc"
+            if self.video_codec.get() == "hevc"
+            else "_av1"
+            if self.video_codec.get() == "av1"
+            else "_h264"
+        )
+
         default_name = (
             self.output_file.get()
             if self.output_file.get()
-            else "output_hevc_custom.mp4"
+            else f"output{codec_suffix}_custom.mp4"
         )
 
         if self.last_output_dir.get() and os.path.exists(self.last_output_dir.get()):
@@ -2071,7 +2779,7 @@ class VideoConverterApp:
                 "encoder_strict_gop": self.strict_gop.get(),
                 "encoder_no_scenecut": self.no_scenecut.get(),
                 "encoder_weighted_pred": self.weighted_pred.get(),
-                "version": "1.5.2",
+                "version": "1.5.3",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -3011,7 +3719,7 @@ class VideoConverterApp:
                 text="Reset to Default",
                 command=self._reset_custom_command,
                 fg_color=ACCENT_RED,
-                hover_color="#FF3333",
+                hover_color=HOVER_RED,
                 text_color=TEXT_COLOR_B,
                 width=150,
             ).pack(side="left", padx=5)
@@ -3615,6 +4323,7 @@ class VideoConverterApp:
                 "scale_cuda=352:-2:interp_algo=bilinear,hwdownload,format=nv12",
                 "-q:v",
                 "2",
+                "-an",
                 "-f",
                 "mjpeg",
                 "pipe:1",
@@ -3656,6 +4365,7 @@ class VideoConverterApp:
                     "scale_cuda=352:-2:interp_algo=bilinear,hwdownload,format=p010le",
                     "-q:v",
                     "2",
+                    "-an",
                     "-f",
                     "mjpeg",
                     "pipe:1",
@@ -3693,6 +4403,7 @@ class VideoConverterApp:
                         "scale=352:-1",
                         "-q:v",
                         "2",
+                        "-an",
                         "-f",
                         "mjpeg",
                         "pipe:1",
@@ -4699,8 +5410,8 @@ class VideoConverterApp:
             content_frame,
             text="Close",
             command=on_close,
-            fg_color=ACCENT_GREEN,
-            hover_color=HOVER_GREEN,
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
         )
         close_btn.pack(pady=10)
@@ -4750,8 +5461,8 @@ class VideoConverterApp:
             content_frame,
             text="Close",
             command=on_close,
-            fg_color=ACCENT_GREEN,
-            hover_color=HOVER_GREEN,
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
         )
         close_btn.pack(pady=10)
@@ -4804,6 +5515,10 @@ class VideoConverterApp:
     def _on_close(self):
         """Application close handler"""
         self._cleanup_preview_files()
+        self.batch_files = []
+        # Stop recording if active
+        if self.is_recording:
+            self._stop_recording()
         self.master.quit()
 
 

@@ -380,3 +380,83 @@ Useful for advanced users who need specific parameters.
 Play Input File = Opens original file in system default player
 Play 10s Preview = Opens encoded preview in system player  
 Play Output File = Opens converted file in system player
+
+#BATCH CONVERSION
+
+The Batch Convert feature allows you to process multiple video files in sequence using the same encoding settings.
+
+#Batch Convert Button
+Opens the Batch Converter window where you can manage a list of files for conversion.
+
+#Adding Files
+- Click "Add Files" to select multiple video files
+- Drag and drop video files directly into the Batch Converter window
+- Supported formats: MP4, MKV, AVI, MOV, FLV, WMV, WEBM
+
+#File List Management
+- The list shows all queued files with their status (Ready, Converting, Done, Failed)
+- Remove individual files with the "×" button
+- Clear entire list with "Remove All" button
+- Files are processed in the order they appear in the list
+
+#Conversion Process
+- Click "Batch Convert" in the main window to start processing all files
+- Files are converted sequentially using current main window settings
+- Progress is shown in the main window with real-time updates
+- Each file's status updates during conversion (Ready → Converting → Done/Failed)
+
+#Output Files
+Output files are automatically named using the pattern:
+[original_name]_[codec]_custom.[extension]
+- Codec suffix: _hevc, _h264, or _av1 based on selected video codec
+- Saved in the same directory as input files or last used output directory
+- Preserves your chosen file extension (.mp4, .mkv, .mov)
+
+#Batch Converter Window Features
+- Real-time status updates for each file
+- Visual progress indication
+- Ability to cancel conversion at any time
+- Window can be kept open while using main application
+
+#Cancelling Batch Conversion
+- Click "Cancel" during conversion to stop the process
+- Partial files are automatically cleaned up
+
+#Status Indicators
+Ready = File queued for conversion
+Converting = Currently being processed
+Done = Successfully converted
+Failed = Error during conversion (check main window for details)
+Cancelled = Conversion stopped by user
+
+Note: All files in a batch conversion use the same settings from the main window. 
+Make sure to configure your desired quality, codec, and other options before starting batch conversion.
+
+#SCREEN RECORDING
+
+The Screen Record feature allows you to capture Windows Desktop
+
+#Screen Record Button
+-Starts screen recording when clicked
+-Stops recording when clicked again
+-Automatically minimizes the main window during recording to avoid capturing itself
+-Uses red color when active to indicate recording state
+
+#Recording Process
+- Recording starts after a 2-second delay to allow window minimization
+- Captures entire desktop screen using FFmpeg's ddagrab filter
+- Real-time monitoring shows recording status in the output window
+- Recording continues in background while window is minimized
+
+#Output Files
+- Default location: Desktop folder
+- Automatic filename: screen_record-DD_MM_YY-HH_MM.[extension]
+- Uses current output file extension settings (.mp4, .mkv, .mov)
+- Preserves current encoding settings (codec, quality, FPS)
+
+#Settings Used
+- FPS: Uses selected FPS (defaults to 60 if "source" selected)
+- Video Codec: HEVC, H.264, or AV1 based on current selection
+- Quality: Constant QP mode or Bitrate mode as configured
+- Hardware Acceleration: NVIDIA NVENC
+- Audio capture: Not implemented for screen recording

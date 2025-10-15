@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.5.3] - 2025-10-15
+- Added "Batch Convert";
+- Added "Screen Record";
+- Build with Python: 3.13.8 + Nuitka 2.9rc2.
+
 ## [1.5.2] - 2025-10-11
 - Fixed saving of manually selected extensions (MKV, MOV);
 - Build with Python: 3.13.8 + Nuitka 2.9rc1.
