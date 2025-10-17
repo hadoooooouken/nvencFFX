@@ -14,6 +14,8 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
 * **NVIDIA NVENC Support:** Utilizes NVIDIA's NVENC for high-performance, hardware-accelerated video encoding.
 * **Video Trimming:** Easily trim video segments by specifying start and end times (HH:MM:SS format).
+* **Batch Conversion:** Process multiple video files in one go with the same settings - perfect for converting entire folders of videos.
+* **Screen Recording:** Record your screen directly with NVENC encoding - choose frame rate, codec, and quality settings.
 * **Additional Options:** Flexibility to add custom FFmpeg commands for advanced users.
 * **Drag-and-Drop Support:** Conveniently add input files by dragging them into the application window.
 
