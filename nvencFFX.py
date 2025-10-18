@@ -14,6 +14,7 @@ from tkinter import filedialog, messagebox
 from winsound import MB_ICONASTERISK, MessageBeep
 
 import customtkinter as ctk
+import win32clipboard
 from PIL import Image
 from win32api import DragFinish, DragQueryFile
 from win32con import GWL_WNDPROC, WM_DROPFILES
@@ -526,7 +527,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.5.3")
+        master.title("nvencFFX 1.5.4")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -649,6 +650,7 @@ class VideoConverterApp:
         # Encoder Flags
         self.spatial_aq.trace_add("write", lambda *args: self._on_setting_changed())
         self.temporal_aq.trace_add("write", lambda *args: self._on_setting_changed())
+        self.tune.trace_add("write", lambda *args: self._on_tune_changed())
         self.strict_gop.trace_add("write", lambda *args: self._on_setting_changed())
         self.no_scenecut.trace_add("write", lambda *args: self._on_setting_changed())
         self.weighted_pred.trace_add("write", lambda *args: self._on_setting_changed())
@@ -2088,20 +2090,24 @@ class VideoConverterApp:
             "setparams=range=limited",
         ]
 
-        # Add encoder settings
+        # Encoder settings
         codec_map = {"hevc": "hevc_nvenc", "h264": "h264_nvenc", "av1": "av1_nvenc"}
         codec = codec_map.get(self.video_codec.get(), "hevc_nvenc")
 
         command.extend(["-c:v", codec])
 
-        # Add quality settings
+        # Preset settings
+        if self.preset.get() != "auto":
+            command.extend(["-preset:v", self.preset.get()])
+
+        # Quality settings
         if self.constant_qp_mode.get():
             command.extend(["-rc:v", "constqp", "-qp:v", self.quality_level.get()])
         else:
             command.extend(["-rc:v", self.rc.get(), "-b:v", f"{self.bitrate.get()}k"])
 
         # Constant FPS + No audio
-        command.extend(["-fps_mode","cfr","-an", output_file])
+        command.extend(["-fps_mode", "cfr", "-an", output_file])
 
         # PRINT THE COMMAND TO CONSOLE
         print("Screen recording command:")
@@ -2779,7 +2785,7 @@ class VideoConverterApp:
                 "encoder_strict_gop": self.strict_gop.get(),
                 "encoder_no_scenecut": self.no_scenecut.get(),
                 "encoder_weighted_pred": self.weighted_pred.get(),
-                "version": "1.5.3",
+                "version": "1.5.4",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -3467,6 +3473,7 @@ class VideoConverterApp:
             self.output_file.set(new_output)
 
     def _update_codec_settings(self):
+        current_tune = self.tune.get()
         if self.video_codec.get() == "hevc":
             # HEVC settings
             self.profile.set("main")
@@ -3607,6 +3614,9 @@ class VideoConverterApp:
                 ]
             )
 
+            if current_tune == "uhq":
+                self.tune.set("hq")
+
             self.coder_label.grid()
             self.coder_option_menu.grid()
             self.tier_label.grid_remove()
@@ -3626,6 +3636,15 @@ class VideoConverterApp:
             self.lookahead_level.set("auto")
 
             self.custom_command = None
+            self._on_tune_changed()
+
+    def _on_tune_changed(self):
+        """Automatically disable AQ settings when lossless mode is selected"""
+        if self.tune.get() == "lossless":
+            # Disable AQ settings for lossless encoding
+            self.spatial_aq.set(False)
+            self.temporal_aq.set(False)
+            self.status_text.set("Note: AQ not supported for lossless encoding")
 
     def _update_preview_button_state(self):
         """Update preview button state based on streamcopy setting"""
@@ -4586,6 +4605,7 @@ class VideoConverterApp:
             self.preset_indicator.configure(
                 text="Default settings applied", text_color=ACCENT_GREEN
             )
+            self._on_tune_changed()
 
         elif preset_name == "fhdf":
             # FHD Fast preset
@@ -5074,7 +5094,6 @@ class VideoConverterApp:
 
     def _copy_text(self):
         widget = self.master.focus_get()
-        self.master.clipboard_clear()
 
         try:
             if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
@@ -5108,7 +5127,13 @@ class VideoConverterApp:
             print(f"Error copying text: {e}")
             text = ""
 
-        self.master.clipboard_append(text)
+        try:
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
+            win32clipboard.CloseClipboard()
+        except Exception as e:
+            print(f"Error setting clipboard: {e}")
 
     def _paste_text(self):
         widget = self.master.focus_get()
@@ -5171,12 +5196,19 @@ class VideoConverterApp:
                     i += 1
 
             command_with_quotes = " ".join(quoted_parts)
-            self.master.clipboard_clear()
-            self.master.clipboard_append(command_with_quotes)
+
+            try:
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardText(
+                    command_with_quotes, win32clipboard.CF_UNICODETEXT
+                )
+                win32clipboard.CloseClipboard()
+            except Exception as e:
+                print(f"Error setting clipboard: {e}")
 
         except Exception:
             # Fallback: simple regex-based quoting for file paths
-
             command_with_quotes = sub(
                 r'(-i\s+)([^"\s]+)',
                 r'\1"\2"',
@@ -5187,9 +5219,16 @@ class VideoConverterApp:
                 r'\1"\2"\3',
                 command_with_quotes,  # Quote output files
             )
-            self.master.clipboard_clear()
-            self.master.clipboard_append(command_with_quotes)
-            messagebox.showinfo("Copied", "Command copied to clipboard!")
+
+            try:
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardText(
+                    command_with_quotes, win32clipboard.CF_UNICODETEXT
+                )
+                win32clipboard.CloseClipboard()
+            except Exception as e:
+                print(f"Error setting clipboard: {e}")
 
     # FILTERS & OPTIONS MANAGEMENT
     def _set_speed_filter(self, speed_factor):
