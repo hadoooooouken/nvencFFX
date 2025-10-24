@@ -186,6 +186,19 @@ source = Maintain original frame rate
 23.976 = 24p cinematic look (24/1.001)
 custom = Manually specify any frame rate value
 
+#FPS Mode
+Auto, CFR, VFR, Passtrough
+
+Set video sync method / framerate mode. vsync is applied to all output video streams but can be overridden for a stream by setting fps_mode.
+vsync is deprecated and will be removed in the future.
+
+passthrough (0) - Each frame is passed with its timestamp from the demuxer to the muxer. 
+cfr (1) - Frames will be duplicated and dropped to achieve exactly the requested constant frame rate.
+vfr (2) - Frames are passed through with their timestamp or dropped so as to prevent 2 frames from having the same timestamp.
+auto (-1) - Chooses between cfr and vfr depending on muxer capabilities. This is the default method.
+
+Note that the timestamps may be further modified by the muxer, after this. For example, in the case that the format option avoid_negative_ts is enabled.
+
 #Video Format
 source, HD, FHD, QHD, 4K, custom
 
