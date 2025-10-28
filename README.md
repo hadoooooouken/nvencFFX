@@ -150,3 +150,8 @@ and/or sell copies of this software, **provided that**:
    endorse or promote derivative products without explicit written permission.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+The release packages include FFmpeg binaries built by BtbN
+https://github.com/BtbN/FFmpeg-Builds,
+which are based on the official FFmpeg project and licensed under GPLv2/LGPLv2.1.
+See included license files in the release archives.
