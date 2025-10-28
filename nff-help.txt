@@ -246,6 +246,16 @@ custom = Manually specify bitrate in kbps
 
 #ADDITIONAL OPTIONS BUTTONS
 
+#Save
+Saves the current values from the "Additional Options", "Additional Filter Options", and "Additional Audio Filter Options" fields.
+
+#Load
+Loads previously saved custom filters and applies them to the entry fields.
+
+Main Purpose:
+This functionality allows you to save your custom filter configurations and load them during subsequent sessions.
+This means you don't have to re-enter the same complex parameters every time you run the program.
+
 #Speed up X2
 setpts=0.5*PTS
 
