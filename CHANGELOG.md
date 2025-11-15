@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
 
+## [1.5.7] - 2025-11-15
+- UI/UX fixes and updates.
+
 ## [1.5.6] - 2025-10-28
 - Additional Options: Added "Save/Load" buttons for custom filter settings;
 - UI fixes.
