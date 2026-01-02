@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
 
+## [1.5.8] - 2026-01-02
+- AV1 fixes.
+
 ## [1.5.7] - 2025-11-15
 - UI/UX fixes and updates.
 

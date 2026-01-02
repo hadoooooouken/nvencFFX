@@ -137,7 +137,7 @@ If you have a suggestion that would make this better, you can simply open an iss
 
 nvencFFX is licensed under the MIT License — Modified for nvencFFX.
 
-© 2025 hadouken (GitLab) / hadoooooouken (GitHub)
+© 2026 hadouken (GitLab) / hadoooooouken (GitHub)
 
 You are free to use, copy, modify, merge, publish, distribute, sublicense,
 and/or sell copies of this software, **provided that**:

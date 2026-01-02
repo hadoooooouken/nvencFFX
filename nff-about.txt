@@ -1,4 +1,4 @@
-nvencFFX 1.5.7
+nvencFFX 1.5.8
 
 Video converter and trimming tool powered by NVIDIA NVENC hardware acceleration.
 

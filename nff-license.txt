@@ -1,5 +1,5 @@
 MIT License — Modified for nvencFFX
-Copyright (c) 2025 hadouken (GitLab) / hadoooooouken (GitHub)
+Copyright (c) 2026 hadouken (GitLab) / hadoooooouken (GitHub)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

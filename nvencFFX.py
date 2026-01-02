@@ -150,7 +150,6 @@ class BatchConverterWindow:
         self.main_app = main_app
         self.is_converting = False
         self.current_file_index = 0
-        self.files = main_app.batch_files
         self.files = main_app.batch_files.copy()
 
         # Create window
@@ -179,7 +178,7 @@ class BatchConverterWindow:
         # Set icon
         if os.path.exists(icon_path):
             self.window.after(201, lambda: self.window.iconbitmap(icon_path))
-
+        
         # Create UI
         self._create_widgets()
         self._setup_drag_drop()
@@ -600,7 +599,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.5.7")
+        master.title("nvencFFX 1.5.8")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -618,10 +617,9 @@ class VideoConverterApp:
         # Convert frame
         self.button_frame = ctk.CTkFrame(master, fg_color=PRIMARY_BG)
         self.button_frame.pack(fill="x", padx=15, pady=(0, 15))
-
+        
         self._setup_variables()
         self._create_widgets()
-        self._update_codec_settings()
 
         # Find FFmpeg executables (critical dependency)
         self.ffmpeg_path = self._find_executable("ffmpeg.exe")
@@ -640,6 +638,8 @@ class VideoConverterApp:
                     self.ffprobe_path = ffprobe_path
                 else:
                     self.ffprobe_path = self._find_executable("ffprobe.exe")
+
+        self._update_codec_settings()
 
         # Set the FFmpeg path in the UI if found
         if self.ffmpeg_path:
@@ -2965,7 +2965,7 @@ class VideoConverterApp:
                 "saved_additional_options": self.saved_additional_options.get(),
                 "saved_additional_filter_options": self.saved_additional_filter_options.get(),
                 "saved_additional_audio_filter_options": self.saved_additional_audio_filter_options.get(),
-                "version": "1.5.7",
+                "version": "1.5.8",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -3311,7 +3311,7 @@ class VideoConverterApp:
         if self.tune.get() != "auto":
             command.extend(["-tune:v", self.tune.get()])
 
-        if self.profile.get() != "auto":
+        if self.profile.get() != "auto" and self.video_codec.get() != "av1":
             command.extend(["-profile:v", self.profile.get()])
 
         if self.level.get() != "auto":
