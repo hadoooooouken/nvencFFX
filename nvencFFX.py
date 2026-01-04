@@ -178,7 +178,7 @@ class BatchConverterWindow:
         # Set icon
         if os.path.exists(icon_path):
             self.window.after(201, lambda: self.window.iconbitmap(icon_path))
-        
+
         # Create UI
         self._create_widgets()
         self._setup_drag_drop()
@@ -599,7 +599,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.5.8")
+        master.title("nvencFFX 1.5.9")
         master.geometry("800x700")
         master.minsize(800, 700)
         master.maxsize(800, 900)
@@ -617,7 +617,7 @@ class VideoConverterApp:
         # Convert frame
         self.button_frame = ctk.CTkFrame(master, fg_color=PRIMARY_BG)
         self.button_frame.pack(fill="x", padx=15, pady=(0, 15))
-        
+
         self._setup_variables()
         self._create_widgets()
 
@@ -743,7 +743,7 @@ class VideoConverterApp:
         self.enable_audio_options = ctk.BooleanVar(value=False)
         self.enable_encoder_options = ctk.BooleanVar(value=False)
         self.threads = ctk.StringVar(value="4")
-        self.preset = ctk.StringVar(value="p3")
+        self.preset = ctk.StringVar(value="p7")
         self.tune = ctk.StringVar(value="hq")
         self.profile = ctk.StringVar(value="main")
         self.level = ctk.StringVar(value="auto")
@@ -753,7 +753,7 @@ class VideoConverterApp:
         self.rc = ctk.StringVar(value="vbr")
         self.rc_locked = ctk.BooleanVar(value=False)
         self.lookahead_level = ctk.StringVar(value="auto")
-        self.split_encode_mode = ctk.StringVar(value="auto")
+        self.split_encode_mode = ctk.StringVar(value="forced")
         self.spatial_aq = ctk.BooleanVar(value=True)
         self.temporal_aq = ctk.BooleanVar(value=True)
         self.strict_gop = ctk.BooleanVar(value=False)
@@ -1182,7 +1182,7 @@ class VideoConverterApp:
         hwaccel_option_menu = ctk.CTkOptionMenu(
             right_column_frame,
             variable=self.hwaccel,
-            values=["auto", "cuda", "d3d11va"],
+            values=["auto", "cuda", "d3d11va", "d3d12va", "opencl", "vulkan"],
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
             button_hover_color=HOVER_GREEN,
@@ -2965,7 +2965,7 @@ class VideoConverterApp:
                 "saved_additional_options": self.saved_additional_options.get(),
                 "saved_additional_filter_options": self.saved_additional_filter_options.get(),
                 "saved_additional_audio_filter_options": self.saved_additional_audio_filter_options.get(),
-                "version": "1.5.8",
+                "version": "1.5.9",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -4830,7 +4830,7 @@ class VideoConverterApp:
             # Reset encoder options
             self.threads.set("4")
             self.hwaccel.set("cuda")
-            self.preset.set("p3")
+            self.preset.set("p7")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
                 self.profile.set("main")
@@ -4846,6 +4846,7 @@ class VideoConverterApp:
             self.no_scenecut.set(False)
             self.weighted_pred.set(False)
             self.strict_gop.set(False)
+            self.split_encode_mode.set("forced")
 
             # Reset FPS and scaling options
             self.fps_option.set("source")
@@ -4882,6 +4883,7 @@ class VideoConverterApp:
             self.multipass.set("disabled")
             self.rc.set("vbr")
             self.lookahead_level.set("0")
+            self.split_encode_mode.set("auto")
 
             # Flags
             self.spatial_aq.set(False)
@@ -4921,6 +4923,7 @@ class VideoConverterApp:
             self.rc.set("vbr")
             if self.video_codec.get() != "h264":
                 self.lookahead_level.set("auto")
+            self.split_encode_mode.set("auto")
 
             # Flags
             self.spatial_aq.set(True)
@@ -4959,6 +4962,7 @@ class VideoConverterApp:
             self.multipass.set("disabled")
             self.rc.set("vbr")
             self.lookahead_level.set("0")
+            self.split_encode_mode.set("auto")
 
             # Flags
             self.spatial_aq.set(False)
@@ -4998,6 +5002,7 @@ class VideoConverterApp:
             self.rc.set("vbr")
             if self.video_codec.get() != "h264":
                 self.lookahead_level.set("auto")
+            self.split_encode_mode.set("auto")
 
             # Flags
             self.spatial_aq.set(True)
@@ -5401,86 +5406,15 @@ class VideoConverterApp:
     def _copy_command_to_clipboard(self):
         command = self.command_textbox.get("1.0", "end-1c")
 
+        # Copy as is
         try:
-            # Parse command into parts while preserving quotes
-            parts = split(command, posix=False)
-
-            # Rebuild with quotes around file paths
-            quoted_parts = []
-            i = 0
-            while i < len(parts):
-                part = parts[i]
-
-                # Check if this is a flag (starts with -)
-                if part.startswith("-"):
-                    quoted_parts.append(part)
-                    i += 1
-                    continue
-
-                # Check if previous part was -i flag (input file)
-                if i > 0 and parts[i - 1] == "-i":
-                    # Add quotes around input file path
-                    if not (part.startswith('"') and part.endswith('"')):
-                        part = f'"{part}"'
-                    quoted_parts.append(part)
-                    i += 1
-                    continue
-
-                # Check if this looks like an output file path
-                # (last argument or contains path separators)
-                is_output_file = (i == len(parts) - 1) or (
-                    "\\" in part
-                    or "/" in part
-                    or part.endswith(
-                        (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
-                    )
-                )
-
-                if is_output_file:
-                    # Add quotes around output file path
-                    if not (part.startswith('"') and part.endswith('"')):
-                        part = f'"{part}"'
-                    quoted_parts.append(part)
-                    i += 1
-                else:
-                    # Regular argument (not a file path)
-                    quoted_parts.append(part)
-                    i += 1
-
-            command_with_quotes = " ".join(quoted_parts)
-
-            try:
-                win32clipboard.OpenClipboard()
-                win32clipboard.EmptyClipboard()
-                win32clipboard.SetClipboardText(
-                    command_with_quotes, win32clipboard.CF_UNICODETEXT
-                )
-                win32clipboard.CloseClipboard()
-            except Exception as e:
-                print(f"Error setting clipboard: {e}")
-
-        except Exception:
-            # Fallback: simple regex-based quoting for file paths
-            command_with_quotes = sub(
-                r'(-i\s+)([^"\s]+)',
-                r'\1"\2"',
-                command,  # Quote input files
-            )
-            command_with_quotes = sub(
-                r"(\s)([A-Za-z]:\\[^ ]+\.\w{2,4}|/[^ ]+\.\w{2,4})(\s|$)",
-                r'\1"\2"\3',
-                command_with_quotes,  # Quote output files
-            )
-
-            try:
-                win32clipboard.OpenClipboard()
-                win32clipboard.EmptyClipboard()
-                win32clipboard.SetClipboardText(
-                    command_with_quotes, win32clipboard.CF_UNICODETEXT
-                )
-                win32clipboard.CloseClipboard()
-            except Exception as e:
-                print(f"Error setting clipboard: {e}")
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardText(command, win32clipboard.CF_UNICODETEXT)
+            win32clipboard.CloseClipboard()
+            self.status_text.set("Command copied to clipboard")
+        except Exception as e:
+            print(f"Error setting clipboard: {e}")
 
     # FILTERS & OPTIONS MANAGEMENT
     def _set_speed_filter(self, speed_factor):

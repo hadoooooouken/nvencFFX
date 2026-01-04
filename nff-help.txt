@@ -25,7 +25,7 @@ Set the encoding preset:
 p1 - fastest (lowest quality)
 p7 - slowest (best quality)
 
-nvencFF default: p3 (good balance between speed and quality).
+nvencFF default: p7 (max quality).
 
 #Tune
 hq, uhq, ll, ull, lossless
@@ -483,3 +483,13 @@ The Screen Record feature allows you to capture Windows Desktop
 - Quality: Constant QP mode or Bitrate mode as configured
 - Hardware Acceleration: NVIDIA NVENC
 - Audio capture: Not implemented for screen recording
+
+#FAQ
+
+#Why my RTX5060 shows only 20% usage of Video Encode engine?
+Advanced Encoder Settings / Set "Preset" to "p7".
+
+#Why my RTX5070Ti shows only 50% usage of Video Encode engine?
+Advanced Encoder Settings / Set "Preset" to "p7".
+or
+Advanced Encoder Settings / Set "Split Encode" to "forced".

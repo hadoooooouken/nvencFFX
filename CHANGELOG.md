@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
 
+## [1.5.9] - 2026-01-05
+- Default preset is tweaked for RTX5000.
+
 ## [1.5.8] - 2026-01-02
 - AV1 fixes.
 
