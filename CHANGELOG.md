@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.6.0] - 2026-01-06
+- FFmpeg Vommand Preview: fixed "Copy to Clipboard";
+- FFmpeg Vommand Preview: fixed "Apply Changes";
+- Trimming: Added previews for HighDPI modes.
+
 ## [1.5.9] - 2026-01-05
 - Default preset is tweaked for RTX5000.
 - Added HighDPI version.

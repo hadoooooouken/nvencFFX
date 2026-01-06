@@ -83,12 +83,13 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-data-file=nff-help.txt=./nff-help.txt ^
         --include-data-file=nff-about.txt=./nff-about.txt ^
         --include-data-file=nff-license.txt=./nff-license.txt ^
+        --include-data-file=nff-license.txt=./LICENSE.txt ^
         --product-name="nvencFFX" ^
-        --product-version="1.5.9" ^
-        --file-version="1.5.9" ^
+        --product-version="1.6.0" ^
+        --file-version="1.6.0" ^
         --file-description="nvencFFX" ^
         --company-name="Deepseek Enjoyer" ^
-        --copyright="Copyright (C) 2025 hadouken" ^
+        --copyright="Copyright (C) 2026 hadouken" ^
         --output-dir=build "nvencFFX.py"
     ```
     The compiled executable will be found in the `build` directory specified by `--output-dir`.

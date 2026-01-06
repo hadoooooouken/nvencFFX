@@ -1,4 +1,5 @@
 # IMPORTS
+import ctypes
 import os
 import subprocess
 import sys
@@ -19,6 +20,34 @@ from PIL import Image
 from win32api import DragFinish, DragQueryFile
 from win32con import GWL_WNDPROC, WM_DROPFILES
 from win32gui import CallWindowProc, DragAcceptFiles, SetWindowLong
+
+
+def get_real_dpi():
+    """Get the actual DPI taking system scaling into account"""
+    user32 = ctypes.windll.user32
+    shcore = ctypes.windll.shcore
+
+    try:
+        awareness = ctypes.c_int(2)
+        user32.SetProcessDpiAwarenessContext(awareness)
+    except:
+        try:
+            shcore.SetProcessDpiAwareness(2)
+        except:
+            user32.SetProcessDPIAware()
+
+    try:
+        hwnd = user32.GetForegroundWindow()
+        dpi = user32.GetDpiForWindow(hwnd)
+        if dpi == 0:
+            dpi = user32.GetDpiForSystem()
+    except:
+        hdc = user32.GetDC(0)
+        dpi = user32.GetDeviceCaps(hdc, 88)
+        user32.ReleaseDC(0, hdc)
+
+    return dpi
+
 
 # UI THEME
 # ctk.ThemeManager.theme["CTkFont"].update({"family": "Segoe UI", "size": 12})
@@ -599,10 +628,23 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.5.9")
-        master.geometry("800x700")
-        master.minsize(800, 700)
-        master.maxsize(800, 900)
+        master.title("nvencFFX 1.6.0")
+
+        dpi = get_real_dpi()
+        scaling = int(round((dpi / 96) * 100))
+        self.scaling = scaling
+
+        if scaling >= 200:
+            h, min_h, max_h = 600, 600, 650
+        elif scaling >= 125:
+            h, min_h, max_h = 650, 650, 800
+        else:
+            h, min_h, max_h = 700, 700, 900
+
+        master.geometry(f"820x{h}")
+        master.minsize(820, min_h)
+        master.maxsize(820, max_h)
+
         master.resizable(False, True)
         master.configure(fg_color=PRIMARY_BG)
 
@@ -2965,7 +3007,7 @@ class VideoConverterApp:
                 "saved_additional_options": self.saved_additional_options.get(),
                 "saved_additional_filter_options": self.saved_additional_filter_options.get(),
                 "saved_additional_audio_filter_options": self.saved_additional_audio_filter_options.get(),
-                "version": "1.5.9",
+                "version": "1.6.0",
             }
 
             with open(settings_file, "w", encoding="utf-8") as file:
@@ -3136,7 +3178,7 @@ class VideoConverterApp:
             raise ValueError("Please fill in all main fields.")
 
         # Basic command structure
-        command = [ffmpeg_path]
+        command = [ffmpeg_path, "-hide_banner"]
 
         # Handle Streamcopy option
         if self.trim_streamcopy.get():
@@ -4029,7 +4071,7 @@ class VideoConverterApp:
             required_height += self.presets_frame.winfo_reqheight() + 10
 
         if required_height != current_height:
-            self.master.geometry(f"800x{required_height}")
+            self.master.geometry(f"820x{required_height}")
 
     def _update_progress(self, line):
         if "time=" in line:
@@ -4191,7 +4233,7 @@ class VideoConverterApp:
         self.trim_canvas.delete("all")
         width = self.trim_canvas.winfo_width()
         if width < 10:  # Minimum width
-            width = 800
+            width = 820
 
         # Draw the track
         self.trim_canvas.create_line(10, 15, width - 10, 15, fill="#555555", width=3)
@@ -4733,11 +4775,19 @@ class VideoConverterApp:
                 ctk_thumb = ctk.CTkImage(light_image=thumb_image, size=(352, 198))
                 self.preview_label.configure(image=ctk_thumb, text="")
 
-                # Position preview above slider handle
-                slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
-                slider_y = self.trim_canvas.winfo_rooty() - 208
+                if self.scaling > 100:
+                    # Position preview in the top-left corner of the screen with 10px offset
+                    screen_x = 50
+                    screen_y = 50
+                    self.preview_window.geometry(f"352x198+{screen_x}+{screen_y}")
 
-                self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
+                else:
+                    # Position preview above slider handle
+                    slider_x = self.trim_canvas.winfo_rootx() + x_pos - 176
+                    slider_y = self.trim_canvas.winfo_rooty() - 208
+
+                    self.preview_window.geometry(f"352x198+{slider_x}+{slider_y}")
+
                 self.preview_window.deiconify()
                 self.preview_visible = True
 
@@ -5163,21 +5213,46 @@ class VideoConverterApp:
         try:
             args = split(new_command, posix=False)
 
+            i = 0
+            while i < len(args):
+                if (":" in args[i] and "\\" in args[i]) or args[i].startswith("\\\\"):
+                    path_parts = [args[i]]
+                    j = i + 1
+                    while j < len(args) and not args[j].startswith("-"):
+                        path_parts.append(args[j])
+                        j += 1
+
+                    full_path = " ".join(path_parts)
+                    if full_path.startswith('"') and full_path.endswith('"'):
+                        full_path = full_path[1:-1]
+
+                    args = args[:i] + [full_path] + args[j:]
+                    i += 1
+                else:
+                    i += 1
+
             if len(args) < 3:
                 raise ValueError("Command too short - not a valid FFmpeg command")
 
             has_input = False
-            has_output = False
+            input_file = None
+            output_file = None
+
             for i, arg in enumerate(args):
                 if arg == "-i" and i < len(args) - 1:
                     has_input = True
-                if not arg.startswith("-") and i > 0 and args[i - 1] != "-i":
-                    has_output = True
+                    input_file = args[i + 1]
+
+            for i in range(1, len(args)):
+                if not args[i].startswith("-") and (i == 0 or args[i - 1] != "-i"):
+                    output_file = args[i]
 
             if not has_input:
                 raise ValueError("Missing input file (-i option)")
-            if not has_output:
+            if not output_file:
                 raise ValueError("Missing output file")
+            if not input_file:
+                raise ValueError("Input file not specified after -i option")
 
             self.custom_command = args
             self.ffmpeg_output.set("Custom command applied: " + " ".join(args))
@@ -5190,7 +5265,8 @@ class VideoConverterApp:
                 f"Invalid command: {str(e)}\n\nPlease check:\n"
                 "1. Input file (-i option)\n"
                 "2. Output file path\n"
-                "3. Valid FFmpeg arguments",
+                "3. Valid FFmpeg arguments\n\n"
+                f"Command: {new_command}",
             )
 
     def _reset_custom_command(self):
@@ -5404,15 +5480,52 @@ class VideoConverterApp:
                 pass
 
     def _copy_command_to_clipboard(self):
-        command = self.command_textbox.get("1.0", "end-1c")
+        command = self.command_textbox.get("1.0", "end-1c").strip()
 
-        # Copy as is
+        # break the command into words, but combine those that are clearly parts of the same path
+        words = command.split()
+        result = []
+        i = 0
+
+        while i < len(words):
+            word = words[i]
+
+            # if a word starts with a drive letter (C:, D:, etc.) and contains \
+            if len(word) >= 2 and word[1] == ":" and "\\" in word:
+                path_parts = [word]
+                j = i + 1
+
+                while j < len(words) and not words[j].startswith("-"):
+                    path_parts.append(words[j])
+                    j += 1
+
+                full_path = " ".join(path_parts)
+
+                if full_path.startswith('"') and full_path.endswith('"'):
+                    full_path = full_path[1:-1]
+
+                # spaces handling
+                if " " in full_path:
+                    result.append(f'"{full_path}"')
+                else:
+                    result.append(full_path)
+
+                i = j
+            else:
+                # not a path = return as is
+                result.append(word)
+                i += 1
+
+        final_command = " ".join(result)
+
         try:
             win32clipboard.OpenClipboard()
             win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(command, win32clipboard.CF_UNICODETEXT)
+            win32clipboard.SetClipboardText(
+                final_command, win32clipboard.CF_UNICODETEXT
+            )
             win32clipboard.CloseClipboard()
-            self.status_text.set("Command copied to clipboard")
+            self.ffmpeg_output.set("Command copied to clipboard!")
         except Exception as e:
             print(f"Error setting clipboard: {e}")
 
@@ -5757,7 +5870,7 @@ def get_icon_path():
 
 root = ctk.CTk()
 app = VideoConverterApp(root)
-ctk.deactivate_automatic_dpi_awareness()
+# ctk.deactivate_automatic_dpi_awareness()
 icon_path = get_icon_path()
 if os.path.exists(icon_path):
     root.after(201, lambda: root.iconbitmap(icon_path))
