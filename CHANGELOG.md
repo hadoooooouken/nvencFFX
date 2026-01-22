@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
 
+## [1.6.1] - 2026-01-22
+- Added the ability to create custom presets.
+
 ## [1.6.0] - 2026-01-06
 - FFmpeg Command Preview: fixed "Copy to Clipboard";
 - FFmpeg Command Preview: fixed "Apply Changes";
