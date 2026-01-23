@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
 
+## [1.6.2] - 2026-01-23
+- Fixed a bug when switching built-in presets to custom ones.
+
 ## [1.6.1] - 2026-01-22
 - Added the ability to create custom presets.
 

@@ -628,7 +628,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.1")
+        master.title("nvencFFX 1.6.2")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -2239,6 +2239,7 @@ class VideoConverterApp:
             preset_name = self.custom_preset_name.get()
             if preset_name:
                 self.custom_preset_selected.set(preset_name)
+                self._load_custom_preset(preset_name)
 
     def _load_custom_preset(self, preset_name):
         """Load a custom preset"""
@@ -2253,7 +2254,8 @@ class VideoConverterApp:
                 self.loading_preset = False
 
                 self.custom_preset_selected.set(preset_name)
-                self.selected_preset.set("custom")
+                if self.selected_preset.get() != "custom":
+                    self.selected_preset.set("custom")
                 self.preset_indicator.configure(
                     text=f"Loaded preset: {preset_name}", text_color=ACCENT_GREEN
                 )
@@ -2651,7 +2653,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.1",
+            "version": "1.6.2",
         }
         return settings
 
