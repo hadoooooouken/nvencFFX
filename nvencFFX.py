@@ -22,6 +22,14 @@ from win32con import GWL_WNDPROC, WM_DROPFILES
 from win32gui import CallWindowProc, DragAcceptFiles, SetWindowLong
 
 
+def get_icon_path():
+    if getattr(sys, "frozen", False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, "nff.ico")
+
+
 def get_real_dpi():
     """Get the actual DPI taking system scaling into account"""
     user32 = ctypes.windll.user32
@@ -210,6 +218,8 @@ class BatchConverterWindow:
 
         # Create UI
         self._create_widgets()
+        self.hwaccel.trace_add("write", lambda *args: self._update_cuda_output_format_state())
+        self._update_cuda_output_format_state()
         self._setup_drag_drop()
         self._update_files_display()
         # Update main window convert button
@@ -628,7 +638,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.2")
+        master.title("nvencFFX 1.6.3")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -674,19 +684,34 @@ class VideoConverterApp:
         self.ffmpeg_path = self._find_executable("ffmpeg.exe")
         self.ffprobe_path = None
 
-        # Try to load saved settings
-        saved_path = self._load_settings()
-        if saved_path:
-            self.ffmpeg_path = saved_path
+        # Load saved settings (updates ffmpeg_custom_path)
+        self._load_settings()
+
+        # Determine the actual ffmpeg path to use
+        custom_ffmpeg = self.ffmpeg_custom_path.get()
+        if (
+            custom_ffmpeg
+            and custom_ffmpeg != self.ffmpeg_path_placeholder
+            and os.path.exists(custom_ffmpeg)
+        ):
+            actual_ffmpeg = custom_ffmpeg
         else:
-            if self.ffmpeg_path:
-                ffprobe_path = os.path.join(
-                    os.path.dirname(self.ffmpeg_path), "ffprobe.exe"
-                )
-                if os.path.exists(ffprobe_path):
-                    self.ffprobe_path = ffprobe_path
-                else:
-                    self.ffprobe_path = self._find_executable("ffprobe.exe")
+            actual_ffmpeg = self.ffmpeg_path
+
+        # Update self.ffmpeg_path to the actual one (so it's consistent)
+        self.ffmpeg_path = actual_ffmpeg
+
+        # Determine ffprobe path based on actual ffmpeg
+        if self.ffmpeg_path:
+            ffprobe_path = os.path.join(
+                os.path.dirname(self.ffmpeg_path), "ffprobe.exe"
+            )
+            if os.path.exists(ffprobe_path):
+                self.ffprobe_path = ffprobe_path
+            else:
+                self.ffprobe_path = self._find_executable("ffprobe.exe")
+        else:
+            self.ffprobe_path = self._find_executable("ffprobe.exe")
 
         self._update_codec_settings()
 
@@ -771,6 +796,9 @@ class VideoConverterApp:
         )
 
         # Encoder Flags
+        self.cuda_output_format.trace_add(
+            "write", lambda *args: self._on_setting_changed()
+        )
         self.spatial_aq.trace_add("write", lambda *args: self._on_setting_changed())
         self.temporal_aq.trace_add("write", lambda *args: self._on_setting_changed())
         self.tune.trace_add("write", lambda *args: self._on_tune_changed())
@@ -803,6 +831,7 @@ class VideoConverterApp:
         self.rc_locked = ctk.BooleanVar(value=False)
         self.lookahead_level = ctk.StringVar(value="auto")
         self.split_encode_mode = ctk.StringVar(value="forced")
+        self.cuda_output_format = ctk.BooleanVar(value=False)
         self.spatial_aq = ctk.BooleanVar(value=True)
         self.temporal_aq = ctk.BooleanVar(value=True)
         self.strict_gop = ctk.BooleanVar(value=False)
@@ -1236,6 +1265,7 @@ class VideoConverterApp:
             right_column_frame,
             variable=self.hwaccel,
             values=["auto", "cuda", "d3d11va", "d3d12va", "opencl", "vulkan"],
+            command=lambda choice: self._update_cuda_output_format_state(),
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
             button_hover_color=HOVER_GREEN,
@@ -1310,13 +1340,22 @@ class VideoConverterApp:
         self.split_encode_menu.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
 
         # Checkboxes
+        self.cuda_output_format_checkbox = ctk.CTkCheckBox(
+            right_column_frame,
+            text="CUDA Output Format",
+            variable=self.cuda_output_format,
+            fg_color=ACCENT_GREEN,
+            hover_color=HOVER_GREEN,
+        )
+        self.cuda_output_format_checkbox.grid(row=0, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+
         ctk.CTkCheckBox(
             right_column_frame,
             text="Spatial AQ",
             variable=self.spatial_aq,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=0, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         ctk.CTkCheckBox(
             right_column_frame,
@@ -1324,7 +1363,7 @@ class VideoConverterApp:
             variable=self.temporal_aq,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        ).grid(row=2, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         ctk.CTkCheckBox(
             right_column_frame,
@@ -1332,7 +1371,7 @@ class VideoConverterApp:
             variable=self.strict_gop,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=2, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        ).grid(row=3, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         ctk.CTkCheckBox(
             right_column_frame,
@@ -1340,7 +1379,7 @@ class VideoConverterApp:
             variable=self.no_scenecut,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=3, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        ).grid(row=4, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         ctk.CTkCheckBox(
             right_column_frame,
@@ -1348,7 +1387,7 @@ class VideoConverterApp:
             variable=self.weighted_pred,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        ).grid(row=4, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        ).grid(row=5, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         # FPS and Scaling
         fps_scale_frame_toggle = TextCheckbox(
@@ -2251,6 +2290,8 @@ class VideoConverterApp:
 
                 self.loading_preset = True
                 self._apply_settings_dict(settings)
+                self.custom_preset_name.set(preset_name)
+                self.custom_preset_selected.set(preset_name)
                 self.loading_preset = False
 
                 self.custom_preset_selected.set(preset_name)
@@ -2445,6 +2486,10 @@ class VideoConverterApp:
             self.split_encode_mode.set(encoder_split_encode_mode)
 
         # Boolean encoder settings
+        cuda_output_format = settings_dict.get("cuda_output_format")
+        if cuda_output_format is not None:
+            self.cuda_output_format.set(cuda_output_format)
+
         encoder_spatial_aq = settings_dict.get("encoder_spatial_aq")
         if encoder_spatial_aq is not None:
             self.spatial_aq.set(encoder_spatial_aq)
@@ -2574,6 +2619,7 @@ class VideoConverterApp:
             self.custom_preset_name.set(custom_preset_selected)
 
         # Update UI
+        self._update_cuda_output_format_state()
         self._update_codec_settings()
         self._toggle_constant_qp_mode()
         self._toggle_custom_abitrate()
@@ -2623,6 +2669,7 @@ class VideoConverterApp:
             "custom_video_width": self.custom_video_width.get(),
             "interpolation_algo": self.interpolation_algo.get(),
             # Encoder Flags
+            "cuda_output_format": self.cuda_output_format.get(),
             "encoder_spatial_aq": self.spatial_aq.get(),
             "encoder_temporal_aq": self.temporal_aq.get(),
             "encoder_strict_gop": self.strict_gop.get(),
@@ -2653,7 +2700,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.2",
+            "version": "1.6.3",
         }
         return settings
 
@@ -3211,12 +3258,7 @@ class VideoConverterApp:
                 if self.video_codec.get() == "av1"
                 else "_h264"
             )
-            output_path = os.path.normpath(
-                os.path.join(
-                    os.path.dirname(normalized_path),
-                    f"{base_name}{codec_suffix}_custom.mp4",
-                )
-            )
+
             if self.last_output_dir.get() and os.path.exists(
                 self.last_output_dir.get()
             ):
@@ -3625,6 +3667,8 @@ class VideoConverterApp:
         # Continue with hardware acceleration and threads
         if self.hwaccel.get() != "auto":
             command.extend(["-hwaccel:v", self.hwaccel.get()])
+            if self.hwaccel.get() == "cuda" and self.cuda_output_format.get():
+                command.extend(["-hwaccel_output_format:v", "cuda"])
 
         if self.threads.get() != "auto":
             command.extend(["-threads", self.threads.get()])
@@ -4265,6 +4309,14 @@ class VideoConverterApp:
 
             self.custom_command = None
             self._on_tune_changed()
+
+    def _update_cuda_output_format_state(self):
+        """Enables the CUDA Output Format checkbox only when cuda is selected."""
+        if self.hwaccel.get() == "cuda":
+            self.cuda_output_format_checkbox.configure(state="normal")
+        else:
+            self.cuda_output_format_checkbox.configure(state="disabled")
+            self.cuda_output_format.set(False)
 
     def _on_tune_changed(self):
         """Automatically disable AQ settings when lossless mode is selected"""
@@ -6203,14 +6255,6 @@ class VideoConverterApp:
         if self.is_recording:
             self._stop_recording()
         self.master.quit()
-
-
-def get_icon_path():
-    if getattr(sys, "frozen", False):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.dirname(__file__)
-    return os.path.join(base_path, "nff.ico")
 
 
 root = ctk.CTk()

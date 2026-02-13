@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.6.3] - 2026-02-13
+- Added "Advanced Encoder Settings / CUDA Output Format" (-hwaccel_output_format cuda) - It is required when using CUDA-based filters;
+- UI fixes in Presets section.
+
 ## [1.6.2] - 2026-01-23
 - Fixed a bug when switching built-in presets to custom ones.
 

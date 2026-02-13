@@ -137,6 +137,12 @@ Controls how many future frames are analyzed for rate control.
 Higher values improve quality but increase encoding time and memory usage.
 0 = Disabled, auto = Automatic selection
 
+#CUDA Output Format
+Enabled/Disabled
+
+Adds the -hwaccel_output_format cuda parameter.
+It is required when using CUDA-based filters.
+
 #Spatial AQ
 Enabled/Disabled
 
