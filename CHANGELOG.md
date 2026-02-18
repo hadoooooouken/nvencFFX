@@ -4,10 +4,9 @@
 - **"Screen Record"** now respects the selected **FPS Mode**. My recommendations:  
   **Auto/Variable (VFR)** – if you want a smaller file size;  
   **Constant (CFR)** – if you plan to use the recorded video for editing in a video editor.
-
 - **Additional Options:** improved text paste handling (custom filters) regardless of the current system keyboard layout.
-
-- **Presets:** updated existing presets and added new `scale_cuda` presets (as examples).
+- **Presets:** updated existing presets and added new `scale_cuda` presets (as examples);
+- Fixed **BatchConverter**.
 
 
 ## [1.6.3] - 2026-02-13

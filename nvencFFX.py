@@ -231,10 +231,6 @@ class BatchConverterWindow:
 
         # Create UI
         self._create_widgets()
-        self.hwaccel.trace_add(
-            "write", lambda *args: self._update_cuda_output_format_state()
-        )
-        self._update_cuda_output_format_state()
         self._setup_drag_drop()
         self._update_files_display()
         # Update main window convert button
