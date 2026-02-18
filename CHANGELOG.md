@@ -1,5 +1,15 @@
 # nvencFFX - Changelog
 
+## [1.6.4] - 2026-02-18
+- **"Screen Record"** now respects the selected **FPS Mode**. My recommendations:  
+  **Auto/Variable (VFR)** – if you want a smaller file size;  
+  **Constant (CFR)** – if you plan to use the recorded video for editing in a video editor.
+
+- **Additional Options:** improved text paste handling (custom filters) regardless of the current system keyboard layout.
+
+- **Presets:** updated existing presets and added new `scale_cuda` presets (as examples).
+
+
 ## [1.6.3] - 2026-02-13
 - Added "Advanced Encoder Settings / CUDA Output Format" (-hwaccel_output_format cuda) - It is required when using CUDA-based filters;
 - UI fixes in Presets section.

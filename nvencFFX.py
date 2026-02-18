@@ -57,6 +57,19 @@ def get_real_dpi():
     return dpi
 
 
+def is_us_english_layout():
+    """Return True if the current keyboard layout is US English (0x0409)."""
+    try:
+        user32 = ctypes.windll.user32
+        # Get keyboard layout for the current thread
+        hkl = user32.GetKeyboardLayout(0)
+        # Language ID is the low 16 bits
+        lang_id = hkl & 0xFFFF
+        return lang_id == 0x0409  # 0x0409 = US English
+    except Exception:
+        return False  # On error, assume not English (or fall back to default)
+
+
 # UI THEME
 # ctk.ThemeManager.theme["CTkFont"].update({"family": "Segoe UI", "size": 12})
 # ctk.set_window_scaling(2.0)
@@ -218,7 +231,9 @@ class BatchConverterWindow:
 
         # Create UI
         self._create_widgets()
-        self.hwaccel.trace_add("write", lambda *args: self._update_cuda_output_format_state())
+        self.hwaccel.trace_add(
+            "write", lambda *args: self._update_cuda_output_format_state()
+        )
         self._update_cuda_output_format_state()
         self._setup_drag_drop()
         self._update_files_display()
@@ -638,7 +653,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.3")
+        master.title("nvencFFX 1.6.4")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1347,7 +1362,9 @@ class VideoConverterApp:
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
         )
-        self.cuda_output_format_checkbox.grid(row=0, column=2, columnspan=2, sticky="w", padx=15, pady=2)
+        self.cuda_output_format_checkbox.grid(
+            row=0, column=2, columnspan=2, sticky="w", padx=15, pady=2
+        )
 
         ctk.CTkCheckBox(
             right_column_frame,
@@ -2700,7 +2717,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.3",
+            "version": "1.6.4",
         }
         return settings
 
@@ -2879,7 +2896,7 @@ class VideoConverterApp:
             command.extend(["-rc:v", self.rc.get(), "-b:v", f"{self.bitrate.get()}k"])
 
         # Constant FPS + No audio
-        command.extend(["-fps_mode", "cfr", "-an", output_file])
+        command.extend(["-fps_mode", self.fps_mode.get(), "-an", output_file])
 
         # PRINT THE COMMAND TO CONSOLE
         print("Screen recording command:")
@@ -5819,6 +5836,11 @@ class VideoConverterApp:
 
         # keycode 86 = 'V'
         elif event.keycode == 86 and (event.state & 0x0004):  # Ctrl+V
+            # Do not intercept if US English layout is active
+            if is_us_english_layout():
+                # Let the event propagate (system default paste)
+                return None
+            # Otherwise use the custom paste handler
             self._paste_text()
             return "break"
 
@@ -5870,8 +5892,8 @@ class VideoConverterApp:
         if hasattr(widget, "insert"):
             try:
                 text = self.master.clipboard_get()
-                if hasattr(widget, "delete"):
-                    widget.delete(0, "end")
+                if hasattr(widget, "selection_present") and widget.selection_present():
+                    widget.delete("sel.first", "sel.last")
                 widget.insert("insert", text)
             except tk.TclError:
                 pass
