@@ -649,7 +649,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.4")
+        master.title("nvencFFX 1.6.5")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -819,6 +819,13 @@ class VideoConverterApp:
         self.custom_abitrate.trace_add(
             "write", lambda *args: self._on_setting_changed()
         )
+        # Load new added custom preset at next start
+        self.selected_preset.trace_add(
+            "write", lambda *args: self._on_setting_changed()
+        )
+        self.custom_preset_name.trace_add(
+            "write", lambda *args: self._on_setting_changed()
+        )
 
     def _setup_variables(self):
         # Initialize all Tkinter control variables
@@ -901,10 +908,6 @@ class VideoConverterApp:
         self.recording_process = None
         # Preview 10s
         self.preview_process = None
-        # Saved custom filters
-        self.saved_additional_options = ctk.StringVar(value="")
-        self.saved_additional_filter_options = ctk.StringVar(value="")
-        self.saved_additional_audio_filter_options = ctk.StringVar(value="")
         # Custom presets
         self.custom_preset_name = ctk.StringVar(value="")
         self.custom_preset_selected = ctk.StringVar(value="")
@@ -1850,7 +1853,7 @@ class VideoConverterApp:
         ctk.CTkButton(
             quick_buttons_frame,
             text="Sharpness",
-            command=lambda: self._add_video_filter("unsharp=5:5:1.15:3:3:0.0"),
+            command=lambda: self._add_video_filter("unsharp=5:5:1.0:3:3:0.0"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
@@ -1956,13 +1959,13 @@ class VideoConverterApp:
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Save custom
+        # H-Flip button
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Save",
-            command=self._save_custom_filters,
-            fg_color=ACCENT_GREEN,
-            hover_color=HOVER_GREEN,
+            text="H-Flip",
+            command=lambda: self._add_video_filter("hflip"),
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left")
@@ -2035,13 +2038,13 @@ class VideoConverterApp:
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Load custom
+        # V-Flip button
         ctk.CTkButton(
             quick_buttons_frame_3,
-            text="Load",
-            command=self._load_custom_filters,
-            fg_color=ACCENT_GREEN,
-            hover_color=HOVER_GREEN,
+            text="V-Flip",
+            command=lambda: self._add_video_filter("vflip"),
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left")
@@ -2600,25 +2603,6 @@ class VideoConverterApp:
                 text_color=PLACEHOLDER_COLOR
             )
 
-        # Saved filters
-        saved_additional_options = settings_dict.get("saved_additional_options", "")
-        if saved_additional_options:
-            self.saved_additional_options.set(saved_additional_options)
-
-        saved_additional_filter_options = settings_dict.get(
-            "saved_additional_filter_options", ""
-        )
-        if saved_additional_filter_options:
-            self.saved_additional_filter_options.set(saved_additional_filter_options)
-
-        saved_additional_audio_filter_options = settings_dict.get(
-            "saved_additional_audio_filter_options", ""
-        )
-        if saved_additional_audio_filter_options:
-            self.saved_additional_audio_filter_options.set(
-                saved_additional_audio_filter_options
-            )
-
         # Selected preset
         selected_preset = settings_dict.get("selected_preset", "")
         if selected_preset:
@@ -2631,7 +2615,21 @@ class VideoConverterApp:
             self._update_preset_dropdown()
             self.custom_preset_name.set(custom_preset_selected)
 
-        # Update UI
+        # Check if preset's preset file still exists
+        if selected_preset == "custom" and custom_preset_selected:
+            preset_file = os.path.join(
+                self.presets_dir, f"{custom_preset_selected}.json"
+            )
+            if not os.path.exists(preset_file):
+                # Preset file missing → reset selection
+                self.selected_preset.set("none")
+                self.custom_preset_selected.set("")
+                self.custom_preset_name.set("")
+                print(
+                    f"Preset file '{custom_preset_selected}.json' not found. Preset selection reset."
+                )
+
+        # Update UI elements
         self._update_cuda_output_format_state()
         self._update_codec_settings()
         self._toggle_constant_qp_mode()
@@ -2644,7 +2642,8 @@ class VideoConverterApp:
         if hasattr(self, "trim_canvas"):
             self.master.after(100, self._draw_trim_slider)
 
-        self._update_preset_indicator_from_settings(settings_dict)
+        # Update preset indicator using current variable values
+        self._update_preset_indicator()
 
     def _get_current_settings(self):
         """Get current settings as dictionary"""
@@ -2706,21 +2705,18 @@ class VideoConverterApp:
             != self.additional_audio_filter_options_placeholder
             else "",
             # Saved custom filters
-            "saved_additional_options": self.saved_additional_options.get(),
-            "saved_additional_filter_options": self.saved_additional_filter_options.get(),
-            "saved_additional_audio_filter_options": self.saved_additional_audio_filter_options.get(),
             "selected_preset": self.selected_preset.get(),
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.4",
+            "version": "1.6.5",
         }
         return settings
 
-    def _update_preset_indicator_from_settings(self, settings_dict):
-        """Update preset indicator based on loaded settings"""
-        selected_preset = settings_dict.get("selected_preset", "")
-        custom_preset_selected = settings_dict.get("custom_preset_selected", "")
+    def _update_preset_indicator(self):
+        """Update the preset indicator label based on current preset selection."""
+        selected_preset = self.selected_preset.get()
+        custom_preset_selected = self.custom_preset_selected.get()
 
         if not selected_preset or selected_preset == "none":
             self.preset_indicator.configure(
@@ -3401,77 +3397,6 @@ class VideoConverterApp:
                 dump(settings, file, indent=4, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving settings: {e}")
-
-    def _save_custom_filters(self):
-        current_options = self.additional_options.get().strip()
-        current_filter_options = self.additional_filter_options.get().strip()
-        current_audio_filter_options = (
-            self.additional_audio_filter_options.get().strip()
-        )
-
-        if current_options == self.additional_options_placeholder:
-            self.saved_additional_options.set("")
-        else:
-            self.saved_additional_options.set(current_options)
-
-        if current_filter_options == self.additional_filter_options_placeholder:
-            self.saved_additional_filter_options.set("")
-        else:
-            self.saved_additional_filter_options.set(current_filter_options)
-
-        if (
-            current_audio_filter_options
-            == self.additional_audio_filter_options_placeholder
-        ):
-            self.saved_additional_audio_filter_options.set("")
-        else:
-            self.saved_additional_audio_filter_options.set(current_audio_filter_options)
-
-        self._save_settings()
-        messagebox.showinfo("Saved", "Custom filters saved!")
-
-    def _load_custom_filters(self):
-        saved_options = self.saved_additional_options.get()
-        saved_filter_options = self.saved_additional_filter_options.get()
-        saved_audio_filter_options = self.saved_additional_audio_filter_options.get()
-
-        if not any([saved_options, saved_filter_options, saved_audio_filter_options]):
-            messagebox.showinfo("Info", "No saved filters found.")
-            return
-
-        if saved_options is not None:
-            if saved_options:
-                self.additional_options.set(saved_options)
-                self.additional_options_entry.configure(text_color=TEXT_COLOR_W)
-            else:
-                self.additional_options.set(self.additional_options_placeholder)
-                self.additional_options_entry.configure(text_color=PLACEHOLDER_COLOR)
-
-        if saved_filter_options is not None:
-            if saved_filter_options:
-                self.additional_filter_options.set(saved_filter_options)
-                self.additional_filter_options_entry.configure(text_color=TEXT_COLOR_W)
-            else:
-                self.additional_filter_options.set(
-                    self.additional_filter_options_placeholder
-                )
-                self.additional_filter_options_entry.configure(
-                    text_color=PLACEHOLDER_COLOR
-                )
-
-        if saved_audio_filter_options is not None:
-            if saved_audio_filter_options:
-                self.additional_audio_filter_options.set(saved_audio_filter_options)
-                self.additional_audio_filter_options_entry.configure(
-                    text_color=TEXT_COLOR_W
-                )
-            else:
-                self.additional_audio_filter_options.set(
-                    self.additional_audio_filter_options_placeholder
-                )
-                self.additional_audio_filter_options_entry.configure(
-                    text_color=PLACEHOLDER_COLOR
-                )
 
     def _on_setting_changed(self):
         """Handle any setting change - debounced to avoid too frequent saves"""
@@ -5825,24 +5750,28 @@ class VideoConverterApp:
         self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
 
     def _handle_key_press(self, event):
-        # keycode 67 = 'C'
-        if event.keycode == 67 and (event.state & 0x0004):  # Ctrl+C
-            self._copy_text()
-            return "break"
+        # Check if Ctrl is pressed (0x0004 is the Control modifier)
+        if not (event.state & 0x0004):
+            return
 
-        # keycode 86 = 'V'
-        elif event.keycode == 86 and (event.state & 0x0004):  # Ctrl+V
-            # Do not intercept if US English layout is active
-            if is_us_english_layout():
-                # Let the event propagate (system default paste)
-                return None
-            # Otherwise use the custom paste handler
-            self._paste_text()
-            return "break"
+        # If US English layout is active, let the system handle the shortcut
+        if is_us_english_layout():
+            return
+
+        # Map keycodes to their handler methods
+        handlers = {
+            67: self._copy_text,  # C
+            86: self._paste_text,  # V
+            88: self._cut_text,  # X
+        }
+
+        handler = handlers.get(event.keycode)
+        if handler:
+            handler()
+            return "break"  # Prevent further event propagation
 
     def _copy_text(self):
         widget = self.master.focus_get()
-
         try:
             if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
                 try:
@@ -5852,7 +5781,6 @@ class VideoConverterApp:
                         text = widget.get("1.0", "end-1c")
                 except Exception:
                     text = widget.get("1.0", "end-1c")
-
             elif isinstance(widget, ctk.CTkEntry):
                 try:
                     entry = widget._entry
@@ -5862,7 +5790,6 @@ class VideoConverterApp:
                         text = widget.get()
                 except Exception:
                     text = widget.get()
-
             elif hasattr(widget, "get"):
                 try:
                     text = widget.selection_get()
@@ -5870,18 +5797,69 @@ class VideoConverterApp:
                     text = widget.get()
             else:
                 text = ""
-
         except Exception as e:
             print(f"Error copying text: {e}")
             text = ""
 
+        if text:
+            try:
+                win32clipboard.OpenClipboard()
+                try:
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
+                finally:
+                    win32clipboard.CloseClipboard()
+            except Exception as e:
+                print(f"Error setting clipboard: {e}")
+
+    def _cut_text(self):
+        """Cut the selected text: copy to clipboard and delete the selection."""
+        widget = self.master.focus_get()
+        if widget is None:
+            return
+
+        has_selection = False
+
+        if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
+            has_selection = bool(widget.tag_ranges("sel"))
+
+        elif isinstance(widget, ctk.CTkEntry):
+            try:
+                has_selection = widget.selection_present()
+            except AttributeError:
+                try:
+                    has_selection = widget._entry.selection_present()
+                except Exception:  # ← fixed
+                    has_selection = False
+
+        elif hasattr(widget, "selection_present"):
+            try:
+                has_selection = widget.selection_present()
+            except Exception:  # ← fixed
+                has_selection = False
+
+        if not has_selection:
+            return
+
+        # Copy
+        self._copy_text()
+
+        # Delete selection directly
         try:
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
-            win32clipboard.CloseClipboard()
+            if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
+                widget.delete("sel.first", "sel.last")
+
+            elif isinstance(widget, ctk.CTkEntry):
+                try:
+                    widget.delete("sel.first", "sel.last")
+                except Exception:  # ← fixed
+                    widget._entry.delete("sel.first", "sel.last")
+
+            elif hasattr(widget, "delete"):
+                widget.delete("sel.first", "sel.last")
+
         except Exception as e:
-            print(f"Error setting clipboard: {e}")
+            print(f"Error deleting text after cut: {e}")
 
     def _paste_text(self):
         widget = self.master.focus_get()
@@ -6272,6 +6250,7 @@ class VideoConverterApp:
         # Stop recording if active
         if self.is_recording:
             self._stop_recording()
+        self._save_settings()
         self.master.quit()
 
 

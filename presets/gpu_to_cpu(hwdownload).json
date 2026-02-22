@@ -1,0 +1,11 @@
+{
+    "encoder_hwaccel": "cuda",
+    "cuda_output_format": true,
+    "fps_option": "source",
+    "fps_mode": "auto",
+    "video_format_option": "source",
+    "additional_filter_options": "scale_cuda=1920:-1:interp_algo=bilinear,hwdownload,format=nv12,eq=saturation=2",
+    "selected_preset": "custom",
+    "custom_preset_selected": "gpu_to_cpu(hwdownload)",
+    "version": "1.6.5"
+}

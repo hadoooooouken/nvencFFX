@@ -1,0 +1,6 @@
+{
+    "additional_filter_options": "hqdn3d=2:1.5:3:2.25,hue=s=0,unsharp=5:5:1.0:3:3",
+    "selected_preset": "custom",
+    "custom_preset_selected": "black_and_white_filter",
+    "version": "1.6.5"
+}

@@ -1,12 +1,19 @@
 # nvencFFX - Changelog
 
+## [1.6.5] - 2026-02-22
+- Additional Options: Save/Load buttons have been removed, as this functionality is now available via custom presets;
+- Additional Options: Added H-Flip and V-Flip filter buttons (mirror video horizontally/vertically);
+- UX/UI improvements for working with custom presets;
+- Added Ctrl+X handler (cut text);
+- Added new presets and cleaned up old ones.
+
 ## [1.6.4] - 2026-02-18
-- **"Screen Record"** now respects the selected **FPS Mode**. My recommendations:  
-  **Auto/Variable (VFR)** – if you want a smaller file size;  
-  **Constant (CFR)** – if you plan to use the recorded video for editing in a video editor.
-- **Additional Options:** improved text paste handling (custom filters) regardless of the current system keyboard layout.
-- **Presets:** updated existing presets and added new `scale_cuda` presets (as examples);
-- Fixed **BatchConverter**.
+- "Screen Record" now respects the selected FPS Mode. My recommendations:  
+  Auto/Variable (VFR) – if you want a smaller file size;  
+  Constant (CFR) – if you plan to use the recorded video for editing in a video editor.
+- Additional Options: improved text paste handling (custom filters) regardless of the current system keyboard layout.
+- Presets: updated existing presets and added new `scale_cuda` presets (as examples);
+- Fixed BatchConverter.
 
 
 ## [1.6.3] - 2026-02-13

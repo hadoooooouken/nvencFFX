@@ -1,0 +1,7 @@
+{
+    "cuda_output_format": false,
+    "additional_filter_options": "hqdn3d=2:1.5:3:2.25,hwupload_cuda,scale_cuda=3840:-1:interp_algo=bicubic",
+    "selected_preset": "custom",
+    "custom_preset_selected": "cpu_to_gpu(hwupload)",
+    "version": "1.6.5"
+}

@@ -85,8 +85,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-data-file=nff-license.txt=./nff-license.txt ^
         --include-data-file=LICENSE.txt=./LICENSE.txt ^
         --product-name="nvencFFX" ^
-        --product-version="1.6.4" ^
-        --file-version="1.6.4" ^
+        --product-version="1.6.5" ^
+        --file-version="1.6.5" ^
         --file-description="nvencFFX" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2026 hadouken" ^

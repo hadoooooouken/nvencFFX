@@ -1,13 +1,9 @@
 {
-    "ffmpeg_path": "e:\\ffmpeg\\ffmpeg.exe",
-    "last_input_dir": "E:\\Videos",
-    "last_output_dir": "E:\\Videos",
     "codec": "hevc",
     "bitrate": "6000",
     "constant_qp_mode": true,
     "quality_level": "30",
     "audio_option": "copy",
-    "custom_abitrate": "160",
     "encoder_threads": "4",
     "encoder_preset": "p3",
     "encoder_tune": "hq",
@@ -21,10 +17,8 @@
     "encoder_lookahead_level": "auto",
     "encoder_split_encode_mode": "auto",
     "fps_option": "source",
-    "custom_fps": "30",
     "fps_mode": "auto",
     "video_format_option": "source",
-    "custom_video_width": "1920",
     "interpolation_algo": "bicubic",
     "cuda_output_format": false,
     "encoder_spatial_aq": true,
@@ -39,5 +33,5 @@
     "additional_audio_filter_options": "",
     "selected_preset": "custom",
     "custom_preset_selected": "RTX3060-Optimal",
-    "version": "1.6.4"
+    "version": "1.6.5"
 }
