@@ -1,0 +1,6 @@
+{
+    "additional_filter_options": "lagfun=decay=0.95, hue=H=0.5*t",
+    "selected_preset": "custom",
+    "custom_preset_selected": "vfx-lsd_trip",
+    "version": "1.6.6"
+}

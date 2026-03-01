@@ -307,8 +307,10 @@ fps_mode passthrough
 Preserve original frame timestamps and pacing.
 Useful when you want to maintain the original variable frame rate characteristics.
 
-#Drop thresh
-frame_drop_threshold 0.5
+#Stereo out
+ac 2
+
+Mixes an audio track down to two channels.
 
 Determines how aggressively frames may be dropped to maintain quality.
 Range: 0–1; higher = more likely to drop frames.

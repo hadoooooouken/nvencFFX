@@ -1,0 +1,6 @@
+{
+    "additional_filter_options": "nlmeans=s=1:p=7:pc=5:r=3:rc=3",
+    "selected_preset": "custom",
+    "custom_preset_selected": "nlmeans_denoise",
+    "version": "1.6.5"
+}

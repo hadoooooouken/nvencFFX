@@ -1,0 +1,7 @@
+{
+    "audio_option": "aac_96k",
+    "additional_options": "-ac 1",
+    "selected_preset": "custom",
+    "custom_preset_selected": "downmix_to_mono",
+    "version": "1.6.6"
+}

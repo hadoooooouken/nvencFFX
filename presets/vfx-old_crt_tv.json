@@ -1,0 +1,6 @@
+{
+    "additional_filter_options": "colortemperature=temperature=15000:mix=0.6,chromashift=crh=4:cbv=-3, drawgrid=w=iw:h=4:t=2:c=black@0.5, lenscorrection=k1=0.15:k2=0.25, noise=alls=35:allf=t+u, vignette",
+    "selected_preset": "custom",
+    "custom_preset_selected": "vfx-old_crt_tv",
+    "version": "1.6.6"
+}

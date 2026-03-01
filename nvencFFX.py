@@ -649,7 +649,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.5")
+        master.title("nvencFFX 1.6.6")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1831,25 +1831,14 @@ class VideoConverterApp:
 
         ctk.CTkButton(
             quick_buttons_frame,
-            text="Speed up X2",
-            command=lambda: self._set_speed_filter("2.0"),
+            text="Brightness",
+            command=lambda: self._add_video_filter("eq=brightness=-0.15"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(
-            quick_buttons_frame,
-            text="Slow down X2",
-            command=lambda: self._set_speed_filter("0.5"),
-            fg_color=ACCENT_GREY,
-            hover_color=HOVER_GREY,
-            text_color=TEXT_COLOR_B,
-            width=106,
-        ).pack(side="left", padx=(0, 10))
-
-        # Sharpness button
         ctk.CTkButton(
             quick_buttons_frame,
             text="Sharpness",
@@ -1860,22 +1849,30 @@ class VideoConverterApp:
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Saturation button
         ctk.CTkButton(
             quick_buttons_frame,
-            text="Saturation",
-            command=lambda: self._add_video_filter("eq=saturation=1.15"),
+            text="H-Flip",
+            command=lambda: self._add_video_filter("hflip"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Denoise button
         ctk.CTkButton(
             quick_buttons_frame,
-            text="Denoise",
-            command=lambda: self._add_video_filter("hqdn3d=2:1.5:3:2.25"),
+            text="Speed up X2",
+            command=lambda: self._set_speed_filter("2.0"),
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            width=106,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            quick_buttons_frame,
+            text="Audio fix",
+            command=lambda: self._add_audio_filter("loudnorm=I=-16:TP=-1.5:LRA=11"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
@@ -1900,70 +1897,60 @@ class VideoConverterApp:
             row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
-        # Deshake video
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Deshake",
-            command=lambda: self._add_video_filter(
-                "deshake=rx=32:ry=32:edge=3:blocksize=32:contrast=200:search=0"
-            ),
+            text="Saturation",
+            command=lambda: self._add_video_filter("eq=saturation=1.15"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Frame drop threshold button
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Drop thresh",
-            command=lambda: self._add_additional_option("-frame_drop_threshold 0.5"),
+            text="Denoise",
+            command=lambda: self._add_video_filter("hqdn3d=2:1.5:3:2.25"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Gamma RGB
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Gamma RGB",
-            command=lambda: self._add_video_filter(
-                "eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0"
-            ),
+            text="V-Flip",
+            command=lambda: self._add_video_filter("vflip"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Brightness button
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Brightness",
-            command=lambda: self._add_video_filter("eq=brightness=-0.15"),
+            text="Slow down X2",
+            command=lambda: self._set_speed_filter("0.5"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Audio fix button
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="Audio fix",
-            command=lambda: self._add_audio_filter("loudnorm=I=-16:TP=-1.5:LRA=11"),
+            text="Stereo out",
+            command=self._set_stereo_out,
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # H-Flip button
         ctk.CTkButton(
             quick_buttons_frame_2,
-            text="H-Flip",
-            command=lambda: self._add_video_filter("hflip"),
+            text="Force 8 bit",
+            command=lambda: self._add_additional_option("-pix_fmt:v nv12"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
@@ -1977,29 +1964,52 @@ class VideoConverterApp:
             row=7, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 10)
         )
 
-        # Force 8 bit button
         ctk.CTkButton(
             quick_buttons_frame_3,
-            text="Force 8 bit",
-            command=lambda: self._add_additional_option("-pix_fmt:v nv12"),
+            text="Gamma RGB",
+            command=lambda: self._add_video_filter(
+                "eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0"
+            ),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Force 10 bit button
         ctk.CTkButton(
             quick_buttons_frame_3,
-            text="Force 10 bit",
-            command=lambda: self._add_additional_option("-pix_fmt:v p010le"),
+            text="Deshake",
+            command=lambda: self._add_video_filter(
+                "deshake=rx=32:ry=32:edge=3:blocksize=32:contrast=200:search=0"
+            ),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # HDR to SDR button
+        ctk.CTkButton(
+            quick_buttons_frame_3,
+            text="Rotate 90°",
+            command=lambda: self._add_video_filter("transpose=1"),
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            width=106,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            quick_buttons_frame_3,
+            text="Crop to 16:9",
+            command=lambda: self._add_video_filter(
+                "crop=iw:min(ih\\,iw*9/16):0:(ih-min(ih\\,iw*9/16))/2"
+            ),
+            fg_color=ACCENT_GREY,
+            hover_color=HOVER_GREY,
+            text_color=TEXT_COLOR_B,
+            width=106,
+        ).pack(side="left", padx=(0, 10))
+
         ctk.CTkButton(
             quick_buttons_frame_3,
             text="HDR to SDR",
@@ -2014,35 +2024,10 @@ class VideoConverterApp:
             width=106,
         ).pack(side="left", padx=(0, 10))
 
-        # Crop to 16:9
         ctk.CTkButton(
             quick_buttons_frame_3,
-            text="Crop to 16:9",
-            command=lambda: self._add_video_filter(
-                "crop=iw:min(ih\\,iw*9/16):0:(ih-min(ih\\,iw*9/16))/2"
-            ),
-            fg_color=ACCENT_GREY,
-            hover_color=HOVER_GREY,
-            text_color=TEXT_COLOR_B,
-            width=106,
-        ).pack(side="left", padx=(0, 10))
-
-        # Rotate / transponse
-        ctk.CTkButton(
-            quick_buttons_frame_3,
-            text="Rotate",
-            command=lambda: self._add_video_filter("transpose=1"),
-            fg_color=ACCENT_GREY,
-            hover_color=HOVER_GREY,
-            text_color=TEXT_COLOR_B,
-            width=106,
-        ).pack(side="left", padx=(0, 10))
-
-        # V-Flip button
-        ctk.CTkButton(
-            quick_buttons_frame_3,
-            text="V-Flip",
-            command=lambda: self._add_video_filter("vflip"),
+            text="Force 10 bit",
+            command=lambda: self._add_additional_option("-pix_fmt:v p010le"),
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
@@ -2709,7 +2694,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.5",
+            "version": "1.6.6",
         }
         return settings
 
@@ -5191,6 +5176,13 @@ class VideoConverterApp:
 
     # PRESETS & UI TOGGLES
     def _apply_preset(self, preset_name):
+
+        # Clear Additional Options (Trimming)
+        self._clear_all_filters()
+        self._reset_trim_slider()
+        self.trim_streamcopy.set(False)
+        self.precise_trim.set(False)
+
         if preset_name == "none":
             # Reset to default settings
             self.enable_encoder_options.set(True)
@@ -5402,12 +5394,6 @@ class VideoConverterApp:
             )
             self._save_settings()
             self.selected_preset.set("hdq")
-
-        # Update UI
-        # self._toggle_encoder_options_frame()
-        # self._toggle_fps_scale_options_frame()
-        # self._toggle_additional_options_frame()
-        # self._update_window_size()
 
     def _apply_auto_encoder_settings(self):
         """Set all option menus with 'auto' to auto and uncheck all checkboxes."""
@@ -5760,6 +5746,7 @@ class VideoConverterApp:
 
         # Map keycodes to their handler methods
         handlers = {
+            65: self._select_all,  # A
             67: self._copy_text,  # C
             86: self._paste_text,  # V
             88: self._cut_text,  # X
@@ -5769,6 +5756,30 @@ class VideoConverterApp:
         if handler:
             handler()
             return "break"  # Prevent further event propagation
+
+    def _select_all(self):
+        """Select all text in the currently focused widget."""
+        widget = self.master.focus_get()
+        if widget is None:
+            return
+
+        try:
+            if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
+                widget.tag_add("sel", "1.0", "end")
+            elif isinstance(widget, ctk.CTkEntry):
+                # CTkEntry contains an internal tk.Entry
+                entry = widget._entry if hasattr(widget, "_entry") else widget
+                entry.select_range(0, tk.END)
+            elif isinstance(widget, tk.Entry):
+                widget.select_range(0, tk.END)
+            else:
+                # Fallback for other widgets that might support selection
+                if hasattr(widget, "select_range"):
+                    widget.select_range(0, tk.END)
+                elif hasattr(widget, "selection_range"):
+                    widget.selection_range(0, tk.END)
+        except Exception as e:
+            print(f"Error selecting all: {e}")
 
     def _copy_text(self):
         widget = self.master.focus_get()
@@ -6241,6 +6252,10 @@ class VideoConverterApp:
         except Exception as e:
             error_msg = f"Error retrieving help information:\n{str(e)}"
             window.after(0, lambda: text_widget.configure(text=error_msg))
+
+    def _set_stereo_out(self):
+        self._add_additional_option("-ac 2")
+        self.audio_option.set("aac_160k")
 
     # SHUTDOWN & CLEANUP
     def _on_close(self):

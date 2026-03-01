@@ -1,0 +1,6 @@
+{
+    "additional_filter_options": "scale=iw/8:-1, scale=8*iw:-1:flags=neighbor, format=rgb8",
+    "selected_preset": "custom",
+    "custom_preset_selected": "vfx-8bit_pixelation",
+    "version": "1.6.6"
+}

@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.6.6] - 2026-03-01
+- Added Ctrl+A handler (select all text);
+- Presets: switching between built-in presets (Fast/Quality) now automatically clears filters from the Additional Options section;
+- Additional Options: removed the "Drop thresh" button, added "Stereo out" — downmixes the audio track to 2 channels.
+
 ## [1.6.5] - 2026-02-22
 - Additional Options: Save/Load buttons have been removed, as this functionality is now available via custom presets;
 - Additional Options: Added H-Flip and V-Flip filter buttons (mirror video horizontally/vertically);
