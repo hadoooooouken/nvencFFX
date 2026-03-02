@@ -1,3 +1,2 @@
 customtkinter
-pywin32
 pillow
