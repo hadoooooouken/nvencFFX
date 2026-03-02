@@ -1,5 +1,4 @@
-![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version)
-![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version)
+![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version) ![License](https://img.shields.io/gitlab/license/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
