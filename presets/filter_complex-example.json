@@ -1,0 +1,6 @@
+{
+    "additional_options": "-filter_complex [0:v]split=2[orig][toblur];[toblur]boxblur=15[blurred];[orig]split=2[oh][ov];[oh]crop=iw:240:0:ih/2-120[hstrip];[ov]crop=240:ih:iw/2-120:0[vstrip];[blurred][hstrip]overlay=0:H/2-120[tmp];[tmp][vstrip]overlay=W/2-120:0[vout] -map [vout] -map 0:a",
+    "selected_preset": "custom",
+    "custom_preset_selected": "filter_complex_example",
+    "version": "1.6.7"
+}

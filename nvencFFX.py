@@ -1,5 +1,5 @@
 # IMPORTS
-import ctypes
+import ctypes.wintypes
 import os
 import subprocess
 import sys
@@ -15,16 +15,94 @@ from tkinter import filedialog, messagebox, simpledialog
 from winsound import MB_ICONASTERISK, MessageBeep
 
 import customtkinter as ctk
-import win32clipboard
 from PIL import Image
-from win32api import DragFinish, DragQueryFile
-from win32con import GWL_WNDPROC, WM_DROPFILES
-from win32gui import CallWindowProc, DragAcceptFiles, SetWindowLong
+
+# Win32 constants
+GWL_WNDPROC = -4
+WM_DROPFILES = 0x0233
+CF_UNICODETEXT = 13
+GMEM_MOVEABLE = 0x0002
+
+# Win32 callback type for window procedures
+WNDPROC = ctypes.WINFUNCTYPE(
+    ctypes.c_long,
+    ctypes.wintypes.HWND,
+    ctypes.wintypes.UINT,
+    ctypes.wintypes.WPARAM,
+    ctypes.wintypes.LPARAM,
+)
+
+# Shell32 — Drag-and-Drop
+_shell32 = ctypes.windll.shell32
+_shell32.DragAcceptFiles.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.BOOL]
+_shell32.DragAcceptFiles.restype = None
+_shell32.DragFinish.argtypes = [ctypes.wintypes.HANDLE]
+_shell32.DragFinish.restype = None
+_shell32.DragQueryFileW.argtypes = [
+    ctypes.wintypes.HANDLE,
+    ctypes.wintypes.UINT,
+    ctypes.wintypes.LPWSTR,
+    ctypes.wintypes.UINT,
+]
+_shell32.DragQueryFileW.restype = ctypes.wintypes.UINT
+
+# User32 — Window Proc & Clipboard
+_user32 = ctypes.windll.user32
+_user32.SetWindowLongPtrW.argtypes = [
+    ctypes.wintypes.HWND,
+    ctypes.c_int,
+    ctypes.c_void_p,
+]
+_user32.SetWindowLongPtrW.restype = ctypes.c_void_p
+_user32.CallWindowProcW.argtypes = [
+    ctypes.c_void_p,
+    ctypes.wintypes.HWND,
+    ctypes.wintypes.UINT,
+    ctypes.wintypes.WPARAM,
+    ctypes.wintypes.LPARAM,
+]
+_user32.CallWindowProcW.restype = ctypes.c_long
+_user32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
+_user32.OpenClipboard.restype = ctypes.wintypes.BOOL
+_user32.CloseClipboard.argtypes = []
+_user32.CloseClipboard.restype = ctypes.wintypes.BOOL
+_user32.EmptyClipboard.argtypes = []
+_user32.EmptyClipboard.restype = ctypes.wintypes.BOOL
+_user32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.HANDLE]
+_user32.SetClipboardData.restype = ctypes.wintypes.HANDLE
+
+# Kernel32 — GlobalAlloc for clipboard
+_kernel32 = ctypes.windll.kernel32
+_kernel32.GlobalAlloc.argtypes = [ctypes.wintypes.UINT, ctypes.c_size_t]
+_kernel32.GlobalAlloc.restype = ctypes.wintypes.HANDLE
+_kernel32.GlobalLock.argtypes = [ctypes.wintypes.HANDLE]
+_kernel32.GlobalLock.restype = ctypes.c_void_p
+_kernel32.GlobalUnlock.argtypes = [ctypes.wintypes.HANDLE]
+_kernel32.GlobalUnlock.restype = ctypes.wintypes.BOOL
+
+
+def _set_clipboard_text(text):
+    """Copy Unicode text to the Windows clipboard using ctypes."""
+    encoded = text.encode("utf-16-le") + b"\x00\x00"
+    h = _kernel32.GlobalAlloc(GMEM_MOVEABLE, len(encoded))
+    if not h:
+        return False
+    ptr = _kernel32.GlobalLock(h)
+    if not ptr:
+        return False
+    ctypes.memmove(ptr, encoded, len(encoded))
+    _kernel32.GlobalUnlock(h)
+    if not _user32.OpenClipboard(None):
+        return False
+    _user32.EmptyClipboard()
+    _user32.SetClipboardData(CF_UNICODETEXT, h)
+    _user32.CloseClipboard()
+    return True
 
 
 def get_icon_path():
     if getattr(sys, "frozen", False):
-        base_path = sys._MEIPASS
+        base_path = os.path.dirname(sys.executable)
     else:
         base_path = os.path.dirname(__file__)
     return os.path.join(base_path, "nff.ico")
@@ -50,8 +128,9 @@ def get_real_dpi():
         if dpi == 0:
             dpi = user32.GetDpiForSystem()
     except Exception:
+        gdi32 = ctypes.windll.gdi32
         hdc = user32.GetDC(0)
-        dpi = user32.GetDeviceCaps(hdc, 88)
+        dpi = gdi32.GetDeviceCaps(hdc, 88)
         user32.ReleaseDC(0, hdc)
 
     return dpi
@@ -165,30 +244,37 @@ class DropTarget:
     def __init__(self, hwnd, callback):
         self.hwnd = hwnd
         self.callback = callback
-        DragAcceptFiles(self.hwnd, True)
+        _shell32.DragAcceptFiles(self.hwnd, True)
 
-        # Use SetWindowLong for compatibility
-        self.old_wnd_proc = SetWindowLong(self.hwnd, GWL_WNDPROC, self._wnd_proc)
+        # Wrap _wnd_proc in WNDPROC and keep a reference to prevent GC
+        self._wndproc_func = WNDPROC(self._wnd_proc)
+        self.old_wnd_proc = _user32.SetWindowLongPtrW(
+            self.hwnd,
+            GWL_WNDPROC,
+            ctypes.cast(self._wndproc_func, ctypes.c_void_p).value,
+        )
         self._self_ref = self  # important
 
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
         if msg == WM_DROPFILES:
             try:
                 hdrop = wparam
-                file_path = DragQueryFile(hdrop, 0)
+                buf = ctypes.create_unicode_buffer(260)
+                _shell32.DragQueryFileW(hdrop, 0, buf, 260)
+                file_path = buf.value
                 if self.callback:
                     self.callback(file_path)
-                DragFinish(hdrop)
+                _shell32.DragFinish(hdrop)
             except Exception as e:
                 print(f"Error handling drop: {e}")
             return 0
-        return CallWindowProc(self.old_wnd_proc, hwnd, msg, wparam, lparam)
+        return _user32.CallWindowProcW(self.old_wnd_proc, hwnd, msg, wparam, lparam)
 
     def cleanup(self):
         """Clean up the drop target - call this before destroying the window"""
         try:
             if hasattr(self, "old_wnd_proc") and self.old_wnd_proc:
-                SetWindowLong(self.hwnd, GWL_WNDPROC, self.old_wnd_proc)
+                _user32.SetWindowLongPtrW(self.hwnd, GWL_WNDPROC, self.old_wnd_proc)
         except Exception:
             # Silently ignore cleanup errors — not critical
             pass
@@ -649,7 +735,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.6")
+        master.title("nvencFFX 1.6.7")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1178,7 +1264,8 @@ class VideoConverterApp:
         tune_option_menu.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
 
         # Profile
-        ctk.CTkLabel(left_column_frame, text="Profile:").grid(
+        self.profile_label = ctk.CTkLabel(left_column_frame, text="Profile:")
+        self.profile_label.grid(
             row=3, column=0, sticky="w", padx=5, pady=2
         )
         profile_option_menu = ctk.CTkOptionMenu(
@@ -2694,7 +2781,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.6",
+            "version": "1.6.7",
         }
         return settings
 
@@ -2969,7 +3056,7 @@ class VideoConverterApp:
                     break
 
                 if self.is_recording:  # Check again in case it changed
-                    self.master.after(0, lambda: self.ffmpeg_output.set(line.strip()))
+                    self.master.after(0, lambda l=line: self.ffmpeg_output.set(l.strip()))
 
             except Exception:
                 break
@@ -3523,30 +3610,7 @@ class VideoConverterApp:
             command.extend(["-c:v", "copy"])
 
             # Audio handling
-            audio_opt = self.audio_option.get()
-            if audio_opt == "disable":
-                command.append("-an")
-            elif audio_opt == "copy":
-                command.extend(["-c:a", "copy"])
-            elif audio_opt == "aac_96k":
-                command.extend(["-c:a", "aac", "-b:a", "96k"])
-            elif audio_opt == "aac_160k":
-                command.extend(["-c:a", "aac", "-b:a", "160k"])
-            elif audio_opt == "aac_256k":
-                command.extend(["-c:a", "aac", "-b:a", "256k"])
-            elif audio_opt == "opus_96k":
-                command.extend(["-c:a", "libopus", "-b:a", "96k"])
-            elif audio_opt == "opus_160k":
-                command.extend(["-c:a", "libopus", "-b:a", "160k"])
-            elif audio_opt == "opus_256k":
-                command.extend(["-c:a", "libopus", "-b:a", "256k"])
-            elif audio_opt == "custom":
-                abitrate_val = self.custom_abitrate.get()
-                try:
-                    int(abitrate_val)
-                    command.extend(["-c:a", "aac", "-b:a", f"{abitrate_val}k"])
-                except ValueError:
-                    raise ValueError("Custom audio bitrate must be a number.")
+            self._append_audio_options(command)
 
             command.append(output_f)
             return command
@@ -3639,7 +3703,10 @@ class VideoConverterApp:
         if addvf_val and addvf_val != self.additional_filter_options_placeholder:
             vf_filters.append(addvf_val)
 
-        if vf_filters:
+        # Skip -vf if user specified -filter_complex in Additional Options
+        has_filter_complex = "-filter_complex" in (other_additional_options or [])
+
+        if vf_filters and not has_filter_complex:
             command.extend(["-vf", ",".join(vf_filters)])
 
         if self.fps_mode.get() != "auto":
@@ -3723,6 +3790,14 @@ class VideoConverterApp:
             command.extend(["-af", add_af_val])
 
         # Audio settings
+        self._append_audio_options(command)
+
+        command.append(output_f)
+
+        return command
+
+    def _append_audio_options(self, command):
+        """Append audio codec/bitrate flags to the command list."""
         audio_opt = self.audio_option.get()
         if audio_opt == "disable":
             command.append("-an")
@@ -3747,10 +3822,6 @@ class VideoConverterApp:
                 command.extend(["-c:a", "aac", "-b:a", f"{abitrate_val}k"])
             except ValueError:
                 raise ValueError("Custom audio bitrate must be a number.")
-
-        command.append(output_f)
-
-        return command
 
     def _run_ffmpeg(self, command):
         startupinfo = None
@@ -3777,8 +3848,8 @@ class VideoConverterApp:
                 line = line.strip()
                 if line:
                     last_line = line
-                    self.master.after(0, lambda: self.ffmpeg_output.set(line))
-                    self.master.after(0, lambda: self._update_progress(line))
+                    self.master.after(0, lambda l=line: self.ffmpeg_output.set(l))
+                    self.master.after(0, lambda l=line: self._update_progress(l))
             self.conversion_process.wait()
             if self.conversion_process.returncode == 0:
                 self.master.after(
@@ -4103,10 +4174,8 @@ class VideoConverterApp:
             self.coder_option_menu.grid_remove()
 
             # Show profile menu for HEVC
+            self.profile_label.grid()
             self.profile_option_menu.grid()
-            ctk.CTkLabel(
-                self.encoder_options_frame.winfo_children()[0], text="Profile:"
-            ).grid(row=3, column=0, sticky="w", padx=5, pady=2)
 
             self.split_encode_label.grid()
             self.split_encode_menu.grid()
@@ -4156,12 +4225,8 @@ class VideoConverterApp:
             self.coder_option_menu.grid_remove()
 
             # Hide profile menu for AV1
+            self.profile_label.grid_remove()
             self.profile_option_menu.grid_remove()
-            for child in self.encoder_options_frame.winfo_children()[
-                0
-            ].winfo_children():
-                if isinstance(child, ctk.CTkLabel) and child.cget("text") == "Profile:":
-                    child.grid_remove()
 
             self.split_encode_label.grid()
             self.split_encode_menu.grid()
@@ -4218,10 +4283,8 @@ class VideoConverterApp:
 
             self.tier_option_menu.grid_remove()
             # Show profile menu for H.264
+            self.profile_label.grid()
             self.profile_option_menu.grid()
-            ctk.CTkLabel(
-                self.encoder_options_frame.winfo_children()[0], text="Profile:"
-            ).grid(row=3, column=0, sticky="w", padx=5, pady=2)
 
             self.split_encode_label.grid_remove()
             self.split_encode_menu.grid_remove()
@@ -5564,9 +5627,17 @@ class VideoConverterApp:
                     has_input = True
                     input_file = args[i + 1]
 
+            # Output file is the last non-flag argument (skip values of known options)
+            skip_next = False
             for i in range(1, len(args)):
-                if not args[i].startswith("-") and (i == 0 or args[i - 1] != "-i"):
-                    output_file = args[i]
+                if skip_next:
+                    skip_next = False
+                    continue
+                if args[i].startswith("-"):
+                    # Most ffmpeg flags take one value argument after them
+                    skip_next = True
+                    continue
+                output_file = args[i]
 
             if not has_input:
                 raise ValueError("Missing input file (-i option)")
@@ -5671,9 +5742,6 @@ class VideoConverterApp:
             if os.path.exists(current_text) and os.path.isfile(current_text):
                 self._save_settings()
                 self.ffmpeg_path = current_text
-                self.ffprobe_path = os.path.join(
-                    os.path.dirname(current_text), "ffprobe.exe"
-                )
                 # Look for ffprobe.exe in the same directory
                 ffprobe_path = os.path.join(
                     os.path.dirname(current_text), "ffprobe.exe"
@@ -5814,12 +5882,7 @@ class VideoConverterApp:
 
         if text:
             try:
-                win32clipboard.OpenClipboard()
-                try:
-                    win32clipboard.EmptyClipboard()
-                    win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
-                finally:
-                    win32clipboard.CloseClipboard()
+                _set_clipboard_text(text)
             except Exception as e:
                 print(f"Error setting clipboard: {e}")
 
@@ -5923,12 +5986,7 @@ class VideoConverterApp:
         final_command = " ".join(result)
 
         try:
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(
-                final_command, win32clipboard.CF_UNICODETEXT
-            )
-            win32clipboard.CloseClipboard()
+            _set_clipboard_text(final_command)
             self.ffmpeg_output.set("Command copied to clipboard!")
         except Exception as e:
             print(f"Error setting clipboard: {e}")
@@ -6105,11 +6163,10 @@ class VideoConverterApp:
             textbox.delete("1.0", "end")
 
             # Get file path
-            base_path = (
-                sys._MEIPASS
-                if getattr(sys, "frozen", False)
-                else os.path.dirname(os.path.abspath(__file__))
-            )
+            if getattr(sys, "frozen", False):
+                base_path = os.path.dirname(sys.executable)
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
             file_name = next(tab[2] for tab in tabs if tab[1] == tab_name)
             file_path = os.path.join(base_path, file_name)
 
@@ -6269,10 +6326,10 @@ class VideoConverterApp:
         self.master.quit()
 
 
+icon_path = get_icon_path()
 root = ctk.CTk()
 app = VideoConverterApp(root)
 # ctk.deactivate_automatic_dpi_awareness()
-icon_path = get_icon_path()
 if os.path.exists(icon_path):
     root.after(201, lambda: root.iconbitmap(icon_path))
 else:

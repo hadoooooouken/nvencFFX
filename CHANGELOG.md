@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.6.7] - 2026-03-02
+- Code cleanup and optimization + bug fixes;
+- Using -filter_complex in Add FF Options automatically ignores -vf filters (simple filters / scaling / FPS / etc.).
+
 ## [1.6.6] - 2026-03-01
 - Added Ctrl+A handler (select all text);
 - Presets: switching between built-in presets (Fast/Quality) now automatically clears filters from the Additional Options section;
