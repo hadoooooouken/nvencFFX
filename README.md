@@ -56,7 +56,7 @@ If you want to run the application from its Python source code:
 2.  **Install dependencies:**
     The project uses `customtkinter`, `pillow`.
     ```bash
-    pip install customtkinter pillow pywin32
+    pip install customtkinter pillow
     ```
 3.  **Run the application:**
     ```
