@@ -735,7 +735,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.7")
+        master.title("nvencFFX 1.6.8")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1265,9 +1265,7 @@ class VideoConverterApp:
 
         # Profile
         self.profile_label = ctk.CTkLabel(left_column_frame, text="Profile:")
-        self.profile_label.grid(
-            row=3, column=0, sticky="w", padx=5, pady=2
-        )
+        self.profile_label.grid(row=3, column=0, sticky="w", padx=5, pady=2)
         profile_option_menu = ctk.CTkOptionMenu(
             left_column_frame,
             variable=self.profile,
@@ -2781,7 +2779,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.7",
+            "version": "1.6.8",
         }
         return settings
 
@@ -2912,17 +2910,7 @@ class VideoConverterApp:
             desktop = os.path.join(os.path.expanduser("~"), "Desktop")
             now = datetime.now()
             date_str = now.strftime("%d_%m_%y-%H_%M")
-
-            # Get extension from current output or use mp4
-            current_output = self.output_file.get()
-            if current_output:
-                ext = os.path.splitext(current_output)[1]
-                if not ext:
-                    ext = ".mp4"
-            else:
-                ext = ".mp4"
-
-            output_file = os.path.join(desktop, f"screen_record-{date_str}{ext}")
+            output_file = os.path.join(desktop, f"screen_record-{date_str}.mp4")
 
         # Get FPS - use 60 if source or not specified
         fps = self.fps_option.get()
@@ -3056,7 +3044,9 @@ class VideoConverterApp:
                     break
 
                 if self.is_recording:  # Check again in case it changed
-                    self.master.after(0, lambda l=line: self.ffmpeg_output.set(l.strip()))
+                    self.master.after(
+                        0, lambda l=line: self.ffmpeg_output.set(l.strip())
+                    )
 
             except Exception:
                 break
@@ -4685,9 +4675,6 @@ class VideoConverterApp:
         self._draw_trim_slider()
 
     def _on_slider_release(self, event):
-        # Mark slider as released
-        self.is_slider_dragging = False
-
         # Cancel any scheduled preview job
         if getattr(self, "preview_job", None):
             try:
