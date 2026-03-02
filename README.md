@@ -1,3 +1,5 @@
+![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version)
+
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
 # nvencFFX 🚀
