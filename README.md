@@ -1,4 +1,5 @@
 ![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version)
+![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version)
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
