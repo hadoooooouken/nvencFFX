@@ -23,6 +23,10 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_settings.png)
 
+![nff-ffprobe_tooltip](screenshots/nff-ffprobe_tooltip.png)
+
+![nff-batch_converter](screenshots/nff-batch_converter.png)
+
 ---
 
 ## Getting Started
@@ -56,9 +60,9 @@ If you want to run the application from its Python source code:
     cd nvencFFX
     ```
 2.  **Install dependencies:**
-    The project uses `customtkinter`, `pillow`.
+    The project uses `customtkinter`, `pillow`, `CTkToolTip`.
     ```bash
-    pip install customtkinter pillow
+    pip install customtkinter pillow CTkToolTip
     ```
 3.  **Run the application:**
     ```
@@ -88,8 +92,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-data-file=LICENSE.txt=./LICENSE.txt ^
         --include-data-dir=presets=./presets ^
         --product-name="nvencFFX" ^
-        --product-version="1.6.7" ^
-        --file-version="1.6.7" ^
+        --product-version="1.6.8" ^
+        --file-version="1.6.8" ^
         --file-description="nvencFFX" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2026 hadouken" ^

@@ -7,5 +7,5 @@
     "additional_filter_options": "scale_cuda=1920:-1:interp_algo=bilinear",
     "selected_preset": "custom",
     "custom_preset_selected": "scale_cuda-FHD",
-    "version": "1.6.5"
+    "version": "1.6.8"
 }

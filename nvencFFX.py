@@ -1,20 +1,25 @@
 # IMPORTS
+
+# Standard library
 import ctypes.wintypes
 import os
 import subprocess
 import sys
 import tempfile
 import tkinter as tk
+from collections import OrderedDict
 from datetime import datetime
 from io import BytesIO
 from json import dump, load
 from re import sub
 from shlex import split
-from threading import Thread, Timer
+from threading import Event, Thread, Timer
 from tkinter import filedialog, messagebox, simpledialog
 from winsound import MB_ICONASTERISK, MessageBeep
 
+# Third-party
 import customtkinter as ctk
+from CTkToolTip import CTkToolTip
 from PIL import Image
 
 # Win32 constants
@@ -81,22 +86,41 @@ _kernel32.GlobalUnlock.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalUnlock.restype = ctypes.wintypes.BOOL
 
 
-def _set_clipboard_text(text):
+def _set_clipboard_text(text: str) -> bool:
     """Copy Unicode text to the Windows clipboard using ctypes."""
     encoded = text.encode("utf-16-le") + b"\x00\x00"
-    h = _kernel32.GlobalAlloc(GMEM_MOVEABLE, len(encoded))
-    if not h:
+
+    # Allocate global movable memory
+    h_mem = _kernel32.GlobalAlloc(GMEM_MOVEABLE, len(encoded))
+    if not h_mem:
         return False
-    ptr = _kernel32.GlobalLock(h)
+
+    ptr = _kernel32.GlobalLock(h_mem)
     if not ptr:
+        _kernel32.GlobalFree(h_mem)
         return False
-    ctypes.memmove(ptr, encoded, len(encoded))
-    _kernel32.GlobalUnlock(h)
+
+    try:
+        ctypes.memmove(ptr, encoded, len(encoded))
+    finally:
+        _kernel32.GlobalUnlock(h_mem)
+
     if not _user32.OpenClipboard(None):
+        _kernel32.GlobalFree(h_mem)
         return False
-    _user32.EmptyClipboard()
-    _user32.SetClipboardData(CF_UNICODETEXT, h)
-    _user32.CloseClipboard()
+
+    try:
+        _user32.EmptyClipboard()
+
+        # If SetClipboardData succeeds, ownership of h_mem
+        # transfers to the system. We must NOT free it.
+        if not _user32.SetClipboardData(CF_UNICODETEXT, h_mem):
+            _kernel32.GlobalFree(h_mem)
+            return False
+
+    finally:
+        _user32.CloseClipboard()
+
     return True
 
 
@@ -240,6 +264,99 @@ class TextCheckbox(ctk.CTkFrame):
         self.var.set(value)
 
 
+class CTkContextMenu(ctk.CTkToplevel):
+    def __init__(self, master, target_widget, app_instance, **kwargs):
+        super().__init__(master, **kwargs)
+        self.target_widget = target_widget
+        self.app_instance = app_instance
+
+        self.withdraw()  # Hide right away while configuring
+
+        # Hide from taskbar securely on Windows
+        self.transient(master)
+        self.overrideredirect(True)
+        if sys.platform == "win32":
+            self.attributes("-toolwindow", True)
+
+        self.attributes("-topmost", True)
+
+        # Create a true transparent color for the surrounding corners
+        transparent_color = "#000001" if sys.platform == "win32" else PRIMARY_BG
+        self.configure(fg_color=transparent_color)
+
+        # Apply transparency to the corners (Win32)
+        if sys.platform == "win32":
+            self.attributes("-transparentcolor", transparent_color)
+
+        # Frame to hold buttons, with corner_radius=10
+        self.frame = ctk.CTkFrame(
+            self,
+            fg_color=SECONDARY_BG,
+            bg_color=transparent_color,
+            corner_radius=10,
+            border_width=0,
+        )
+        self.frame.pack(fill="both", expand=True)
+
+        self._add_button("Cut", self._cut)
+        self._add_button("Copy", self._copy)
+        self._add_button("Paste", self._paste)
+        self._add_button("Delete", self._delete)
+        self._add_button("Select All", self._select_all)
+
+        self.bind("<FocusOut>", self._on_focus_out)
+
+    def _on_focus_out(self, event=None):
+        self.withdraw()
+
+    def _add_button(self, text, command):
+        btn = ctk.CTkButton(
+            self.frame,
+            text=text,
+            fg_color="transparent",
+            hover_color=HOVER_GREEN,
+            text_color=TEXT_COLOR_W,
+            anchor="w",
+            corner_radius=6,
+            height=28,
+            width=120,
+            command=command,
+        )
+        # Extra padding to ensure buttons don't clip the corners
+        btn.pack(fill="x", padx=3, pady=3)
+
+    def _execute_action(self, action_func):
+        if not self.target_widget or not self.target_widget.winfo_exists():
+            self.withdraw()
+            return
+        self.target_widget.focus_set()
+        # Delay the action to allow FocusIn events to clear the placeholder text
+        self.target_widget.after(50, action_func)
+        self.withdraw()
+
+    def _select_all(self):
+        self._execute_action(self.app_instance._select_all)
+
+    def _copy(self):
+        self._execute_action(self.app_instance._copy_text)
+
+    def _cut(self):
+        self._execute_action(self.app_instance._cut_text)
+
+    def _paste(self):
+        self._execute_action(self.app_instance._paste_text)
+
+    def _delete(self):
+        self._execute_action(self.app_instance._delete_text)
+
+    def destroy(self):
+        self.target_widget = None
+        self.app_instance = None
+        self.frame = None
+        super().destroy()
+
+
+# DRAG N DROP FILES
 class DropTarget:
     def __init__(self, hwnd, callback):
         self.hwnd = hwnd
@@ -259,15 +376,30 @@ class DropTarget:
         if msg == WM_DROPFILES:
             try:
                 hdrop = wparam
-                buf = ctypes.create_unicode_buffer(260)
-                _shell32.DragQueryFileW(hdrop, 0, buf, 260)
-                file_path = buf.value
-                if self.callback:
-                    self.callback(file_path)
+
+                # Get number of files dropped
+                file_count = _shell32.DragQueryFileW(hdrop, 0xFFFFFFFF, None, 0)
+
+                for i in range(file_count):
+                    # Get required length
+                    length = _shell32.DragQueryFileW(hdrop, i, None, 0)
+
+                    # Allocate buffer dynamically
+                    buffer = ctypes.create_unicode_buffer(length + 1)
+
+                    _shell32.DragQueryFileW(hdrop, i, buffer, length + 1)
+                    file_path = buffer.value
+
+                    if self.callback:
+                        self.callback(file_path)
+
                 _shell32.DragFinish(hdrop)
+
             except Exception as e:
                 print(f"Error handling drop: {e}")
+
             return 0
+
         return _user32.CallWindowProcW(self.old_wnd_proc, hwnd, msg, wparam, lparam)
 
     def cleanup(self):
@@ -319,6 +451,7 @@ class BatchConverterWindow:
         self._create_widgets()
         self._setup_drag_drop()
         self._update_files_display()
+
         # Update main window convert button
         self._update_main_convert_button()
 
@@ -445,26 +578,28 @@ class BatchConverterWindow:
             "widgets": None,
         }
         self.files.append(file_info)
-
         self._update_files_display()
         self._update_main_convert_button()
+        self.main_app.batch_files = self.files.copy()
         self.window.lift()
 
+    # Remove from list
     def _remove_file(self, index):
         if 0 <= index < len(self.files):
-            # Remove from list
             self.files.pop(index)
             self._update_files_display()
             self._update_main_convert_button()
+            self.main_app.batch_files = self.files.copy()
 
     def _remove_all_files(self):
         if self.files:
             self.files.clear()
             self._update_files_display()
             self._update_main_convert_button()
+            self.main_app.batch_files = self.files.copy()
 
+    # Clear current display
     def _update_files_display(self):
-        # Clear current display
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
@@ -510,10 +645,16 @@ class BatchConverterWindow:
         file_info["widgets"] = {"status_label": status_label}
 
     def _update_file_status(self, index, status):
+        if not self.window.winfo_exists():
+            return
+
         if 0 <= index < len(self.files):
             self.files[index]["status"] = status
             if self.files[index]["widgets"]:
-                self.files[index]["widgets"]["status_label"].configure(text=status)
+                try:
+                    self.files[index]["widgets"]["status_label"].configure(text=status)
+                except Exception:
+                    pass
 
     def _update_main_convert_button(self):
         if hasattr(self.main_app, "convert_button"):
@@ -540,6 +681,7 @@ class BatchConverterWindow:
         self.main_app.progress_frame.grid()
         self.main_app.progress_value.set(0.0)
         self.main_app.progress_label.configure(text="0%")
+        self.main_app.status_text.set("Conversion in progress...")
         self.main_app.convert_button.configure(
             text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
         )
@@ -547,6 +689,9 @@ class BatchConverterWindow:
         self._convert_next_file()
 
     def _convert_next_file(self):
+        if not self.window.winfo_exists():
+            self.is_converting = False
+            return
         if self.current_file_index >= len(self.files) or not self.is_converting:
             self.is_converting = False
             self.main_app.progress_frame.grid_remove()
@@ -566,9 +711,9 @@ class BatchConverterWindow:
         codec_suffix = (
             "_hevc"
             if self.main_app.video_codec.get() == "hevc"
-            else "_av1"
-            if self.main_app.video_codec.get() == "av1"
             else "_h264"
+            if self.main_app.video_codec.get() == "h264"
+            else "_av1"
         )
 
         # Get output directory from main app or use input file directory
@@ -607,6 +752,7 @@ class BatchConverterWindow:
             conversion_thread = Thread(
                 target=self._run_single_conversion,
                 args=(command, self.current_file_index),
+                daemon=True,
             )
             conversion_thread.start()
 
@@ -618,6 +764,7 @@ class BatchConverterWindow:
     def _run_single_conversion(self, command, file_index):
         startupinfo = None
         creationflags = 0
+
         if os.name == "nt":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -637,9 +784,16 @@ class BatchConverterWindow:
                 errors="replace",
             )
 
-            # Monitor progress
             for line in process.stdout:
-                if line and self.is_converting:
+                if not self.is_converting:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    break
+
+                if line:
                     self.master.after(
                         0,
                         lambda line_text=line: self.main_app.ffmpeg_output.set(
@@ -652,9 +806,6 @@ class BatchConverterWindow:
                             line_text
                         ),
                     )
-                if not self.is_converting:
-                    process.terminate()
-                    break
 
             process.wait()
 
@@ -673,17 +824,8 @@ class BatchConverterWindow:
 
         except Exception as e:
             error_msg = str(e)
-            if self.is_converting:
-                self.master.after(
-                    0,
-                    lambda: self._update_file_status(
-                        file_index, f"Failed: {error_msg}"
-                    ),
-                )
-            else:
-                self.master.after(
-                    0, lambda: self._update_file_status(file_index, "Cancelled")
-                )
+            status = "Cancelled" if not self.is_converting else f"Failed: {error_msg}"
+            self.master.after(0, lambda: self._update_file_status(file_index, status))
 
         finally:
             if self.is_converting:
@@ -704,29 +846,23 @@ class BatchConverterWindow:
 
     def _on_close(self):
         if self.is_converting:
-            if messagebox.askokcancel(
-                "Confirm Close",
-                "Batch conversion is in progress. Closing will cancel the conversion. Continue?",
-            ):
-                self.cancel_batch_conversion()
-                self.main_app.progress_frame.grid_remove()
-                self.main_app.batch_files = self.files
-                # Clean up drop target before destroying window
-                if hasattr(self, "drop_target"):
-                    self.drop_target.cleanup()
-                self.window.destroy()
-            else:
-                return
+            self.window.withdraw()
         else:
+            self._update_main_convert_button()
             self.main_app.progress_frame.grid_remove()
             self.main_app.batch_files = self.files
             # Clean up drop target before destroying window
             if hasattr(self, "drop_target"):
                 self.drop_target.cleanup()
             self.window.destroy()
-        self._update_main_convert_button()
+            # Clear reference in main app so _open_batch_converter creates a new one
+            self.main_app.batch_converter_window = None
+            self.main_app = None
+            self.files = None
+            self.window = None
 
 
+# MAIN
 class VideoConverterApp:
     # INITIALIZATION
     def __init__(self, master):
@@ -751,7 +887,6 @@ class VideoConverterApp:
         master.geometry(f"820x{h}")
         master.minsize(820, min_h)
         master.maxsize(820, max_h)
-
         master.resizable(False, True)
         master.configure(fg_color=PRIMARY_BG)
 
@@ -915,6 +1050,10 @@ class VideoConverterApp:
 
     def _setup_variables(self):
         # Initialize all Tkinter control variables
+        self.ffprobe_cache = OrderedDict()
+        self.input_file_tooltip = None
+        self._tooltip_generation = 0
+        self._tooltip_cancel = Event()
         self.input_file = ctk.StringVar()
         self.output_file = ctk.StringVar()
         self.bitrate = ctk.StringVar(value="6000")
@@ -1024,6 +1163,7 @@ class VideoConverterApp:
         self.input_file_entry.configure(text_color=PLACEHOLDER_COLOR)
         self.input_file_entry.bind("<FocusIn>", self._on_input_file_focus_in)
         self.input_file_entry.bind("<FocusOut>", self._on_input_file_focus_out)
+        self.input_file.trace_add("write", self._on_input_file_change)
 
         # Browse button
         ctk.CTkButton(
@@ -2873,18 +3013,23 @@ class VideoConverterApp:
                 text="Play 10s Preview", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
             )
 
-    def _open_batch_converter(self):
+    def _open_batch_converter(self, show_window: bool = True):
         if (
             not hasattr(self, "batch_converter_window")
             or not self.batch_converter_window
             or not self.batch_converter_window.window.winfo_exists()
         ):
             self.batch_converter_window = BatchConverterWindow(self.master, self)
+            if not show_window:
+                self.batch_converter_window.window.withdraw()
         else:
-            self.batch_converter_window.files = self.batch_files.copy()
+            if not self.batch_converter_window.is_converting:
+                self.batch_converter_window.files = self.batch_files.copy()
             self.batch_converter_window._update_files_display()
-            self.batch_converter_window.window.lift()
-            self.batch_converter_window.window.focus_force()
+            if show_window:
+                self.batch_converter_window.window.deiconify()
+                self.batch_converter_window.window.lift()
+                self.batch_converter_window.window.focus_force()
 
     def _screen_record(self):
         if self.is_recording:
@@ -3056,29 +3201,23 @@ class VideoConverterApp:
             self.master.after(0, self._stop_recording)
 
     def _toggle_conversion(self):
-        # Check if batch conversion should be started or cancelled
-        batch_active = (
-            hasattr(self, "batch_converter_window")
-            and self.batch_converter_window
-            and self.batch_converter_window.window.winfo_exists()
-        )
-
-        # Check if batch conversion is in progress
-        batch_running = batch_active and self.batch_converter_window.is_converting
-
         # Check if single conversion is in progress
         single_running = self.is_converting
+
+        # Check if batch conversion is in progress
+        batch_running = (
+            hasattr(self, "batch_converter_window")
+            and self.batch_converter_window
+            and self.batch_converter_window.is_converting
+        )
 
         if batch_running or single_running:
             # If any conversion is running, cancel both
             self._cancel_conversion()
         else:
             # Otherwise, start conversion
-            if (
-                batch_active
-                and self.batch_converter_window.files
-                and not self.batch_converter_window.is_converting
-            ):
+            if self.batch_files:
+                self._open_batch_converter(show_window=False)
                 self.batch_converter_window.start_batch_conversion()
             else:
                 if self.is_creating_preview:
@@ -3303,6 +3442,106 @@ class VideoConverterApp:
                 ),
             )
 
+    def _on_input_file_change(self, *args):
+        # Triggered whenever self.input_file changes
+
+        # Prevent tooltip and ffprobe during batch conversion or regular conversion
+        if getattr(self, "is_converting", False) or (
+            getattr(self, "batch_converter_window", None)
+            and getattr(self.batch_converter_window, "is_converting", False)
+        ):
+            return
+
+        input_file = self.input_file.get()
+        if not input_file or input_file.startswith("Drag and drop"):
+            # Hide/remove tooltip
+            if getattr(self, "input_file_tooltip", None) is not None:
+                self.input_file_tooltip.hide()
+            return
+
+        # Valid file: show tooltip
+        if getattr(self, "input_file_tooltip", None) is None:
+            self.input_file_tooltip = CTkToolTip(
+                self.input_file_entry,
+                delay=0.5,
+                message="Loading metadata...",
+                font=("Consolas", 14),
+                justify="left",
+                bg_color=SECONDARY_BG,
+                wraplength=600,
+                alpha=1.0,
+                padding=(10, 10),
+            )
+        else:
+            self.input_file_tooltip.configure(message="Loading metadata...")
+
+        # Cancel any previous tooltip thread and start a new one
+        self._tooltip_cancel.set()
+        self._tooltip_cancel = Event()
+        self._tooltip_generation += 1
+        Thread(
+            target=self._update_tooltip_async,
+            args=(input_file, self._tooltip_generation, self._tooltip_cancel),
+            daemon=True,
+        ).start()
+
+    def _update_tooltip_async(self, file_path, generation, cancel_event):
+        if cancel_event.is_set():
+            return
+
+        if not getattr(self, "ffprobe_path", None):
+            self.master.after(0, lambda: self._set_tooltip_message("ffprobe not found"))
+            return
+
+        if file_path in self.ffprobe_cache:
+            self.ffprobe_cache.move_to_end(file_path)
+            self.master.after(
+                0, lambda: self._set_tooltip_message(self.ffprobe_cache[file_path])
+            )
+            return
+
+        command = [self.ffprobe_path, "-hide_banner", file_path]
+
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+
+            if cancel_event.is_set():
+                return
+
+            # ffprobe output is usually in stderr
+            output = result.stderr.strip()
+            if not output:
+                output = result.stdout.strip()
+
+            # Limit cache to 50 entries
+            if len(self.ffprobe_cache) >= 50:
+                self.ffprobe_cache.popitem(last=False)
+            self.ffprobe_cache[file_path] = output
+
+            # Check if this thread is still the latest one
+            if self._tooltip_generation == generation:
+                self.master.after(0, lambda: self._set_tooltip_message(output))
+        except subprocess.TimeoutExpired:
+            if self._tooltip_generation == generation:
+                self.master.after(
+                    0,
+                    lambda: self._set_tooltip_message("Timeout: ffprobe took too long"),
+                )
+        except Exception as e:
+            error_msg = f"Error reading metadata:\n{str(e)}"
+            if self._tooltip_generation == generation:
+                self.master.after(0, lambda: self._set_tooltip_message(error_msg))
+
+    def _set_tooltip_message(self, message):
+        if getattr(self, "input_file_tooltip", None) is not None:
+            self.input_file_tooltip.configure(message=message)
+
     def _browse_input(self):
         initial_dir = (
             self.last_input_dir.get() if self.last_input_dir.get() else os.getcwd()
@@ -3325,9 +3564,9 @@ class VideoConverterApp:
             codec_suffix = (
                 "_hevc"
                 if self.video_codec.get() == "hevc"
-                else "_av1"
-                if self.video_codec.get() == "av1"
                 else "_h264"
+                if self.video_codec.get() == "h264"
+                else "_av1"
             )
 
             if self.last_output_dir.get() and os.path.exists(
@@ -3355,9 +3594,9 @@ class VideoConverterApp:
         codec_suffix = (
             "_hevc"
             if self.video_codec.get() == "hevc"
-            else "_av1"
-            if self.video_codec.get() == "av1"
             else "_h264"
+            if self.video_codec.get() == "h264"
+            else "_av1"
         )
 
         default_name = (
@@ -3563,7 +3802,7 @@ class VideoConverterApp:
             trim_options = []
             other_additional_options = []
 
-            if self.enable_additional_options.get() and not self.precise_trim.get():
+            if not self.precise_trim.get():
                 add_val = self.additional_options.get().strip()
                 if add_val and add_val != self.additional_options_placeholder:
                     # Split the additional options string
@@ -3580,11 +3819,10 @@ class VideoConverterApp:
                             other_additional_options.append(parts[i])
                             i += 1
             else:
-                # In precise mode or when additional options are disabled, use all additional options as-is
-                if self.enable_additional_options.get():
-                    add_val = self.additional_options.get().strip()
-                    if add_val and add_val != self.additional_options_placeholder:
-                        other_additional_options.extend(add_val.split())
+                # In precise mode, use all additional options as-is
+                add_val = self.additional_options.get().strip()
+                if add_val and add_val != self.additional_options_placeholder:
+                    other_additional_options.extend(add_val.split())
 
             # Add trim options at the beginning if we have any
             if trim_options:
@@ -3610,11 +3848,7 @@ class VideoConverterApp:
         other_additional_options = []
 
         # Extract trim options from additional_options if not in precise mode
-        if (
-            self.enable_additional_options.get()
-            and not self.precise_trim.get()
-            and not self.trim_streamcopy.get()
-        ):
+        if not self.precise_trim.get() and not self.trim_streamcopy.get():
             add_val = self.additional_options.get().strip()
             if add_val and add_val != self.additional_options_placeholder:
                 # Split the additional options string
@@ -5233,10 +5467,8 @@ class VideoConverterApp:
         self.trim_streamcopy.set(False)
         self.precise_trim.set(False)
 
+        # Default (Reset)
         if preset_name == "none":
-            # Reset to default settings
-            self.enable_encoder_options.set(True)
-
             # Reset all settings to their initial values
             self.bitrate.set("6000")
             self.constant_qp_mode.set(True)
@@ -5247,6 +5479,7 @@ class VideoConverterApp:
             # Reset encoder options
             self.threads.set("4")
             self.hwaccel.set("cuda")
+            self.cuda_output_format.set(False)
             self.preset.set("p7")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
@@ -5279,11 +5512,8 @@ class VideoConverterApp:
             self._save_settings()
             self.selected_preset.set("none")
 
+        # FHD Fast preset
         elif preset_name == "fhdf":
-            # FHD Fast preset
-            self.enable_encoder_options.set(True)
-            self.enable_fps_scale_options.set(True)
-
             # Video settings
             self.bitrate.set("6000")
             self.constant_qp_mode.set(True)
@@ -5292,6 +5522,7 @@ class VideoConverterApp:
             self.interpolation_algo.set("bicubic")
 
             # Encoder settings
+            self.cuda_output_format.set(False)
             self.preset.set("p3")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
@@ -5320,11 +5551,8 @@ class VideoConverterApp:
             self._save_settings()
             self.selected_preset.set("fhdf")
 
+        # FHD Quality preset
         elif preset_name == "fhdq":
-            # FHD Quality preset
-            self.enable_encoder_options.set(True)
-            self.enable_fps_scale_options.set(True)
-
             # Video settings
             self.bitrate.set("8000")
             self.constant_qp_mode.set(True)
@@ -5333,6 +5561,7 @@ class VideoConverterApp:
             self.interpolation_algo.set("spline")
 
             # Encoder settings
+            self.cuda_output_format.set(False)
             self.preset.set("p7")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
@@ -5362,11 +5591,8 @@ class VideoConverterApp:
             self._save_settings()
             self.selected_preset.set("fhdq")
 
+        # HD Fast preset
         elif preset_name == "hdf":
-            # HD Fast preset
-            self.enable_encoder_options.set(True)
-            self.enable_fps_scale_options.set(True)
-
             # Video settings
             self.bitrate.set("5000")
             self.constant_qp_mode.set(True)
@@ -5375,6 +5601,7 @@ class VideoConverterApp:
             self.interpolation_algo.set("bicubic")
 
             # Encoder settings
+            self.cuda_output_format.set(False)
             self.preset.set("p3")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
@@ -5403,11 +5630,8 @@ class VideoConverterApp:
             self._save_settings()
             self.selected_preset.set("hdf")
 
+        # HD Quality preset
         elif preset_name == "hdq":
-            # HD Quality preset
-            self.enable_encoder_options.set(True)
-            self.enable_fps_scale_options.set(True)
-
             # Video settings
             self.bitrate.set("6000")
             self.constant_qp_mode.set(True)
@@ -5416,6 +5640,7 @@ class VideoConverterApp:
             self.interpolation_algo.set("spline")
 
             # Encoder settings
+            self.cuda_output_format.set(False)
             self.preset.set("p7")
             self.tune.set("hq")
             if self.video_codec.get() == "hevc":
@@ -5787,8 +6012,91 @@ class VideoConverterApp:
             )
 
     # KEYBOARD & CLIPBOARD
+
     def _setup_keyboard_shortcuts(self):
+        self.context_menu = None
         self.master.bind_all("<Control-KeyPress>", self._handle_key_press)
+        self.master.bind_all("<Button-3>", self._show_context_menu)
+        self.master.bind_all("<Button-1>", self._hide_context_menu, add="+")
+        self.master.bind("<FocusOut>", self._hide_context_menu_on_focus_loss)
+        self.master.bind("<Configure>", self._on_master_configure)
+
+    def _show_context_menu(self, event):
+        if not isinstance(event.widget, (tk.Entry, tk.Text)):
+            return
+
+        if (
+            not hasattr(self, "context_menu")
+            or not self.context_menu
+            or not self.context_menu.winfo_exists()
+        ):
+            self.context_menu = CTkContextMenu(self.master, event.widget, self)
+            self.context_menu.update()  # force initialization to fix first click
+        else:
+            self.context_menu.target_widget = event.widget
+
+        # Position menu at mouse cursor
+        x = event.x_root
+        y = event.y_root
+
+        # Show window
+        self.context_menu.geometry(f"+{x}+{y}")
+        self.context_menu.deiconify()
+        self.context_menu.focus_set()
+
+    def _hide_context_menu(self, event):
+        if (
+            hasattr(self, "context_menu")
+            and self.context_menu
+            and self.context_menu.winfo_exists()
+        ):
+            try:
+                # event.widget can be a string if the widget was recently destroyed
+                if isinstance(event.widget, str):
+                    self.context_menu.withdraw()
+                    return
+
+                # Only hide if clicked outside the context menu
+                if event.widget.winfo_toplevel() != self.context_menu:
+                    self.context_menu.withdraw()
+            except (AttributeError, tk.TclError):
+                # If the widget is invalid or doesn't have winfo_toplevel, hide for safety
+                self.context_menu.withdraw()
+
+    def _hide_context_menu_on_focus_loss(self, event):
+        if event.widget == self.master:
+            # Delay the check slightly to see if focus moved to the context menu
+            self.master.after(50, self._check_focus_loss)
+
+    def _check_focus_loss(self):
+        if (
+            hasattr(self, "context_menu")
+            and self.context_menu
+            and self.context_menu.winfo_exists()
+        ):
+            # If the current focused widget is None, then the whole application lost OS focus
+            current_focus = self.master.focus_displayof()
+            # If focus is still somewhere within our app (even the main window), keep the menu open.
+            # The <Button-1> binding handles clicks inside the app to close the menu.
+            if current_focus is None:
+                self.context_menu.withdraw()
+
+    def _on_master_configure(self, event):
+        if event.widget == self.master:
+            if hasattr(self, "_configure_after_id") and self._configure_after_id:
+                self.master.after_cancel(self._configure_after_id)
+            self._configure_after_id = self.master.after(
+                50, self._deferred_hide_context_menu
+            )
+
+    def _deferred_hide_context_menu(self):
+        self._configure_after_id = None
+        if (
+            hasattr(self, "context_menu")
+            and self.context_menu
+            and self.context_menu.winfo_exists()
+        ):
+            self.context_menu.withdraw()
 
     def _handle_key_press(self, event):
         # Check if Ctrl is pressed (0x0004 is the Control modifier)
@@ -5932,6 +6240,52 @@ class VideoConverterApp:
                 widget.insert("insert", text)
             except tk.TclError:
                 pass
+
+    def _delete_text(self):
+        """Delete the selected text without copying to clipboard."""
+        widget = self.master.focus_get()
+        if widget is None:
+            return
+
+        has_selection = False
+
+        if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
+            has_selection = bool(widget.tag_ranges("sel"))
+
+        elif isinstance(widget, ctk.CTkEntry):
+            try:
+                has_selection = widget.selection_present()
+            except AttributeError:
+                try:
+                    has_selection = widget._entry.selection_present()
+                except Exception:
+                    has_selection = False
+
+        elif hasattr(widget, "selection_present"):
+            try:
+                has_selection = widget.selection_present()
+            except Exception:
+                has_selection = False
+
+        if not has_selection:
+            return
+
+        # Delete selection directly
+        try:
+            if isinstance(widget, (ctk.CTkTextbox, tk.Text)):
+                widget.delete("sel.first", "sel.last")
+
+            elif isinstance(widget, ctk.CTkEntry):
+                try:
+                    widget.delete("sel.first", "sel.last")
+                except Exception:
+                    widget._entry.delete("sel.first", "sel.last")
+
+            elif hasattr(widget, "delete"):
+                widget.delete("sel.first", "sel.last")
+
+        except Exception as e:
+            print(f"Error deleting text: {e}")
 
     def _copy_command_to_clipboard(self):
         command = self.command_textbox.get("1.0", "end-1c").strip()

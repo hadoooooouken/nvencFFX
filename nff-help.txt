@@ -312,9 +312,6 @@ ac 2
 
 Mixes an audio track down to two channels.
 
-Determines how aggressively frames may be dropped to maintain quality.
-Range: 0–1; higher = more likely to drop frames.
-
 #Gamma RGB
 eq=gamma_r=1.0:gamma_g=1.0:gamma_b=1.0:gamma_weight=1.0
 

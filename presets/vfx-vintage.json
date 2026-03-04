@@ -1,6 +1,7 @@
 {
+    "cuda_output_format": false,
     "additional_filter_options": "curves=vintage, noise=alls=20:allf=t+u, vignette",
     "selected_preset": "custom",
     "custom_preset_selected": "vfx-vintage",
-    "version": "1.6.6"
+    "version": "1.6.8"
 }
