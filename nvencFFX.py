@@ -871,7 +871,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.8")
+        master.title("nvencFFX 1.6.9")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1166,14 +1166,18 @@ class VideoConverterApp:
         self.input_file.trace_add("write", self._on_input_file_change)
 
         # Browse button
-        ctk.CTkButton(
+        self.btn_browse = ctk.CTkButton(
             main_frame,
             text="Browse",
             command=self._browse_input,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
             text_color=TEXT_COLOR_B,
-        ).grid(row=0, column=2, padx=5, pady=5)
+        )
+        self.btn_browse.grid(row=0, column=2, padx=5, pady=5)
+        self.btn_browse.bind(
+            "<Button-3>", lambda e: self._explore_path(e, self.input_file.get())
+        )
 
         # Output File
         ctk.CTkLabel(main_frame, text="Output File:").grid(
@@ -1188,14 +1192,18 @@ class VideoConverterApp:
         ).grid(row=1, column=1, padx=5, pady=5)
 
         # Save As button
-        ctk.CTkButton(
+        self.btn_save_as = ctk.CTkButton(
             main_frame,
             text="Save As",
             command=self._browse_output,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
             text_color=TEXT_COLOR_B,
-        ).grid(row=1, column=2, padx=5, pady=5)
+        )
+        self.btn_save_as.grid(row=1, column=2, padx=5, pady=5)
+        self.btn_save_as.bind(
+            "<Button-3>", lambda e: self._explore_path(e, self.output_file.get())
+        )
 
         # FFmpeg Path
         ctk.CTkLabel(main_frame, text="FFmpeg Path:").grid(
@@ -1215,14 +1223,18 @@ class VideoConverterApp:
         self.ffmpeg_path_entry.bind("<FocusOut>", self._on_ffmpeg_path_focus_out)
 
         # Browse button for FFmpeg
-        ctk.CTkButton(
+        self.btn_ffmpeg = ctk.CTkButton(
             main_frame,
             text="FFmpeg",
             command=self._browse_ffmpeg,
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
-        ).grid(row=2, column=2, padx=5, pady=5)
+        )
+        self.btn_ffmpeg.grid(row=2, column=2, padx=5, pady=5)
+        self.btn_ffmpeg.bind(
+            "<Button-3>", lambda e: self._explore_path(e, self.ffmpeg_custom_path.get())
+        )
 
         # Video Bitrate/Quality Level
         self.bitrate_label = ctk.CTkLabel(main_frame, text="Video Bitrate (k):")
@@ -1253,14 +1265,16 @@ class VideoConverterApp:
         )
         self.constant_qp_checkbox.pack(side="left", padx=(10, 0))
 
-        ctk.CTkButton(
+        self.btn_output = ctk.CTkButton(
             main_frame,
             text="Output",
             command=self._show_output_command,
             fg_color=ACCENT_GREY,
             hover_color=HOVER_GREY,
             text_color=TEXT_COLOR_B,
-        ).grid(row=3, column=2, sticky="w", padx=5, pady=5)
+        )
+        self.btn_output.grid(row=3, column=2, sticky="w", padx=5, pady=5)
+        self.btn_output.bind("<Button-3>", lambda e: self._copy_command_to_clipboard())
 
         ctk.CTkButton(
             main_frame,
@@ -2919,7 +2933,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.8",
+            "version": "1.6.9",
         }
         return settings
 
@@ -3541,6 +3555,28 @@ class VideoConverterApp:
     def _set_tooltip_message(self, message):
         if getattr(self, "input_file_tooltip", None) is not None:
             self.input_file_tooltip.configure(message=message)
+
+    def _explore_path(self, event, path_str):
+        if (
+            not path_str
+            or "Drag and drop" in path_str
+            or path_str == getattr(self, "ffmpeg_path_placeholder", "")
+        ):
+            return
+
+        path_str = path_str.strip("\"' ")
+        if not path_str or not os.path.exists(path_str):
+            folder = os.path.dirname(path_str)
+            if not folder or not os.path.exists(folder):
+                return
+            path_str = folder
+
+        import subprocess
+
+        if os.path.isfile(path_str):
+            subprocess.run(["explorer", "/select,", os.path.normpath(path_str)])
+        elif os.path.isdir(path_str):
+            os.startfile(path_str)
 
     def _browse_input(self):
         initial_dir = (
@@ -6288,7 +6324,13 @@ class VideoConverterApp:
             print(f"Error deleting text: {e}")
 
     def _copy_command_to_clipboard(self):
-        command = self.command_textbox.get("1.0", "end-1c").strip()
+        try:
+            command = self.command_textbox.get("1.0", "end-1c").strip()
+        except Exception:
+            try:
+                command = " ".join(self._build_ffmpeg_command(preview=True))
+            except Exception:
+                return
 
         # break the command into words, but combine those that are clearly parts of the same path
         words = command.split()

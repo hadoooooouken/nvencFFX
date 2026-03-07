@@ -1,5 +1,12 @@
 # nvencFFX - Changelog
 
+## [1.6.9] - 2026-03-07
+Added right-click handlers for the following buttons:
+- **Browse** — opens Windows Explorer in the folder where the file specified in the **Input File** field is located.
+- **Save As** — opens Windows Explorer in the folder where the file specified in the **Output File** field is located.
+- **FFmpeg** — opens Windows Explorer in the folder where the file specified in the **FFmpeg Path** field is located.
+- **Output** — copies the full FFmpeg command to the clipboard.
+
 ## [1.6.8] - 2026-03-04
 - The **Input File** field now shows a tooltip with metadata of the opened video file when hovering the mouse cursor over it;
 - Text fields now support a right-click context menu for text operations (Cut / Copy / Paste / Delete / Select All);
