@@ -11,7 +11,7 @@ from collections import OrderedDict
 from datetime import datetime
 from io import BytesIO
 from json import dump, load
-from re import sub
+from re import sub, search
 from shlex import split
 from threading import Event, Thread, Timer
 from tkinter import filedialog, messagebox, simpledialog
@@ -419,6 +419,8 @@ class BatchConverterWindow:
         self.is_converting = False
         self.current_file_index = 0
         self.files = main_app.batch_files.copy()
+        self._saved_input_file = ""
+        self._saved_output_file = ""
 
         # Create window
         self.window = ctk.CTkToplevel(master)
@@ -523,7 +525,28 @@ class BatchConverterWindow:
     def _process_dropped_file(self, file_path):
         """Process dropped file in separate thread"""
         if file_path.lower().endswith(
-            (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
+            (
+                ".mp4",
+                ".mkv",
+                ".avi",
+                ".mov",
+                ".flv",
+                ".wmv",
+                ".webm",
+                ".ts",
+                ".m4v",
+                ".mpg",
+                ".mpeg",
+                ".m2ts",
+                ".mts",
+                ".3gp",
+                ".ogv",
+                ".ogm",
+                ".vob",
+                ".f4v",
+                ".asf",
+                ".divx",
+            )
         ):
             normalized_path = os.path.normpath(file_path)
 
@@ -550,7 +573,10 @@ class BatchConverterWindow:
             title="Select Video Files",
             initialdir=initial_dir,
             filetypes=(
-                ("Video Files", "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm"),
+                (
+                    "Video Files",
+                    "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
+                ),
                 ("All Files", "*.*"),
             ),
         )
@@ -678,6 +704,10 @@ class BatchConverterWindow:
         self.is_converting = True
         self.current_file_index = 0
 
+        # Save original input/output so we can restore after batch
+        self._saved_input_file = self.main_app.input_file.get()
+        self._saved_output_file = self.main_app.output_file.get()
+
         self.main_app.progress_frame.grid()
         self.main_app.progress_value.set(0.0)
         self.main_app.progress_label.configure(text="0%")
@@ -691,6 +721,7 @@ class BatchConverterWindow:
     def _convert_next_file(self):
         if not self.window.winfo_exists():
             self.is_converting = False
+            self._restore_input_output()
             return
         if self.current_file_index >= len(self.files) or not self.is_converting:
             self.is_converting = False
@@ -698,6 +729,7 @@ class BatchConverterWindow:
             self.main_app.ffmpeg_output.set("")
             self.main_app.status_text.set("Batch conversion completed!")
             self._update_main_convert_button()
+            self._restore_input_output()
             return
 
         current_file = self.files[self.current_file_index]
@@ -843,6 +875,14 @@ class BatchConverterWindow:
         self._update_main_convert_button()
         self.main_app.progress_frame.grid_remove()
         self.main_app.progress_value.set(0.0)
+        self._restore_input_output()
+
+    def _restore_input_output(self):
+        """Restore original input/output file paths after batch conversion"""
+        if hasattr(self, "_saved_input_file") and self._saved_input_file:
+            self.main_app.input_file.set(self._saved_input_file)
+        if hasattr(self, "_saved_output_file") and self._saved_output_file:
+            self.main_app.output_file.set(self._saved_output_file)
 
     def _on_close(self):
         if self.is_converting:
@@ -871,7 +911,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.6.9")
+        master.title("nvencFFX 1.7.0")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1178,6 +1218,7 @@ class VideoConverterApp:
         self.btn_browse.bind(
             "<Button-3>", lambda e: self._explore_path(e, self.input_file.get())
         )
+        CTkToolTip(self.btn_browse, message="Right-click to open containing folder", bg_color=SECONDARY_BG, text_color=TEXT_COLOR_W, alpha=1.0, corner_radius=6, delay=0.3)
 
         # Output File
         ctk.CTkLabel(main_frame, text="Output File:").grid(
@@ -1204,6 +1245,7 @@ class VideoConverterApp:
         self.btn_save_as.bind(
             "<Button-3>", lambda e: self._explore_path(e, self.output_file.get())
         )
+        CTkToolTip(self.btn_save_as, message="Right-click to open containing folder", bg_color=SECONDARY_BG, text_color=TEXT_COLOR_W, alpha=1.0, corner_radius=6, delay=0.3)
 
         # FFmpeg Path
         ctk.CTkLabel(main_frame, text="FFmpeg Path:").grid(
@@ -1235,6 +1277,7 @@ class VideoConverterApp:
         self.btn_ffmpeg.bind(
             "<Button-3>", lambda e: self._explore_path(e, self.ffmpeg_custom_path.get())
         )
+        CTkToolTip(self.btn_ffmpeg, message="Right-click to open containing folder", bg_color=SECONDARY_BG, text_color=TEXT_COLOR_W, alpha=1.0, corner_radius=6, delay=0.3)
 
         # Video Bitrate/Quality Level
         self.bitrate_label = ctk.CTkLabel(main_frame, text="Video Bitrate (k):")
@@ -1275,6 +1318,7 @@ class VideoConverterApp:
         )
         self.btn_output.grid(row=3, column=2, sticky="w", padx=5, pady=5)
         self.btn_output.bind("<Button-3>", lambda e: self._copy_command_to_clipboard())
+        CTkToolTip(self.btn_output, message="Right-click to copy command to clipboard", bg_color=SECONDARY_BG, text_color=TEXT_COLOR_W, alpha=1.0, corner_radius=6, delay=0.3)
 
         ctk.CTkButton(
             main_frame,
@@ -2431,6 +2475,8 @@ class VideoConverterApp:
         )
         self.play_output_button.pack(side="left", expand=True, fill="x", padx=(2, 2))
         self.play_output_button.configure(command=self._play_output_file)
+        self.play_output_button.bind("<Button-3>", self._on_vmaf_right_click)
+        CTkToolTip(self.play_output_button, message="Right-click to run VMAF analysis", bg_color=SECONDARY_BG, text_color=TEXT_COLOR_W, alpha=1.0, corner_radius=6, delay=0.3)
 
         self.play10s_button = ctk.CTkButton(
             self.play_buttons_frame,
@@ -2568,6 +2614,200 @@ class VideoConverterApp:
         self.preset_indicator.configure(
             text=f"Preset saved: {preset_name}", text_color=ACCENT_GREEN
         )
+
+    def _on_vmaf_right_click(self, event=None):
+        """Handle right-click on Play Output File button for VMAF analysis"""
+        # Cancel if already running
+        if getattr(self, "_vmaf_running", False):
+            self._cancel_vmaf()
+            return
+
+        input_f = self.input_file.get()
+        output_f = self.output_file.get()
+
+        if not input_f or input_f.startswith("Drag and drop") or not output_f:
+            messagebox.showwarning(
+                "Warning", "Please specify both Input and Output files."
+            )
+            return
+
+        if not os.path.exists(input_f) or not os.path.exists(output_f):
+            messagebox.showwarning("Warning", "Input or Output file does not exist.")
+            return
+
+        # Start analysis in a separate thread
+        self._vmaf_running = True
+        Thread(target=self._run_vmaf_analysis, daemon=True).start()
+
+    def _cancel_vmaf(self):
+        """Cancel running VMAF analysis"""
+        self._vmaf_running = False
+        if hasattr(self, "_vmaf_process") and self._vmaf_process:
+            try:
+                self._vmaf_process.terminate()
+            except Exception:
+                pass
+        self.status_text.set("VMAF analysis cancelled")
+        self.ffmpeg_output.set("")
+
+    def _run_vmaf_analysis(self):
+        try:
+            input_f = self.input_file.get()
+            output_f = self.output_file.get()
+
+            if not os.path.exists(input_f) or not os.path.exists(output_f):
+                self.master.after(
+                    0,
+                    lambda: messagebox.showwarning(
+                        "Warning", "Input or Output file does not exist."
+                    ),
+                )
+                return
+
+            n_threads = os.cpu_count()  # use os.cpu_count() instead of multiprocessing
+            ffmpeg_path = (
+                self.ffmpeg_custom_path.get()
+                if self.ffmpeg_custom_path.get()
+                and self.ffmpeg_custom_path.get() != self.ffmpeg_path_placeholder
+                else self.ffmpeg_path
+            )
+
+            if not ffmpeg_path:
+                self.master.after(
+                    0,
+                    lambda: messagebox.showerror(
+                        "Error", "FFmpeg path is not specified"
+                    ),
+                )
+                return
+
+            # Get resolutions of both videos
+            in_w, in_h = self._get_video_resolution(input_f)
+            out_w, out_h = self._get_video_resolution(output_f)
+
+            if None in (in_w, in_h, out_w, out_h):
+                self.master.after(
+                    0,
+                    lambda: messagebox.showerror(
+                        "Error", "Could not determine video resolution"
+                    ),
+                )
+                return
+
+            need_scaling = (in_w != out_w) or (in_h != out_h)
+            scale_flag = self.interpolation_algo.get()  # scaling algorithm from GUI
+
+            if need_scaling:
+                # Scale first input (output) to match the size of the second input (original)
+                lavfi_filter = (
+                    f"[0:v]scale={in_w}:{in_h}:flags={scale_flag}[dist];"
+                    f"[1:v]null[ref];"
+                    f"[dist][ref]libvmaf=n_threads={n_threads}:n_subsample=10"
+                )
+                score_label = "VMAF score (with scaling)"
+            else:
+                lavfi_filter = f"libvmaf=n_threads={n_threads}:n_subsample=10"
+                score_label = "VMAF score"
+
+            command = [
+                ffmpeg_path,
+                "-t",
+                "30",
+                "-i",
+                output_f,  # distorted video
+                "-t",
+                "30",
+                "-i",
+                input_f,  # original video
+                "-lavfi",
+                lavfi_filter,
+                "-f",
+                "null",
+                "-",
+            ]
+
+            self.master.after(
+                0, lambda: self.status_text.set("VMAF Analysis in progress...")
+            )
+            self.master.after(
+                0, lambda: self.ffmpeg_output.set("Calculating VMAF score...")
+            )
+
+            # Pass the label to _execute_vmaf
+            self._execute_vmaf(command, score_label)
+
+        except Exception as e:
+            self.master.after(
+                0,
+                lambda msg=f"VMAF Analysis failed: {str(e)}": messagebox.showerror(
+                    "Error", msg
+                ),
+            )
+
+    def _execute_vmaf(self, command, score_label="VMAF score"):
+        """Execute the FFmpeg command and parse VMAF score"""
+        startupinfo = None
+        creationflags = 0
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self._vmaf_process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            vmaf_score = None
+            for line in self._vmaf_process.stdout:
+                if not self._vmaf_running:
+                    self._vmaf_process.terminate()
+                    break
+
+                line = line.strip()
+                if line:
+                    self.master.after(0, lambda l=line: self.ffmpeg_output.set(l))
+                    # Look for VMAF score
+                    match = search(r"VMAF score:\s*([\d.]+)", line)
+                    if match:
+                        vmaf_score = match.group(1)
+
+            self._vmaf_process.wait()
+
+            if vmaf_score and self._vmaf_running:
+                try:
+                    score_float = float(vmaf_score)
+                    formatted_score = f"{score_label}: {score_float:.2f}"
+                    self.master.after(
+                        0, lambda s=formatted_score: self.status_text.set(s)
+                    )
+                    self.master.after(0, lambda: MessageBeep(MB_ICONASTERISK))
+                except ValueError:
+                    self.master.after(
+                        0, lambda: self.status_text.set("Error parsing VMAF score")
+                    )
+            elif self._vmaf_running:
+                self.master.after(
+                    0, lambda: self.status_text.set("VMAF score not found in output")
+                )
+
+        except Exception as e:
+            self.master.after(
+                0,
+                lambda msg=f"Error executing VMAF: {str(e)}": self.status_text.set(msg),
+            )
+        finally:
+            self._vmaf_running = False
+            self._vmaf_process = None
+            self.master.after(0, lambda: self.ffmpeg_output.set(""))
 
     def _save_preset(self):
         """Save current settings to selected preset"""
@@ -2933,7 +3173,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.6.9",
+            "version": "1.7.0",
         }
         return settings
 
@@ -2988,14 +3228,9 @@ class VideoConverterApp:
         self.conversion_thread.start()
 
     def _cancel_conversion(self):
-        if self.conversion_process and self.is_converting:
-            self.conversion_process.terminate()
+        # Cancel single conversion — just set the flag, _run_ffmpeg handles UI
+        if self.is_converting:
             self.is_converting = False
-            self.status_text.set("Conversion cancelled")
-            self.progress_frame.grid_remove()
-            self.convert_button.configure(
-                text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-            )
 
         # Also cancel batch conversion if active
         if (
@@ -3402,7 +3637,28 @@ class VideoConverterApp:
 
     def _process_dropped_file(self, file_path):
         if file_path.lower().endswith(
-            (".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm")
+            (
+                ".mp4",
+                ".mkv",
+                ".avi",
+                ".mov",
+                ".flv",
+                ".wmv",
+                ".webm",
+                ".ts",
+                ".m4v",
+                ".mpg",
+                ".mpeg",
+                ".m2ts",
+                ".mts",
+                ".3gp",
+                ".ogv",
+                ".ogm",
+                ".vob",
+                ".f4v",
+                ".asf",
+                ".divx",
+            )
         ):
             normalized_path = os.path.normpath(file_path)
 
@@ -3571,8 +3827,6 @@ class VideoConverterApp:
                 return
             path_str = folder
 
-        import subprocess
-
         if os.path.isfile(path_str):
             subprocess.run(["explorer", "/select,", os.path.normpath(path_str)])
         elif os.path.isdir(path_str):
@@ -3587,7 +3841,10 @@ class VideoConverterApp:
             title="Select Video File",
             initialdir=initial_dir,
             filetypes=(
-                ("Video Files", "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm"),
+                (
+                    "Video Files",
+                    "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
+                ),
                 ("All Files", "*.*"),
             ),
         )
@@ -3793,6 +4050,39 @@ class VideoConverterApp:
             self.master.after(100, self._update_trim_slider)
 
         return duration
+
+    def _get_video_resolution(self, file_path):
+        """Return (width, height) of video or (None, None) on error."""
+        if not self.ffprobe_path or not file_path:
+            return None, None
+        cmd = [
+            self.ffprobe_path,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0",
+            file_path,
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=10,
+            )
+            output = result.stdout.strip()
+            if output and "," in output:
+                w, h = output.split(",")
+                return int(w), int(h)
+        except Exception:
+            pass
+        return None, None
 
     def _build_ffmpeg_command(self, preview=False):
         if self.custom_command is not None:
@@ -4105,6 +4395,14 @@ class VideoConverterApp:
             )
             last_line = ""
             for line in self.conversion_process.stdout:
+                if not self.is_converting:
+                    self.conversion_process.terminate()
+                    try:
+                        self.conversion_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.conversion_process.kill()
+                    break
+
                 line = line.strip()
                 if line:
                     last_line = line

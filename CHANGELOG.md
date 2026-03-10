@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.7.0] - 2026-03-10
+- Extended input video format support: .mp4, .mkv, .avi, .mov, .flv, .wmv, .webm, .ts, .m4v, .mpg, .mpeg, .m2ts, .mts, .3gp, .ogv, .ogm, .vob, .f4v, .asf, .divx;
+- Right-click **Play Output File** after a single convert to run a simplified VMAF comparison.
+
 ## [1.6.9] - 2026-03-07
 Added right-click handlers for the following buttons:
 - **Browse** — opens Windows Explorer in the folder where the file specified in the **Input File** field is located.

@@ -1,4 +1,4 @@
-nvencFFX 1.6.9
+nvencFFX 1.7.0
 Video converter and trimming tool powered by NVIDIA NVENC hardware acceleration.
 
 Features:
@@ -11,6 +11,10 @@ Features:
 • Advanced encoder parameters and presets
 • Real-time process output and encoding progress
 • Save and load configuration profiles
+• Batch video conversion with queue management
+• Desktop screen recording
+• VMAF quality analysis for output comparison
+• Drag and drop file support
 
 System Requirements:
 • NVIDIA GPU with NVENC support (GeForce 1000 series or newer)
@@ -21,6 +25,7 @@ Credits:
 • FFmpeg — Multimedia framework
 • CustomTkinter — Modern UI components
 • PIL (Pillow) — Image processing
+• CTkToolTip — Tooltip widget
 
 Links:
 • GitLab Repository: https://gitlab.com/hadoukez/nvencffx

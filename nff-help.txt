@@ -193,7 +193,7 @@ source = Maintain original frame rate
 custom = Manually specify any frame rate value
 
 #FPS Mode
-Auto, CFR, VFR, Passtrough
+Auto, CFR, VFR, Passthrough
 
 Set video sync method / framerate mode. vsync is applied to all output video streams but can be overridden for a stream by setting fps_mode.
 vsync is deprecated and will be removed in the future.
@@ -264,7 +264,7 @@ Doubles audio playback speed (2x faster) without changing pitch.
 #Slow down X2
 setpts=2.0*PTS
 
-Halves video playback speed (2x slower)..
+Halves video playback speed (2x slower).
 
 atempo=0.5
 Halves audio playback speed (2x slower).
@@ -408,6 +408,25 @@ Useful for advanced users who need specific parameters.
 Play Input File = Opens original file in system default player
 Play 10s Preview = Opens encoded preview in system player  
 Play Output File = Opens converted file in system player
+
+#Right-Click Actions
+Browse / Save As / FFmpeg buttons = Right-click to open containing folder in Explorer
+Output button = Right-click to copy FFmpeg command to clipboard
+Play Output File = Right-click to run VMAF quality analysis
+
+#VMAF Quality Analysis
+VMAF (Video Multimethod Assessment Fusion) measures the perceptual quality difference between the input and output files.
+Right-click the "Play Output File" button to start the analysis.
+The VMAF score (0-100) will be displayed in the status bar upon completion.
+Higher scores indicate better quality preservation:
+
+95-100 = Virtually indistinguishable from the original
+90-95 = Excellent quality
+80-90 = Good quality
+70-80 = Acceptable quality
+<70 = Noticeable quality loss
+
+Requires both input and output files to be set. Uses libvmaf via FFmpeg with automatic thread detection.
 
 #BATCH CONVERSION
 

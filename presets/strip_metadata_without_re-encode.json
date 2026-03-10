@@ -1,0 +1,13 @@
+{
+    "fps_option": "source",
+    "fps_mode": "auto",
+    "video_format_option": "source",
+    "trim_streamcopy": true,
+    "precise_trim": false,
+    "additional_options": "-map_metadata -1",
+    "additional_filter_options": "",
+    "additional_audio_filter_options": "",
+    "selected_preset": "custom",
+    "custom_preset_selected": "strip_metadata_without_re-encode",
+    "version": "1.7.0"
+}
