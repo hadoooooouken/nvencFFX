@@ -1219,8 +1219,6 @@ class VideoConverterApp:
             alpha=1.0,
             corner_radius=6,
             delay=0.3,
-            justify="left",
-            wraplength=400,
         )
 
         # Output File
@@ -1256,8 +1254,6 @@ class VideoConverterApp:
             alpha=1.0,
             corner_radius=6,
             delay=0.3,
-            justify="left",
-            wraplength=400,
         )
 
         # FFmpeg Path
@@ -1298,8 +1294,6 @@ class VideoConverterApp:
             alpha=1.0,
             corner_radius=6,
             delay=0.3,
-            justify="left",
-            wraplength=400,
         )
 
         # Video Bitrate/Quality Level
@@ -1349,8 +1343,6 @@ class VideoConverterApp:
             alpha=1.0,
             corner_radius=6,
             delay=0.3,
-            justify="left",
-            wraplength=400,
         )
 
         ctk.CTkButton(
@@ -1447,9 +1439,10 @@ class VideoConverterApp:
         )
 
         # FF Threads
-        threads_label = ctk.CTkLabel(left_column_frame, text="FF Threads:")
-        threads_label.grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        threads_option_menu = ctk.CTkOptionMenu(
+        ctk.CTkLabel(left_column_frame, text="FF Threads:").grid(
+            row=0, column=0, sticky="w", padx=5, pady=2
+        )
+        preset_option_menu = ctk.CTkOptionMenu(
             left_column_frame,
             variable=self.threads,
             values=["auto"] + [str(i) for i in range(1, 17)],
@@ -1459,34 +1452,12 @@ class VideoConverterApp:
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
         )
-        threads_option_menu.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
-        threads_tooltip = "Sets the number of threads used by FFmpeg for processing.\n\nHigher values can improve performance on multi-core systems."
-        CTkToolTip(
-            threads_label,
-            message=threads_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            threads_option_menu,
-            message=threads_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
+        preset_option_menu.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
 
         # Preset
-        preset_label = ctk.CTkLabel(left_column_frame, text="Preset:")
-        preset_label.grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(left_column_frame, text="Preset:").grid(
+            row=1, column=0, sticky="w", padx=5, pady=2
+        )
         preset_option_menu = ctk.CTkOptionMenu(
             left_column_frame,
             variable=self.preset,
@@ -1498,35 +1469,11 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         preset_option_menu.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        preset_tooltip = (
-            "Set the encoding preset.\n\nnvencFF default: p7 (max quality)."
-        )
-        CTkToolTip(
-            preset_label,
-            message=preset_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            preset_option_menu,
-            message=preset_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Tune
-        tune_label = ctk.CTkLabel(left_column_frame, text="Tune:")
-        tune_label.grid(row=2, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(left_column_frame, text="Tune:").grid(
+            row=2, column=0, sticky="w", padx=5, pady=2
+        )
         tune_option_menu = ctk.CTkOptionMenu(
             left_column_frame,
             variable=self.tune,
@@ -1538,29 +1485,6 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         tune_option_menu.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        tune_tooltip = "Optimizes encoding for specific content types."
-        CTkToolTip(
-            tune_label,
-            message=tune_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            tune_option_menu,
-            message=tune_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Profile
         self.profile_label = ctk.CTkLabel(left_column_frame, text="Profile:")
@@ -1576,33 +1500,11 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         profile_option_menu.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        profile_tooltip = "Sets the encoding profile which determines supported features and compatibility.\n\nHigher profiles offer more features but may have reduced device compatibility."
-        CTkToolTip(
-            self.profile_label,
-            message=profile_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            profile_option_menu,
-            message=profile_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Level
-        level_label = ctk.CTkLabel(left_column_frame, text="Level:")
-        level_label.grid(row=4, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(left_column_frame, text="Level:").grid(
+            row=4, column=0, sticky="w", padx=5, pady=2
+        )
         level_option_menu = ctk.CTkOptionMenu(
             left_column_frame,
             variable=self.level,
@@ -1629,29 +1531,6 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         level_option_menu.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
-        level_tooltip = 'Specifies the maximum capabilities of the decoder.\n\nHigher levels support higher resolutions, bitrates, and processing requirements.\n\n"auto" lets FFmpeg automatically determine the appropriate level.'
-        CTkToolTip(
-            level_label,
-            message=level_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            level_option_menu,
-            message=level_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Tier Label (for HEVC and AV1)
         self.tier_label = ctk.CTkLabel(left_column_frame, text="Tier:")
@@ -1669,29 +1548,6 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         self.tier_option_menu.grid(row=5, column=1, sticky="ew", padx=5, pady=2)
-        tier_tooltip = "Controls the tier within a given level."
-        CTkToolTip(
-            self.tier_label,
-            message=tier_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            self.tier_option_menu,
-            message=tier_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Coder Label (only for H.264)
         self.coder_label = ctk.CTkLabel(left_column_frame, text="Coder:")
@@ -1711,29 +1567,6 @@ class VideoConverterApp:
         )
         self.coder_option_menu.grid(row=5, column=1, sticky="ew", padx=5, pady=2)
         self.coder_option_menu.grid_remove()  # hide by default
-        coder_tooltip = "Selects entropy encoding method.\n\nDefault: cabac for best compression efficiency."
-        CTkToolTip(
-            self.coder_label,
-            message=coder_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            self.coder_option_menu,
-            message=coder_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         right_column_frame = ctk.CTkFrame(
             self.encoder_options_frame, fg_color="transparent"
@@ -1747,8 +1580,9 @@ class VideoConverterApp:
         self.level_option_menu = level_option_menu
 
         # HW Accel
-        hwaccel_label = ctk.CTkLabel(right_column_frame, text="HW Accel:")
-        hwaccel_label.grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(right_column_frame, text="HW Accel:").grid(
+            row=0, column=0, sticky="w", padx=5, pady=2
+        )
         hwaccel_option_menu = ctk.CTkOptionMenu(
             right_column_frame,
             variable=self.hwaccel,
@@ -1761,35 +1595,11 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         hwaccel_option_menu.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
-        hwaccel_tooltip = (
-            "Selects hardware acceleration method.\n\nRecommended: cuda for NVIDIA GPUs"
-        )
-        CTkToolTip(
-            hwaccel_label,
-            message=hwaccel_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            hwaccel_option_menu,
-            message=hwaccel_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Multipass
-        multipass_label = ctk.CTkLabel(right_column_frame, text="Multipass:")
-        multipass_label.grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(right_column_frame, text="Multipass:").grid(
+            row=1, column=0, sticky="w", padx=5, pady=2
+        )
         multipass_option_menu = ctk.CTkOptionMenu(
             right_column_frame,
             variable=self.multipass,
@@ -1801,33 +1611,11 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         multipass_option_menu.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        multipass_tooltip = "Enables multi-pass encoding for improved quality.\n\nMulti-pass provides better rate control but increases encoding time."
-        CTkToolTip(
-            multipass_label,
-            message=multipass_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            multipass_option_menu,
-            message=multipass_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Rate-Control
-        rc_label = ctk.CTkLabel(right_column_frame, text="Rate-Control:")
-        rc_label.grid(row=2, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(right_column_frame, text="Rate-Control:").grid(
+            row=2, column=0, sticky="w", padx=5, pady=2
+        )
         self.rc_option_menu = ctk.CTkOptionMenu(
             right_column_frame,
             variable=self.rc,
@@ -1839,29 +1627,6 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         self.rc_option_menu.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
-        rc_tooltip = "Selects rate control method."
-        CTkToolTip(
-            rc_label,
-            message=rc_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            self.rc_option_menu,
-            message=rc_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Lookahead Level
         self.lookahead_level_label = ctk.CTkLabel(
@@ -1879,29 +1644,6 @@ class VideoConverterApp:
         )
         self.lookahead_level_label.grid(row=3, column=0, sticky="w", padx=5, pady=2)
         self.lookahead_level_menu.grid(row=3, column=1, sticky="ew", padx=5, pady=2)
-        lookahead_tooltip = "Controls how many future frames are analyzed for rate control.\n\nHigher values improve quality but increase encoding time and memory usage."
-        CTkToolTip(
-            self.lookahead_level_label,
-            message=lookahead_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            self.lookahead_level_menu,
-            message=lookahead_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Split Encode Mode
         self.split_encode_label = ctk.CTkLabel(right_column_frame, text="Split Encode:")
@@ -1918,29 +1660,6 @@ class VideoConverterApp:
             dropdown_hover_color=ACCENT_GREEN,
         )
         self.split_encode_menu.grid(row=4, column=1, sticky="ew", padx=5, pady=2)
-        split_encode_tooltip = "Controls frame-level parallel encoding.\n\nUseful for high-bitrate, high-resolution encoding on GPUs like the 3080/3090, which can have 2 NVENC engines active simultaneously. For most consumer cards with only one engine, this setting does nothing."
-        CTkToolTip(
-            self.split_encode_label,
-            message=split_encode_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
-        CTkToolTip(
-            self.split_encode_menu,
-            message=split_encode_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
         # Checkboxes
         self.cuda_output_format_checkbox = ctk.CTkCheckBox(
@@ -1953,125 +1672,46 @@ class VideoConverterApp:
         self.cuda_output_format_checkbox.grid(
             row=0, column=2, columnspan=2, sticky="w", padx=15, pady=2
         )
-        cuda_output_tooltip = "Adds the -hwaccel_output_format cuda parameter.\n\nIt is required when using CUDA-based filters."
-        CTkToolTip(
-            self.cuda_output_format_checkbox,
-            message=cuda_output_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
 
-        self.spatial_aq_checkbox = ctk.CTkCheckBox(
+        ctk.CTkCheckBox(
             right_column_frame,
             text="Spatial AQ",
             variable=self.spatial_aq,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        )
-        self.spatial_aq_checkbox.grid(
-            row=1, column=2, columnspan=2, sticky="w", padx=15, pady=2
-        )
-        spatial_aq_tooltip = "Enables spatial adaptive quantization.\n\nImproves quality in areas with complex textures and details.\n\nRecommended: Enabled for most content"
-        CTkToolTip(
-            self.spatial_aq_checkbox,
-            message=spatial_aq_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-            justify="left",
-            wraplength=400,
-        )
+        ).grid(row=1, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
-        self.temporal_aq_checkbox = ctk.CTkCheckBox(
+        ctk.CTkCheckBox(
             right_column_frame,
             text="Temporal AQ",
             variable=self.temporal_aq,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        )
-        self.temporal_aq_checkbox.grid(
-            row=2, column=2, columnspan=2, sticky="w", padx=15, pady=2
-        )
-        temporal_aq_tooltip = "Enables temporal adaptive quantization.\n\nImproves quality for moving objects and scene changes.\n\nRecommended: Enabled for most content"
-        CTkToolTip(
-            self.temporal_aq_checkbox,
-            message=temporal_aq_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-        )
+        ).grid(row=2, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
-        self.strict_gop_checkbox = ctk.CTkCheckBox(
+        ctk.CTkCheckBox(
             right_column_frame,
             text="Strict GOP",
             variable=self.strict_gop,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        )
-        self.strict_gop_checkbox.grid(
-            row=3, column=2, columnspan=2, sticky="w", padx=15, pady=2
-        )
-        strict_gop_tooltip = "Forces regular GOP (Group of Pictures) structure.\n\nImproves seeking accuracy but may reduce compression efficiency.\n\nRecommended: Disabled unless specific seeking requirements"
-        CTkToolTip(
-            self.strict_gop_checkbox,
-            message=strict_gop_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-        )
+        ).grid(row=3, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
-        self.no_scenecut_checkbox = ctk.CTkCheckBox(
+        ctk.CTkCheckBox(
             right_column_frame,
             text="No-Scenecut",
             variable=self.no_scenecut,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        )
-        self.no_scenecut_checkbox.grid(
-            row=4, column=2, columnspan=2, sticky="w", padx=15, pady=2
-        )
-        no_scenecut_tooltip = "Disables automatic scene cut detection.\n\nMay improve encoding speed but reduces quality at scene changes.\n\nRecommended: Disabled for most content"
-        CTkToolTip(
-            self.no_scenecut_checkbox,
-            message=no_scenecut_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-        )
+        ).grid(row=4, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
-        self.weighted_pred_checkbox = ctk.CTkCheckBox(
+        ctk.CTkCheckBox(
             right_column_frame,
             text="Weighted Prediction",
             variable=self.weighted_pred,
             fg_color=ACCENT_GREEN,
             hover_color=HOVER_GREEN,
-        )
-        self.weighted_pred_checkbox.grid(
-            row=5, column=2, columnspan=2, sticky="w", padx=15, pady=2
-        )
-        weighted_pred_tooltip = "Enables weighted prediction for B-frames.\n\nImproves compression efficiency for fading scenes.\n\nNote: Automatically sets -bf 0 when enabled."
-        CTkToolTip(
-            self.weighted_pred_checkbox,
-            message=weighted_pred_tooltip,
-            bg_color=SECONDARY_BG,
-            text_color=TEXT_COLOR_W,
-            alpha=1.0,
-            corner_radius=6,
-            delay=0.3,
-        )
+        ).grid(row=5, column=2, columnspan=2, sticky="w", padx=15, pady=2)
 
         # FPS and Scaling
         fps_scale_frame_toggle = TextCheckbox(
