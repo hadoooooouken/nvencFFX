@@ -28,6 +28,47 @@ WM_DROPFILES = 0x0233
 CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
 
+# Tray icon Win32 constants
+WM_USER_TRAY = 0x8000
+NIF_MESSAGE = 0x01
+NIF_ICON = 0x02
+NIF_TIP = 0x04
+NIM_ADD = 0x00
+NIM_DELETE = 0x02
+MF_STRING = 0x00
+MF_SEPARATOR = 0x800
+TPM_RIGHTBUTTON = 0x02
+TPM_RETURNCMD = 0x0100
+IDM_STOP_RECORDING = 1001
+
+# Process snapshot constants for killing only our ffmpeg.exe
+TH32CS_SNAPPROCESS = 0x00000002
+PROCESS_QUERY_INFORMATION = 0x0400
+PROCESS_VM_READ = 0x0010
+PROCESS_TERMINATE = 0x0001
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", ctypes.wintypes.DWORD),
+        ("cntUsage", ctypes.wintypes.DWORD),
+        ("th32ProcessID", ctypes.wintypes.DWORD),
+        ("th32DefaultHeapID", ctypes.c_size_t),
+        ("th32ModuleID", ctypes.wintypes.DWORD),
+        ("cntThreads", ctypes.wintypes.DWORD),
+        ("th32ParentProcessID", ctypes.wintypes.DWORD),
+        ("pcPriClassBase", ctypes.c_long),
+        ("dwFlags", ctypes.wintypes.DWORD),
+        ("szExeFile", ctypes.c_wchar * 260),
+    ]
+
+
+# Hotkey Win32 constants
+WM_HOTKEY = 0x0312
+MOD_ALT = 0x0001
+VK_F9 = 0x78
+HOTKEY_ID = 1002
+
 # Win32 callback type for window procedures
 WNDPROC = ctypes.WINFUNCTYPE(
     ctypes.c_long,
@@ -84,6 +125,8 @@ _kernel32.GlobalLock.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalLock.restype = ctypes.c_void_p
 _kernel32.GlobalUnlock.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalUnlock.restype = ctypes.wintypes.BOOL
+_kernel32.GlobalFree.argtypes = [ctypes.wintypes.HANDLE]
+_kernel32.GlobalFree.restype = ctypes.wintypes.HANDLE
 
 
 def _set_clipboard_text(text: str) -> bool:
@@ -189,6 +232,35 @@ HOVER_RED = "#d83636"
 TEXT_COLOR_W = "#ffffff"
 TEXT_COLOR_B = "#000000"
 PLACEHOLDER_COLOR = "#a0a0a0"
+
+# Supported video extensions (used for drag-and-drop and file dialog filters)
+VIDEO_EXTENSIONS = (
+    ".mp4",
+    ".mkv",
+    ".avi",
+    ".mov",
+    ".flv",
+    ".wmv",
+    ".webm",
+    ".ts",
+    ".m4v",
+    ".mpg",
+    ".mpeg",
+    ".m2ts",
+    ".mts",
+    ".3gp",
+    ".ogv",
+    ".ogm",
+    ".vob",
+    ".f4v",
+    ".asf",
+    ".divx",
+)
+VIDEO_EXTENSIONS_FILTER = (
+    "Video Files",
+    "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v"
+    " *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
+)
 
 
 class TextCheckbox(ctk.CTkFrame):
@@ -405,6 +477,130 @@ class DropTarget:
             pass
 
 
+class TrayIcon:
+    """System tray icon with a right-click context menu for screen recording control."""
+
+    class _NOTIFYICONDATA(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.wintypes.DWORD),
+            ("hWnd", ctypes.wintypes.HWND),
+            ("uID", ctypes.wintypes.UINT),
+            ("uFlags", ctypes.wintypes.UINT),
+            ("uCallbackMessage", ctypes.wintypes.UINT),
+            ("hIcon", ctypes.wintypes.HANDLE),
+            ("szTip", ctypes.c_wchar * 128),
+        ]
+
+    def __init__(self, hwnd, icon_path, on_stop_callback):
+        self.hwnd = hwnd
+        self.on_stop = on_stop_callback
+        self._active = False
+
+        # Load icon from .ico file (fall back to app icon)
+        _user32.LoadImageW.restype = ctypes.wintypes.HANDLE
+        _user32.LoadImageW.argtypes = [
+            ctypes.wintypes.HINSTANCE,
+            ctypes.wintypes.LPCWSTR,
+            ctypes.wintypes.UINT,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.wintypes.UINT,
+        ]
+        LR_LOADFROMFILE = 0x0010
+        IMAGE_ICON = 1
+        self._hicon = _user32.LoadImageW(
+            None, icon_path, IMAGE_ICON, 16, 16, LR_LOADFROMFILE
+        )
+        if not self._hicon:
+            # Fall back to application icon
+            self._hicon = _user32.LoadIconW(
+                None, ctypes.wintypes.LPCWSTR(32512)
+            )  # IDI_APPLICATION
+
+        # Hook our tray message into the existing window proc
+        self._prev_wndproc = None
+        self._wndproc_ref = WNDPROC(self._wnd_proc)
+        self._prev_wndproc = _user32.SetWindowLongPtrW(
+            self.hwnd,
+            GWL_WNDPROC,
+            ctypes.cast(self._wndproc_ref, ctypes.c_void_p).value,
+        )
+
+        # Register global hotkey (Alt + F9)
+        _user32.RegisterHotKey(self.hwnd, HOTKEY_ID, MOD_ALT, VK_F9)
+
+    def _nid(self):
+        nid = self._NOTIFYICONDATA()
+        nid.cbSize = ctypes.sizeof(self._NOTIFYICONDATA)
+        nid.hWnd = self.hwnd
+        nid.uID = 1
+        nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
+        nid.uCallbackMessage = WM_USER_TRAY
+        nid.hIcon = self._hicon
+        nid.szTip = "nvencFFX 1.7.2"
+        return nid
+
+    def show(self):
+        if self._active:
+            return
+        nid = self._nid()
+        _shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid))
+        self._active = True
+
+    def hide(self):
+        if not self._active:
+            return
+        nid = self._nid()
+        _shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(nid))
+        self._active = False
+
+    def _show_context_menu(self):
+        hmenu = _user32.CreatePopupMenu()
+        _user32.AppendMenuW(
+            hmenu, MF_STRING, IDM_STOP_RECORDING, "Stop Recording (Alt + F9)"
+        )
+
+        # Required: set foreground window so menu dismisses correctly
+        _user32.SetForegroundWindow(self.hwnd)
+
+        pt = ctypes.wintypes.POINT()
+        _user32.GetCursorPos(ctypes.byref(pt))
+
+        cmd = _user32.TrackPopupMenu(
+            hmenu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, 0, self.hwnd, None
+        )
+        _user32.DestroyMenu(hmenu)
+
+        if cmd == IDM_STOP_RECORDING:
+            self.on_stop()
+
+    def _wnd_proc(self, hwnd, msg, wparam, lparam):
+        if msg == WM_HOTKEY and wparam == HOTKEY_ID:
+            # Safely escape the CTypes Windows hook before interacting with Tkinter
+            # by spawning a temporary thread to queue the UI event.
+            from threading import Thread
+
+            Thread(target=self.on_stop, daemon=True).start()
+            return 0
+        if msg == WM_USER_TRAY:
+            # WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B
+            if lparam in (0x0205, 0x007B):
+                self._show_context_menu()
+            return 0
+        if self._prev_wndproc:
+            return _user32.CallWindowProcW(
+                self._prev_wndproc, hwnd, msg, wparam, lparam
+            )
+        return _user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+    def destroy(self):
+        _user32.UnregisterHotKey(self.hwnd, HOTKEY_ID)
+        self.hide()
+        if self._prev_wndproc:
+            _user32.SetWindowLongPtrW(self.hwnd, GWL_WNDPROC, self._prev_wndproc)
+            self._prev_wndproc = None
+
+
 class BatchConverterWindow:
     def __init__(self, master, main_app):
         self.master = master
@@ -517,30 +713,7 @@ class BatchConverterWindow:
 
     def _process_dropped_file(self, file_path):
         """Process dropped file in separate thread"""
-        if file_path.lower().endswith(
-            (
-                ".mp4",
-                ".mkv",
-                ".avi",
-                ".mov",
-                ".flv",
-                ".wmv",
-                ".webm",
-                ".ts",
-                ".m4v",
-                ".mpg",
-                ".mpeg",
-                ".m2ts",
-                ".mts",
-                ".3gp",
-                ".ogv",
-                ".ogm",
-                ".vob",
-                ".f4v",
-                ".asf",
-                ".divx",
-            )
-        ):
+        if file_path.lower().endswith(VIDEO_EXTENSIONS):
             normalized_path = os.path.normpath(file_path)
 
             # Update GUI from main thread
@@ -566,10 +739,7 @@ class BatchConverterWindow:
             title="Select Video Files",
             initialdir=initial_dir,
             filetypes=(
-                (
-                    "Video Files",
-                    "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
-                ),
+                VIDEO_EXTENSIONS_FILTER,
                 ("All Files", "*.*"),
             ),
         )
@@ -904,7 +1074,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.7.1")
+        master.title("nvencFFX 1.7.2")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -1587,7 +1757,7 @@ class VideoConverterApp:
             right_column_frame,
             variable=self.hwaccel,
             values=["auto", "cuda", "d3d11va", "d3d12va", "opencl", "vulkan"],
-            command=lambda choice: self._update_cuda_output_format_state(),
+            command=lambda _: self._update_cuda_output_format_state(),
             fg_color=PRIMARY_BG,
             button_color=ACCENT_GREEN,
             button_hover_color=HOVER_GREEN,
@@ -3206,7 +3376,7 @@ class VideoConverterApp:
             "custom_preset_selected": self.custom_preset_name.get()
             if self.selected_preset.get() == "custom"
             else "",
-            "version": "1.7.1",
+            "version": "1.7.2",
         }
         return settings
 
@@ -3390,49 +3560,100 @@ class VideoConverterApp:
             self.status_text.set("Screen is recording now...")
             self.ffmpeg_output.set("Screen recording starting...")
 
+            # Show tray icon so recording can be stopped without unminimizing
+            if not hasattr(self, "_tray_icon") or self._tray_icon is None:
+                hwnd = self.master.winfo_id()
+                self._tray_icon = TrayIcon(
+                    hwnd, icon_path, lambda: self.master.after(0, self._stop_recording)
+                )
+            self._tray_icon.show()
+
             # Minimize window after 1 second
-            self.master.after(1000, self.master.iconify)
+            self._iconify_job = self.master.after(1000, self.master.iconify)
 
             # Start recording process after 1 second delay using Timer
             def start_recording():
-                startupinfo = None
-                creationflags = 0
-                if os.name == "nt":
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = subprocess.SW_HIDE
-                    creationflags = subprocess.CREATE_NO_WINDOW
+                try:
+                    startupinfo = None
+                    creationflags = 0
+                    if os.name == "nt":
+                        startupinfo = subprocess.STARTUPINFO()
+                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        startupinfo.wShowWindow = subprocess.SW_HIDE
+                        creationflags = subprocess.CREATE_NO_WINDOW
 
-                self.recording_process = subprocess.Popen(
-                    command,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    startupinfo=startupinfo,
-                    creationflags=creationflags,
-                    encoding="utf-8",
-                    errors="replace",
-                )
+                    self.recording_process = subprocess.Popen(
+                        command,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        startupinfo=startupinfo,
+                        creationflags=creationflags,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
 
-                self.ffmpeg_output.set("Screen recording started...")
+                    self.ffmpeg_output.set("Screen recording started...")
 
-                # Start monitoring thread
-                recording_thread = Thread(target=self._monitor_recording)
-                recording_thread.start()
+                    # Start monitoring thread
+                    recording_thread = Thread(target=self._monitor_recording)
+                    recording_thread.start()
+                except Exception as e:
+                    self.master.after(
+                        0,
+                        lambda: self._handle_recording_error(str(e)),
+                    )
 
             # Use Timer to delay the recording start by 2 seconds
-            timer = Timer(2.0, start_recording)
-            timer.start()
+            self._recording_timer = Timer(2.0, start_recording)
+            self._recording_timer.daemon = True
+            self._recording_timer.start()
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start screen recording: {str(e)}")
 
+    def _handle_recording_error(self, error_msg):
+        """Reset UI after a failed recording start (called from Timer thread)."""
+        if hasattr(self, "original_title"):
+            self.master.title(self.original_title)
+        self.is_recording = False
+        self.recording_process = None
+        self.screen_record_button.configure(
+            text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
+        )
+        self.status_text.set("Screen recording failed")
+        self.ffmpeg_output.set("")
+        self.master.deiconify()
+        messagebox.showerror("Error", f"Failed to start screen recording: {error_msg}")
+
     def _stop_recording(self):
         if hasattr(self, "original_title"):
             self.master.title(self.original_title)
+
+        # Cancel pending timer if recording hasn't started yet
+        if hasattr(self, "_recording_timer") and self._recording_timer is not None:
+            self._recording_timer.cancel()
+            self._recording_timer = None
+
+        # Cancel pending iconify if window hasn't minimized yet
+        if hasattr(self, "_iconify_job") and self._iconify_job is not None:
+            self.master.after_cancel(self._iconify_job)
+            self._iconify_job = None
+
         if not self.recording_process:
+            # Timer was cancelled before FFmpeg started — just reset UI
+            if self.is_recording:
+                self.is_recording = False
+                self.screen_record_button.configure(
+                    text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
+                )
+                self.status_text.set("Screen recording cancelled")
+                self.ffmpeg_output.set("")
+                self.master.deiconify()
+                if hasattr(self, "_tray_icon") and self._tray_icon:
+                    self._tray_icon.hide()
             return
 
         try:
@@ -3458,6 +3679,10 @@ class VideoConverterApp:
         )
         self.status_text.set("Screen recording stopped")
         self.ffmpeg_output.set("Screen recording completed")
+
+        # Hide tray icon
+        if hasattr(self, "_tray_icon") and self._tray_icon:
+            self._tray_icon.hide()
 
         # Restore window
         self.master.deiconify()
@@ -3669,30 +3894,7 @@ class VideoConverterApp:
         ).start()
 
     def _process_dropped_file(self, file_path):
-        if file_path.lower().endswith(
-            (
-                ".mp4",
-                ".mkv",
-                ".avi",
-                ".mov",
-                ".flv",
-                ".wmv",
-                ".webm",
-                ".ts",
-                ".m4v",
-                ".mpg",
-                ".mpeg",
-                ".m2ts",
-                ".mts",
-                ".3gp",
-                ".ogv",
-                ".ogm",
-                ".vob",
-                ".f4v",
-                ".asf",
-                ".divx",
-            )
-        ):
+        if file_path.lower().endswith(VIDEO_EXTENSIONS):
             normalized_path = os.path.normpath(file_path)
 
             # refresh GUI from main thread
@@ -3874,10 +4076,7 @@ class VideoConverterApp:
             title="Select Video File",
             initialdir=initial_dir,
             filetypes=(
-                (
-                    "Video Files",
-                    "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
-                ),
+                VIDEO_EXTENSIONS_FILTER,
                 ("All Files", "*.*"),
             ),
         )
@@ -4030,8 +4229,7 @@ class VideoConverterApp:
         if self.loading_preset:
             return
 
-        if hasattr(self, "_update_output_filename"):
-            self._update_output_filename()
+        self._update_output_filename()
 
         if hasattr(self, "_save_settings_job"):
             self.master.after_cancel(self._save_settings_job)
@@ -5119,41 +5317,11 @@ class VideoConverterApp:
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
     def _set_trim_end_to_duration(self):
-        if (
-            not self.ffprobe_path
-            or not self.input_file.get()
-            or self.input_file.get().startswith("Drag and drop")
-        ):
-            return
-        try:
-            command = [
-                self.ffprobe_path,
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                self.input_file.get(),
-            ]
-            result = subprocess.run(
-                command,
-                check=True,
-                capture_output=True,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-            duration = float(result.stdout.strip())
-            # convert seconds to hh:mm:ss
-            h = int(duration // 3600)
-            m = int((duration % 3600) // 60)
-            s = int(duration % 60)
-            self.trim_end.set(f"{h:02d}:{m:02d}:{s:02d}")
+        duration = self._get_video_duration(update_ui=False)
+        if duration > 0:
+            self.trim_end.set(self._seconds_to_time_str(duration))
             if hasattr(self, "trim_canvas"):
                 self.master.after(100, self._update_trim_slider)
-        except Exception as e:
-            print(f"Error setting trim_end: {e}")
-            self.trim_end.set("00:10:00")
 
     def _time_to_slider_positions(self):
         """Convert time values to slider positions"""
@@ -5206,10 +5374,10 @@ class VideoConverterApp:
         start_pos, end_pos = self._time_to_slider_positions()
 
         # Draw handles
-        self.start_handle = self.trim_canvas.create_oval(
+        self.trim_canvas.create_oval(
             start_pos - 8, 15 - 8, start_pos + 8, 15 + 8, fill=ACCENT_GREEN, outline=""
         )
-        self.end_handle = self.trim_canvas.create_oval(
+        self.trim_canvas.create_oval(
             end_pos - 8, 15 - 8, end_pos + 8, 15 + 8, fill=ACCENT_GREEN, outline=""
         )
 
@@ -5864,6 +6032,7 @@ class VideoConverterApp:
             self.weighted_pred.set(False)
             self.strict_gop.set(False)
             self.split_encode_mode.set("forced")
+            self.coder.set("cabac")
 
             # Reset FPS and scaling options
             self.fps_option.set("source")
@@ -6058,6 +6227,8 @@ class VideoConverterApp:
                         sub_child._variable.set(False)
                     except Exception:
                         pass
+
+        self._update_cuda_output_format_state()
 
     def _toggle_encoder_options_frame(self):
         if self.enable_encoder_options.get():
@@ -7029,6 +7200,70 @@ class VideoConverterApp:
         self.audio_option.set("aac_160k")
 
     # SHUTDOWN & CLEANUP
+    def _kill_our_ffmpeg_processes(self):
+        """Synchronous version: terminate only ffmpeg.exe matching self.ffmpeg_path."""
+        if not self.ffmpeg_path:
+            return
+
+        target_path = os.path.normpath(self.ffmpeg_path).lower()
+        kernel32 = ctypes.windll.kernel32
+        pids_to_kill = []
+        h_snapshot = None
+
+        try:
+            h_snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if h_snapshot in (0, -1, None):
+                return
+
+            pe32 = PROCESSENTRY32W()
+            pe32.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+
+            if not kernel32.Process32FirstW(h_snapshot, ctypes.byref(pe32)):
+                return
+
+            while True:
+                if pe32.szExeFile.lower() == "ffmpeg.exe":
+                    h_process = kernel32.OpenProcess(
+                        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                        False,
+                        pe32.th32ProcessID,
+                    )
+                    if h_process:
+                        exe_path = ctypes.create_unicode_buffer(260)
+                        size = ctypes.c_uint(260)
+                        if kernel32.QueryFullProcessImageNameW(
+                            h_process, 0, exe_path, ctypes.byref(size)
+                        ):
+                            current_path = os.path.normpath(exe_path.value).lower()
+                            if current_path == target_path:
+                                pids_to_kill.append(pe32.th32ProcessID)
+                        kernel32.CloseHandle(h_process)
+
+                if not kernel32.Process32NextW(h_snapshot, ctypes.byref(pe32)):
+                    break
+
+        except Exception:
+            return
+        finally:
+            if h_snapshot and h_snapshot not in (0, -1):
+                kernel32.CloseHandle(h_snapshot)
+
+        for pid in pids_to_kill:
+            h_process = None
+            try:
+                h_process = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+                if h_process:
+                    kernel32.TerminateProcess(h_process, 0)
+            except Exception:
+                pass
+            finally:
+                if h_process:
+                    kernel32.CloseHandle(h_process)
+
+    def _kill_our_ffmpeg_processes_async(self):
+        """Asynchronous version: runs killer in a background thread."""
+        Thread(target=self._kill_our_ffmpeg_processes, daemon=True).start()
+
     def _on_close(self):
         """Application close handler"""
 
@@ -7054,9 +7289,17 @@ class VideoConverterApp:
         # Save current settings
         self._save_settings()
 
+        # Clean up tray icon if it was created
+        if hasattr(self, "_tray_icon") and self._tray_icon:
+            self._tray_icon.destroy()
+            self._tray_icon = None
+
         # Properly release Windows API resources for Drag-and-Drop
         if hasattr(self, "drop_target") and getattr(self, "drop_target", None):
             self.drop_target.cleanup()
+
+        # Kill only our ffmpeg.exe processes
+        self._kill_our_ffmpeg_processes_async()
 
         # Close the application
         self.master.quit()

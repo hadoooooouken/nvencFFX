@@ -25,7 +25,7 @@ Set the encoding preset:
 p1 - fastest (lowest quality)
 p7 - slowest (best quality)
 
-nvencFF default: p7 (max quality).
+nvencFFX default: p7 (max quality).
 
 #Tune
 hq, uhq, ll, ull, lossless
@@ -494,6 +494,16 @@ The Screen Record feature allows you to capture Windows Desktop
 - Captures entire desktop screen using FFmpeg's ddagrab filter
 - Real-time monitoring shows recording status in the output window
 - Recording continues in background while window is minimized
+
+#System Tray Integration
+- During recording, an icon appears in the system tray
+- Right-click the tray icon to access a context menu with "Stop Recording" option
+- Allows stopping recording without restoring the main window
+- Tray icon disappears automatically when recording stops
+
+#Global Hotkey
+- Press Alt+F9 to instantly stop screen recording from anywhere
+- Works even when the application window is minimized or in the background
 
 #Output Files
 - Default location: Desktop folder

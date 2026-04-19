@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.7.2] - 2026-04-19
+- The ability to stop screen recording from the system tray icon menu or using the Alt+F9 hotkey;
+- Better memory management and cleaning of processes (ffmpeg.exe) after closing the program.
+
 ## [1.7.1] - 2026-03-31
 - Code cleanup.
 
