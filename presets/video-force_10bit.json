@@ -1,0 +1,6 @@
+{
+    "additional_options": "-pix_fmt:v p010le",
+    "selected_preset": "custom",
+    "custom_preset_selected": "video-force_10bit",
+    "version": "1.7.3"
+}

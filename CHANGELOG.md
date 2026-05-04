@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.7.3] - 2026-05-05
+- **Encoding Fix**: Enforced UTF-8 encoding across all internal system calls (metadata retrieval, executable discovery, duration checks, etc.) to ensure stability across different regional system settings and prevent crashes with special characters;
+- **Tooltip Optimization**: Metadata tooltips are now more compact (verbose tags filtered) and feature vertical screen boundary clamping to ensure they remain fully visible;
+- **Improved Stability**: Added robust null-safety checks for subprocess outputs to prevent "NoneType" attribute errors during command execution.
+
 ## [1.7.2] - 2026-04-19
 - The ability to stop screen recording from the system tray icon menu or using the Alt+F9 hotkey;
 - Better memory management and cleaning of processes (ffmpeg.exe) after closing the program.

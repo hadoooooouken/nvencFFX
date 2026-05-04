@@ -1,0 +1,6 @@
+{
+    "additional_options": "-pix_fmt:v nv12",
+    "selected_preset": "custom",
+    "custom_preset_selected": "video-force_8bit",
+    "version": "1.7.3"
+}
