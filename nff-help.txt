@@ -433,41 +433,49 @@ Requires both input and output files to be set. Uses libvmaf via FFmpeg with aut
 The Batch Convert feature allows you to process multiple video files in sequence using the same encoding settings.
 
 #Batch Convert Button
-Opens the Batch Converter window where you can manage a list of files for conversion.
+- Opens the Batch Converter window where you can manage a list of files for conversion.
+
+#Output Folder
+- Set a specific destination folder for all batch-converted files. 
+- This setting is persistent and automatically saved in your configuration.
+- Click "Output Folder" button to select a directory or right-click to open it in Explorer.
+
+#Change Output Container
+- Enable "Change output container" to override the extension for all files in the batch.
+- Choose between MP4, MKV, or MOV from the dropdown menu.
+- This setting is persistent and remembered between sessions.
 
 #Adding Files
-- Click "Add Files" to select multiple video files
-- Drag and drop video files directly into the Batch Converter window
-- Supported formats: MP4, MKV, AVI, MOV, FLV, WMV, WEBM
+- Click "Add Files" to select multiple video files.
+- Drag and drop video files directly into the Batch Converter window.
+- Supported formats: MP4, MKV, AVI, MOV, FLV, WMV, WEBM, etc.
 
 #File List Management
-- The list shows all queued files with their status (Ready, Converting, Done, Failed)
-- Remove individual files with the "×" button
-- Clear entire list with "Remove All" button
-- Files are processed in the order they appear in the list
+- The list shows all queued files with their status (Ready, Converting, Done, Failed).
+- Remove individual files with the "×" button.
+- Clear entire list with "Remove All" button.
+- Files are processed in the order they appear in the list.
 
 #Conversion Process
-- Click "Batch Convert" in the main window to start processing all files
-- Files are converted sequentially using current main window settings
-- Progress is shown in the main window with real-time updates
-- Each file's status updates during conversion (Ready → Converting → Done/Failed)
+- Click "Batch Convert" in the main window to start processing all files.
+- Files are converted sequentially using current main window settings.
+- Progress is shown in the main window with real-time updates.
+- Each file's status updates during conversion (Ready → Converting → Done/Failed).
 
 #Output Files
-Output files are automatically named using the pattern:
-[original_name]_[codec]_custom.[extension]
-- Codec suffix: _hevc, _h264, or _av1 based on selected video codec
-- Saved in the same directory as input files or last used output directory
-- Preserves your chosen file extension (.mp4, .mkv, .mov)
+- Output files are automatically named using the pattern: [original_name]_[codec]_custom.[extension]
+- Codec suffix: _hevc, _h264, or _av1 based on selected video codec.
+- Saved in the specified Output Folder, or the same directory as input files if no folder is set.
 
 #Batch Converter Window Features
-- Real-time status updates for each file
-- Visual progress indication
-- Ability to cancel conversion at any time
-- Window can be kept open while using main application
+- Real-time status updates for each file.
+- Visual progress indication.
+- Ability to cancel conversion at any time.
+- Window can be kept open while using main application.
 
 #Cancelling Batch Conversion
-- Click "Cancel" during conversion to stop the process
-- Partial files are automatically cleaned up
+- Click "Cancel" during conversion to stop the process.
+- Partial files are automatically cleaned up.
 
 #Status Indicators
 Ready = File queued for conversion
@@ -478,6 +486,34 @@ Cancelled = Conversion stopped by user
 
 Note: All files in a batch conversion use the same settings from the main window. 
 Make sure to configure your desired quality, codec, and other options before starting batch conversion.
+
+#STREAMS SELECTION
+
+The Streams Selection tool allows you to selectively include or exclude specific video, audio, and subtitle tracks from the source file.
+
+#Why is this tool needed? (Default FFmpeg Behavior)
+By default, when you convert a video, FFmpeg uses an automatic selection logic that:
+1. Picks only ONE video stream (usually the one with the highest resolution).
+2. Picks only ONE audio stream (usually the one with the most channels).
+3. DISCARDS all other audio tracks, subtitle tracks, and data streams.
+
+The Streams tool allows you to bypass this limitation, enabling you to keep multiple audio languages, include specific subtitle tracks, or select exactly which video stream you want to process.
+
+**Important**: Unlike standard FFmpeg, this application is configured to include ALL streams from the source file by default. The Streams Selection tool is used when you want to EXCLUDE specific tracks or pick exactly what you need.
+
+#Streams Button
+- Opens the Stream Selection window.
+- Displays all detected streams with detailed metadata (codec, language, channels, resolution, etc.).
+- Allows manual selection of tracks via checkboxes.
+- When you select streams manually, the application adds the necessary -map flags to ensure FFmpeg includes exactly what you chose.
+- If no streams are manually selected, the application follows default FFmpeg stream selection logic.
+
+#Stream Selection Window
+- Video Streams: Toggle individual video tracks.
+- Audio Streams: Toggle individual audio tracks (with channel and language info).
+- Subtitle Streams: Toggle individual subtitle tracks.
+- Apply / Check All / Uncheck All / Close: Save selection, toggle all streams at once, or exit.
+- Persistent Cache: The application remembers your selection for the current input file.
 
 #SCREEN RECORDING
 

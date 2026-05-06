@@ -1,5 +1,10 @@
 # nvencFFX - Changelog
 
+## [1.7.4] - 2026-05-07
+- **Batch Converter Window**: Updated the interface with new persistent "Output Folder" selection and "Change output container" (MP4/MKV/MOV override) features;
+- **Default Behavior Change**: Unlike standard FFmpeg, which only picks one track per type, the application now includes ALL streams from the source file by default (implemented `-map 0 -ignore_unknown` logic);
+- **Streams Selection**: Added a new Stream Mapping window (opened via the "Streams" button in the "Additional Options" section) for manual selection of video, audio, and subtitle tracks.
+
 ## [1.7.3] - 2026-05-05
 - **Encoding Fix**: Enforced UTF-8 encoding across all internal system calls (metadata retrieval, executable discovery, duration checks, etc.) to ensure stability across different regional system settings and prevent crashes with special characters;
 - **Tooltip Optimization**: Metadata tooltips are now more compact (verbose tags filtered) and feature vertical screen boundary clamping to ensure they remain fully visible;
