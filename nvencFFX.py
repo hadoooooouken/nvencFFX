@@ -537,7 +537,7 @@ class TrayIcon:
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
         nid.uCallbackMessage = WM_USER_TRAY
         nid.hIcon = self._hicon
-        nid.szTip = "nvencFFX 1.7.4"
+        nid.szTip = "nvencFFX 1.7.5"
         return nid
 
     def show(self):
@@ -1190,7 +1190,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        master.title("nvencFFX 1.7.4")
+        master.title("nvencFFX 1.7.5")
 
         dpi = get_real_dpi()
         scaling = int(round((dpi / 96) * 100))
@@ -2706,6 +2706,7 @@ class VideoConverterApp:
             dropdown_fg_color=SECONDARY_BG,
             dropdown_hover_color=ACCENT_GREEN,
             width=170,
+            dynamic_resizing=False,
         )
         self.custom_preset_dropdown.pack(side="left", padx=5)
 
@@ -3525,7 +3526,7 @@ class VideoConverterApp:
             "batch_output_folder": self.batch_output_folder.get(),
             "batch_change_container": self.batch_change_container.get(),
             "batch_output_container": self.batch_output_container.get(),
-            "version": "1.7.4",
+            "version": "1.7.5",
         }
         return settings
 
@@ -5888,14 +5889,15 @@ class VideoConverterApp:
     def _create_stream_map_window(self, input_file):
         map_window = ctk.CTkToplevel(self.master)
         map_window.title(f"Stream Selection - {os.path.basename(input_file)}")
-        map_window.geometry("600x700")
-        map_window.minsize(600, 550)
+        
         map_window.configure(fg_color=PRIMARY_BG)
-
-        # Center window
+        map_window.geometry("600x600")
+        map_window.minsize(600, 550)
+        
+        # Center relative to parent
         self.master.update_idletasks()
         x = self.master.winfo_x() + (self.master.winfo_width() - 600) // 2
-        y = self.master.winfo_y() + (self.master.winfo_height() - 700) // 2
+        y = self.master.winfo_y() + (self.master.winfo_height() - 600) // 2
         map_window.geometry(f"+{x}+{y}")
 
         # Ensure window is on top
@@ -5984,6 +5986,7 @@ class VideoConverterApp:
                 output = result.stderr or result.stdout
                 
                 v_streams = []
+                p_streams = []
                 a_streams = []
                 s_streams = []
                 
@@ -6007,7 +6010,10 @@ class VideoConverterApp:
                         if s_type == "Video":
                             map_code = f"0:v:{v_count}"
                             v_count += 1
-                            v_streams.append({"index": idx, "text": full_text, "map_code": map_code})
+                            if "attached pic" in desc.lower():
+                                p_streams.append({"index": idx, "text": full_text, "map_code": map_code})
+                            else:
+                                v_streams.append({"index": idx, "text": full_text, "map_code": map_code})
                         elif s_type == "Audio":
                             map_code = f"0:a:{a_count}"
                             a_count += 1
@@ -6021,13 +6027,14 @@ class VideoConverterApp:
                     if loading_label.winfo_exists():
                         loading_label.destroy()
                     
-                    if not (v_streams or a_streams or s_streams):
+                    if not (v_streams or a_streams or s_streams or p_streams):
                         error_label = ctk.CTkLabel(scroll_frame, text="No streams found or error parsing output", text_color=ACCENT_RED)
                         error_label.pack(pady=20)
                     else:
                         add_stream_section("Video", v_streams)
                         add_stream_section("Audio", a_streams)
                         add_stream_section("Subtitle", s_streams)
+                        add_stream_section("Pictures", p_streams)
                         
                     # Enable buttons now that streams are loaded
                     apply_btn.configure(state="normal")

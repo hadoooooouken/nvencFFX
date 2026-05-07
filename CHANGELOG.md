@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
 
+## [1.7.5] - 2026-05-08
+- **Streams Selection**: Attached pictures (cover art) are now separated from video streams;
+- **UI Fix**: Fixed layout shifting in the Presets section when using custom presets with long names.
+
 ## [1.7.4] - 2026-05-07
 - **Batch Converter Window**: Updated the interface with new persistent "Output Folder" selection and "Change output container" (MP4/MKV/MOV override) features;
 - **Default Behavior Change**: Unlike standard FFmpeg, which only picks one track per type, the application now includes ALL streams from the source file by default (implemented `-map 0 -ignore_unknown` logic);
