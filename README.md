@@ -17,7 +17,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 * **NVIDIA NVENC Support:** Utilizes NVIDIA's NVENC for high-performance, hardware-accelerated video encoding.
 * **Video Trimming:** Easily trim video segments by specifying start and end times (HH:MM:SS format).
 * **Batch Conversion:** Process multiple video files in one go with the same settings - perfect for converting entire folders of videos.
-* **Screen Recording:** Record your screen directly with NVENC encoding - choose frame rate, codec, and quality settings.
+* **Screen Recording:** Record your screen and system audio directly with NVENC encoding - choose frame rate, codec, and quality settings.
 * **Additional Options:** Flexibility to add custom FFmpeg commands for advanced users.
 * **Drag-and-Drop Support:** Conveniently add input files by dragging them into the application window.
 
@@ -60,9 +60,9 @@ If you want to run the application from its Python source code:
     cd nvencFFX
     ```
 2.  **Install dependencies:**
-    The project uses `customtkinter`, `pillow`, `CTkToolTip`.
+    The project uses `customtkinter`, `pillow`, `CTkToolTip`, `pyaudiowpatch`.
     ```bash
-    pip install customtkinter pillow CTkToolTip
+    pip install customtkinter pillow CTkToolTip pyaudiowpatch
     ```
 3.  **Run the application:**
     ```
@@ -92,8 +92,8 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
         --include-data-file=LICENSE.txt=./LICENSE.txt ^
         --include-data-dir=presets=./presets ^
         --product-name="nvencFFX" ^
-        --product-version="1.7.5" ^
-        --file-version="1.7.5" ^
+        --product-version="1.7.6" ^
+        --file-version="1.7.6" ^
         --file-description="nvencFFX" ^
         --company-name="Deepseek Enjoyer" ^
         --copyright="Copyright (C) 2026 hadouken" ^

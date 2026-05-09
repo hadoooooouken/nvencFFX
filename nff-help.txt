@@ -552,7 +552,7 @@ The Screen Record feature allows you to capture Windows Desktop
 - Video Codec: HEVC, H.264, or AV1 based on current selection
 - Quality: Constant QP mode or Bitrate mode as configured
 - Hardware Acceleration: NVIDIA NVENC
-- Audio capture: Not implemented for screen recording
+- Audio capture: Records system audio (WASAPI loopback). Uses the codec and bitrate configured in the "Audio Settings" section. Set Audio to "Disable audio" to record video without sound.
 
 #FAQ
 
