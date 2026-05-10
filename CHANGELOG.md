@@ -1,6 +1,9 @@
 # nvencFFX - Changelog
  
-## [1.7.6] - 2026-05-10
+## [1.7.7] - 2026-05-10
+- **Stability**: Minor bug fixes and improvements.
+
+## [1.7.6] - 2026-05-09
 - **Screen Recording**: 
     - Screen recording now captures audio (unless "Disable audio" is selected);
     - Added global hotkeys: **Alt+F8** to Start, **Alt+F9** to Stop;
