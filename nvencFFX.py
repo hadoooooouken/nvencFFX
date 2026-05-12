@@ -4493,14 +4493,16 @@ class VideoConverterApp:
             if not output:
                 output = (result.stdout or "").strip()
 
-            # Filter out verbose metadata tags to keep tooltip compact
+            # Filter out verbose metadata tags and chapters to keep tooltip compact
             if output:
                 lines = output.splitlines()
                 filtered = []
                 metadata_indent = -1
+                chapters_indent = -1
                 for line in lines:
                     stripped = line.strip()
                     indent = len(line) - len(line.lstrip()) if stripped else 0
+
                     # Detect "Metadata:" header and remember its indent level
                     if stripped == "Metadata:":
                         metadata_indent = indent
@@ -4511,6 +4513,17 @@ class VideoConverterApp:
                             continue
                         # Line at same or lesser indent → metadata block ended
                         metadata_indent = -1
+
+                    # Detect "Chapters:" header and remember its indent level
+                    if stripped == "Chapters:":
+                        chapters_indent = indent
+                        continue
+                    # Inside a chapters block: skip lines indented deeper
+                    if chapters_indent >= 0:
+                        if stripped and indent > chapters_indent:
+                            continue
+                        chapters_indent = -1
+
                     filtered.append(line)
                 output = "\n".join(filtered).strip()
 
@@ -4658,9 +4671,18 @@ class VideoConverterApp:
             else "_av1"
         )
 
-        # Get input file extension as default
+        # Get default extension: prefer current output file ext, then input file ext, then .mp4
+        output_value_ext = ""
+        output_value_raw = self.output_file.get()
+        if output_value_raw and output_value_raw != getattr(
+            self, "output_file_placeholder", ""
+        ):
+            output_value_ext = os.path.splitext(output_value_raw)[1]
+
         input_file = self.input_file.get()
-        if input_file and not input_file.startswith("Drag and drop"):
+        if output_value_ext:
+            default_ext = output_value_ext
+        elif input_file and not input_file.startswith("Drag and drop"):
             default_ext = os.path.splitext(input_file)[1] or ".mp4"
         else:
             default_ext = ".mp4"
@@ -6169,6 +6191,10 @@ class VideoConverterApp:
         input_file = self.input_file.get()
         if not input_file or input_file.startswith("Drag and drop"):
             messagebox.showwarning("Warning", "Please select an input file first.")
+            return
+
+        if not os.path.exists(input_file):
+            messagebox.showwarning("Error", "Input file does not exist.")
             return
 
         if not self.ffprobe_path:
