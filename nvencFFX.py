@@ -1253,7 +1253,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.7.8"
+        self.version = "1.7.9"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
@@ -4665,11 +4665,13 @@ class VideoConverterApp:
         else:
             default_ext = ".mp4"
 
-        default_name = (
-            self.output_file.get()
-            if self.output_file.get()
-            else f"output{codec_suffix}_custom{default_ext}"
-        )
+        output_value = self.output_file.get()
+        if output_value and output_value != getattr(
+            self, "output_file_placeholder", ""
+        ):
+            default_name = output_value
+        else:
+            default_name = f"output{codec_suffix}_custom{default_ext}"
 
         if self.last_output_dir.get() and os.path.exists(self.last_output_dir.get()):
             initial_dir = self.last_output_dir.get()
@@ -4679,6 +4681,8 @@ class VideoConverterApp:
             initial_dir = os.path.dirname(default_name)
         else:
             initial_dir = os.getcwd()
+
+        initialfile = os.path.splitext(os.path.basename(default_name))[0]
 
         # Reorder filetypes to put input file extension first
         filetypes_list = [
@@ -4699,7 +4703,7 @@ class VideoConverterApp:
         filename = filedialog.asksaveasfilename(
             title="Save As...",
             defaultextension=default_ext,
-            initialfile=os.path.basename(default_name),
+            initialfile=initialfile,
             initialdir=initial_dir,
             filetypes=tuple(filetypes_list),
         )

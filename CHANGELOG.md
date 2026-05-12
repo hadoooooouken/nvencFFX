@@ -1,5 +1,8 @@
 # nvencFFX - Changelog
  
+## [1.7.9] - 2026-05-12
+- **Save As**: Fixed Save As dialog so the selected container extension (MP4/MKV/MOV) is applied correctly and placeholder text is not offered as the default file name.
+
 ## [1.7.8] - 2026-05-11
 - **Maintenance**: Code cleanup and removal of redundant method definitions.
 
