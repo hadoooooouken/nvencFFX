@@ -1,7 +1,12 @@
 # nvencFFX - Changelog
  
+## [1.8.0] - 2026-06-06
+- **FFmpeg Command Generation**: Resolved a crash when transcoding files with embedded cover art or thumbnails. 
+    - Implemented a robust fallback that copies all secondary video streams (attached pictures) while encoding only the primary video stream (v:0);
+    - Added post-processing to explicitly target encoder-specific options (preset, profile, rate control, etc.) to the primary video stream (:v:0 instead of :v), preventing compatibility errors on copied stream contexts.
+
 ## [1.7.9] - 2026-05-12
-- **Save As**: Fixed Save As dialog so the selected container extension (MP4/MKV/MOV) is applied correctly and placeholder text is not offered as the default file name.
+- **Save As**: Fixed Save As dialog so the selected container extension (MP4/MKV/MOV) is applied correctly and placeholder text is not offered as the default file name;
 - **Tooltip**: Cleaned up file information tooltips by filtering out verbose Chapters blocks.
 
 ## [1.7.8] - 2026-05-11

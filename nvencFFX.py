@@ -1253,7 +1253,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.7.9"
+        self.version = "1.8.0"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
@@ -5085,7 +5085,7 @@ class VideoConverterApp:
 
         # Add encoder settings based on mode
         codec_map = {"hevc": "hevc_nvenc", "av1": "av1_nvenc"}
-        command.extend(["-c:v", codec_map.get(self.video_codec.get(), "h264_nvenc")])
+        command.extend(["-c:v", "copy", "-c:v:0", codec_map.get(self.video_codec.get(), "h264_nvenc")])
 
         if self.preset.get() != "auto":
             command.extend(["-preset:v", self.preset.get()])
@@ -5164,6 +5164,23 @@ class VideoConverterApp:
         self._append_audio_options(command)
 
         command.append(output_f)
+
+        # Post-process: target video encoder options to the first video stream (:v:0)
+        # to avoid applying them to copied streams (like cover art/attached pics).
+        v0_targets_with_v = {
+            "-preset:v", "-tune:v", "-profile:v", "-level:v", "-tier:v", "-coder:v",
+            "-multipass:v", "-lookahead_level:v", "-split_encode_mode:v", "-spatial_aq:v",
+            "-temporal_aq:v", "-strict_gop:v", "-no-scenecut:v", "-weighted_pred:v",
+            "-rc:v", "-qp:v", "-b:v", "-maxrate:v", "-bufsize:v"
+        }
+        v0_targets_no_v = {
+            "-bf"
+        }
+        for idx in range(len(command)):
+            if command[idx] in v0_targets_with_v:
+                command[idx] = command[idx] + ":0"
+            elif command[idx] in v0_targets_no_v:
+                command[idx] = command[idx] + ":v:0"
 
         return command
 
