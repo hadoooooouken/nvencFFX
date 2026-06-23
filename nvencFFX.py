@@ -275,6 +275,7 @@ VIDEO_EXTENSIONS_FILTER = (
     "*.mp4 *.mkv *.avi *.mov *.flv *.wmv *.webm *.ts *.m4v"
     " *.mpg *.mpeg *.m2ts *.mts *.3gp *.ogv *.ogm *.vob *.f4v *.asf *.divx",
 )
+PRESERVE_EXTENSIONS = (".mp4", ".mkv", ".mov", ".ts", ".mts", ".m2ts", ".webm")
 
 
 class TextCheckbox(ctk.CTkFrame):
@@ -1253,7 +1254,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.8.0"
+        self.version = "1.8.1"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
@@ -4389,6 +4390,8 @@ class VideoConverterApp:
 
             # Use input file extension as default
             input_ext = os.path.splitext(normalized_path)[1] or ".mp4"
+            if input_ext.lower() not in PRESERVE_EXTENSIONS:
+                input_ext = ".mp4"
             output_path = os.path.normpath(
                 os.path.join(
                     output_dir,
@@ -4648,6 +4651,8 @@ class VideoConverterApp:
 
             # Use input file extension as default
             input_ext = os.path.splitext(normalized_path)[1] or ".mp4"
+            if input_ext.lower() not in PRESERVE_EXTENSIONS:
+                input_ext = ".mp4"
             output_path = os.path.normpath(
                 os.path.join(
                     output_dir,
@@ -5528,8 +5533,11 @@ class VideoConverterApp:
 
             # Preserve the original file extension
             original_extension = os.path.splitext(current_output)[1]
-            if not original_extension:  # If no extension, default to .mp4
+            if not original_extension:
                 original_extension = ".mp4"
+            else:
+                if original_extension.lower() not in PRESERVE_EXTENSIONS:
+                    original_extension = ".mp4"
 
             new_filename = f"{base_name}{codec_suffix}_custom{original_extension}"
             new_output = os.path.normpath(os.path.join(dir_name, new_filename))
