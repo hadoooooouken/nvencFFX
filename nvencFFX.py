@@ -16,7 +16,7 @@ from io import BytesIO
 from json import dump, load
 from re import sub, search, compile, IGNORECASE
 from shlex import split
-from threading import Event, Thread, Timer
+from threading import Event, Lock, Thread, Timer
 from tkinter import filedialog, messagebox, simpledialog
 from winsound import MB_ICONASTERISK, MessageBeep
 
@@ -1254,7 +1254,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.8.1"
+        self.version = "1.8.2"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
@@ -1540,6 +1540,14 @@ class VideoConverterApp:
         # Screen recording variables
         self.is_recording = False
         self.recording_process = None
+        self.recording_parts = []
+        self.recording_part_index = 0
+        self.recording_base_filename = None
+        self.recording_restart_attempts = 0
+        self.max_restart_attempts = 3
+        self.recording_stopped_by_user = False
+        self.recording_finalizing = False
+        self.recording_lock = Lock()
         # Preview 10s
         self.preview_process = None
         # Custom presets
@@ -3735,7 +3743,16 @@ class VideoConverterApp:
             # Start recording
             self._start_recording()
 
-    def _start_recording(self):
+    def _start_recording(self, restart=False):
+        if restart:
+            return self._launch_recording_segment()
+
+        if self.recording_finalizing:
+            messagebox.showinfo(
+                "Screen recording", "Please wait until the previous recording is saved."
+            )
+            return
+
         if not hasattr(self, "original_title"):
             self.original_title = self.master.title()
 
@@ -3756,14 +3773,24 @@ class VideoConverterApp:
             desktop = os.path.join(os.path.expanduser("~"), "Desktop")
             output_file = os.path.join(desktop, f"screen_record-{date_str}.mp4")
 
-        # Set up temporary files for video and audio
+        # Set up the recording session. Video is written to numbered segments;
+        # audio remains continuous and is muxed after the segments are joined.
         self.final_record_file = output_file
-        self.temp_video_file = os.path.join(
-            tempfile.gettempdir(), f"temp_vid_{date_str}.mp4"
+        output_extension = os.path.splitext(output_file)[1] or ".mp4"
+        self.recording_base_filename = os.path.join(
+            tempfile.gettempdir(),
+            f"nvencffx_record_{date_str}_{os.getpid()}_{time.time_ns()}",
         )
-        self.temp_audio_file = os.path.join(
-            tempfile.gettempdir(), f"temp_aud_{date_str}.wav"
-        )
+        self.recording_extension = output_extension
+        self.recording_parts = []
+        self.recording_part_index = 1
+        self.recording_restart_attempts = 0
+        self.recording_stopped_by_user = False
+        self.recording_finalizing = False
+        with self.recording_lock:
+            self.recording_process = None
+        self.temp_video_file = self._recording_part_filename()
+        self.temp_audio_file = f"{self.recording_base_filename}_audio.wav"
 
         # Get FPS - use 60 if source or not specified
         fps = self.fps_option.get()
@@ -3820,12 +3847,9 @@ class VideoConverterApp:
                 except Exception:
                     command.extend(val.split())
 
-        # Constant FPS + No audio
-        command.extend(["-fps_mode", self.fps_mode.get(), "-an", self.temp_video_file])
-
-        # PRINT THE COMMAND TO CONSOLE
-        print("Screen recording command:")
-        print(" ".join(command))
+        # Constant FPS + No audio. The segment filename is added at launch time.
+        command.extend(["-fps_mode", self.fps_mode.get(), "-an"])
+        self.recording_command = command
 
         try:
             # Update UI first
@@ -3845,52 +3869,18 @@ class VideoConverterApp:
             # Minimize window after 1 second
             self._iconify_job = self.master.after(1000, self.master.iconify)
 
-            # Start recording process after 1 second delay using Timer
+            # Start recording process after a short delay using Timer
             def start_recording():
                 if not self.is_recording:
                     return
                 try:
-                    startupinfo = None
-                    creationflags = 0
-                    if os.name == "nt":
-                        startupinfo = subprocess.STARTUPINFO()
-                        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                        startupinfo.wShowWindow = subprocess.SW_HIDE
-                        creationflags = subprocess.CREATE_NO_WINDOW
-
-                    self.recording_process = subprocess.Popen(
-                        command,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,
-                        startupinfo=startupinfo,
-                        creationflags=creationflags,
-                        encoding="utf-8",
-                        errors="replace",
-                    )
-
-                    self.ffmpeg_output.set("Screen recording started...")
-
-                    # Start audio recording thread if not disabled
-                    if (
-                        getattr(self, "audio_option", None)
-                        and self.audio_option.get() != "disable"
-                    ):
-                        self.audio_thread = Thread(target=self._record_audio_loop)
-                        self.audio_thread.daemon = True
-                        self.audio_thread.start()
-
-                    # Start monitoring thread
-                    recording_thread = Thread(
-                        target=self._monitor_recording, daemon=True
-                    )
-                    recording_thread.start()
+                    self._start_recording(restart=True)
                 except Exception as e:
                     self.master.after(
                         0,
-                        lambda: self._handle_recording_error(str(e)),
+                        lambda error_msg=str(e): self._handle_recording_error(
+                            error_msg
+                        ),
                     )
 
             # Use Timer to delay the recording start by 2 seconds
@@ -3901,11 +3891,91 @@ class VideoConverterApp:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start screen recording: {str(e)}")
 
+    def _recording_part_filename(self):
+        return (
+            f"{self.recording_base_filename}_part{self.recording_part_index}"
+            f"{self.recording_extension}"
+        )
+
+    def _hidden_process_options(self):
+        startupinfo = None
+        creationflags = 0
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            creationflags = subprocess.CREATE_NO_WINDOW
+        return startupinfo, creationflags
+
+    def _launch_recording_segment(self):
+        """Launch FFmpeg for the current segment and attach its own monitor."""
+        if not self.is_recording or self.recording_stopped_by_user:
+            return False
+
+        segment_file = self._recording_part_filename()
+        command = [*self.recording_command, segment_file]
+        startupinfo, creationflags = self._hidden_process_options()
+
+        print(f"Screen recording command (part {self.recording_part_index}):")
+        print(" ".join(command))
+
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            startupinfo=startupinfo,
+            creationflags=creationflags,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        with self.recording_lock:
+            if not self.is_recording or self.recording_stopped_by_user:
+                process.terminate()
+                return False
+            self.recording_process = process
+            self.temp_video_file = segment_file
+            self.recording_parts.append(segment_file)
+
+        self.master.after(
+            0, lambda: self.status_text.set("Screen is recording now...")
+        )
+
+        if self.recording_part_index == 1:
+            self.master.after(
+                0, lambda: self.ffmpeg_output.set("Screen recording started...")
+            )
+
+            # Audio is recorded once for the entire session, not once per segment.
+            if (
+                getattr(self, "audio_option", None)
+                and self.audio_option.get() != "disable"
+            ):
+                self.audio_thread = Thread(target=self._record_audio_loop, daemon=True)
+                self.audio_thread.start()
+        else:
+            part_index = self.recording_part_index
+            self.master.after(
+                0,
+                lambda p=part_index: self.ffmpeg_output.set(
+                    f"Screen recording resumed in segment {p}."
+                ),
+            )
+
+        Thread(
+            target=self._monitor_recording, args=(process,), daemon=True
+        ).start()
+        return True
+
     def _handle_recording_error(self, error_msg):
         """Reset UI after a failed recording start (called from Timer thread)."""
         if hasattr(self, "original_title"):
             self.master.title(self.original_title)
         self.is_recording = False
+        self.recording_stopped_by_user = True
         self.recording_process = None
         self.screen_record_button.configure(
             text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
@@ -3968,6 +4038,7 @@ class VideoConverterApp:
             print(f"Audio recording error: {e}")
 
     def _stop_recording(self):
+        self.recording_stopped_by_user = True
         self.is_recording = False
         if hasattr(self, "original_title"):
             self.master.title(self.original_title)
@@ -3982,7 +4053,10 @@ class VideoConverterApp:
             self.master.after_cancel(self._iconify_job)
             self._iconify_job = None
 
-        if not self.recording_process:
+        with self.recording_lock:
+            process = self.recording_process
+
+        if not process and not self.recording_parts:
             # Timer was cancelled before FFmpeg started — just reset UI
             self.screen_record_button.configure(
                 text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
@@ -3991,65 +4065,119 @@ class VideoConverterApp:
             self.ffmpeg_output.set("")
             return
 
+        if process and process.poll() is None:
+            try:
+                # Send 'q' to gracefully stop FFmpeg and finalize the segment.
+                process.stdin.write("q")
+                process.stdin.flush()
+            except (BrokenPipeError, OSError, IOError, AttributeError) as e:
+                print(f"Failed to send stop signal via stdin: {e}")
+                process.terminate()
+
+        self._begin_recording_finalization(process)
+
+    def _begin_recording_finalization(self, process=None, failure_message=None):
+        """Ensure that only one thread joins and saves a recording session."""
+        with self.recording_lock:
+            if self.recording_finalizing:
+                return
+            self.recording_finalizing = True
+
+        self.master.after(
+            0, lambda: self.screen_record_button.configure(state="disabled")
+        )
+        Thread(
+            target=self._finalize_recording,
+            args=(process, failure_message),
+            daemon=True,
+        ).start()
+
+    def _concat_recording_parts(self):
+        """Join all usable video segments without re-encoding."""
+        parts = [
+            part
+            for part in self.recording_parts
+            if os.path.exists(part) and os.path.getsize(part) > 0
+        ]
+        if not parts:
+            raise Exception(
+                "FFmpeg failed to generate a video segment. Check encoder settings."
+            )
+        if len(parts) == 1:
+            return parts[0]
+
+        concat_list = f"{self.recording_base_filename}_concat.txt"
+        concat_output = (
+            f"{self.recording_base_filename}_joined{self.recording_extension}"
+        )
         try:
-            # Send 'q' to gracefully stop FFmpeg
-            self.recording_process.stdin.write("q")
-            self.recording_process.stdin.flush()
-        except (BrokenPipeError, OSError, IOError) as e:
-            # If stdin fails, terminate the process
-            print(f"Failed to send stop signal via stdin: {e}")
-            self.recording_process.terminate()
+            with open(concat_list, "w", encoding="utf-8", newline="\n") as file:
+                for part in parts:
+                    escaped_part = os.path.abspath(part).replace("\\", "/")
+                    escaped_part = escaped_part.replace("'", "'\\''")
+                    file.write(f"file '{escaped_part}'\n")
 
-        # Start finalization in a background thread to avoid freezing UI
-        Thread(target=self._finalize_recording, daemon=True).start()
+            startupinfo, creationflags = self._hidden_process_options()
+            concat_cmd = [
+                self.ffmpeg_path,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                concat_list,
+                "-c",
+                "copy",
+                concat_output,
+            ]
+            result = subprocess.run(
+                concat_cmd,
+                startupinfo=startupinfo,
+                creationflags=creationflags,
+            )
+            if (
+                result.returncode != 0
+                or not os.path.exists(concat_output)
+                or os.path.getsize(concat_output) == 0
+            ):
+                raise Exception("Failed to join screen recording segments.")
+            return concat_output
+        finally:
+            try:
+                if os.path.exists(concat_list):
+                    os.remove(concat_list)
+            except OSError:
+                pass
 
-    def _finalize_recording(self):
+    def _finalize_recording(self, process=None, failure_message=None):
+        saved = False
         try:
             # Wait for process to finish
-            try:
-                self.recording_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.recording_process.kill()
+            if process:
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
 
             # Ensure audio thread is finished
             if hasattr(self, "audio_thread") and self.audio_thread:
                 self.audio_thread.join(timeout=2)
                 self.audio_thread = None
 
-            self.recording_process = None
             self.master.after(
-                0,
-                lambda: self.screen_record_button.configure(
-                    text="Screen Record", fg_color=ACCENT_GREY, hover_color=HOVER_GREY
-                ),
-            )
-
-            # --- CHECK: Ensure video file was actually created ---
-            if (
-                not os.path.exists(self.temp_video_file)
-                or os.path.getsize(self.temp_video_file) == 0
-            ):
-                raise Exception(
-                    "FFmpeg failed to generate the video file. Check encoder settings."
-                )
-
-            self.master.after(
-                0, lambda: self.status_text.set("Muxing audio and video...")
+                0, lambda: self.status_text.set("Joining recording segments...")
             )
             self.master.after(
                 0,
                 lambda: self.ffmpeg_output.set(
-                    "Muxing audio and video... please wait."
+                    "Joining recording segments... please wait."
                 ),
             )
 
-            startupinfo = None
-            creationflags = 0
-            if os.name == "nt":
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-                creationflags = subprocess.CREATE_NO_WINDOW
+            joined_video_file = self._concat_recording_parts()
+            startupinfo, creationflags = self._hidden_process_options()
 
             has_audio = (
                 getattr(self, "audio_option", None)
@@ -4059,11 +4187,20 @@ class VideoConverterApp:
             )
 
             if has_audio:
+                self.master.after(
+                    0, lambda: self.status_text.set("Muxing audio and video...")
+                )
+                self.master.after(
+                    0,
+                    lambda: self.ffmpeg_output.set(
+                        "Muxing audio and video... please wait."
+                    ),
+                )
                 mux_cmd = [
                     self.ffmpeg_path,
                     "-y",
                     "-i",
-                    self.temp_video_file,
+                    joined_video_file,
                     "-i",
                     self.temp_audio_file,
                     "-c:v",
@@ -4082,21 +4219,42 @@ class VideoConverterApp:
                 if result.returncode != 0 or not os.path.exists(self.final_record_file):
                     raise Exception("Failed to mux audio and video streams.")
             else:
-                move(self.temp_video_file, self.final_record_file)
+                move(joined_video_file, self.final_record_file)
 
-            # Cleanup
-            for f in [self.temp_video_file, self.temp_audio_file]:
+            saved = True
+
+            # Cleanup only after the final file has been saved successfully.
+            cleanup_files = [*self.recording_parts, self.temp_audio_file]
+            if joined_video_file not in self.recording_parts:
+                cleanup_files.append(joined_video_file)
+            for f in cleanup_files:
                 try:
                     if os.path.exists(f):
                         os.remove(f)
                 except Exception:
                     pass
 
-            self.master.after(
-                0, lambda: self.status_text.set("Screen recording stopped")
-            )
             filename = os.path.basename(getattr(self, "final_record_file", "output"))
-            self.master.after(0, lambda: self.ffmpeg_output.set(f"Saved to {filename}"))
+            if failure_message:
+                self.master.after(
+                    0,
+                    lambda: self.status_text.set(
+                        "Recording stopped after repeated FFmpeg errors"
+                    ),
+                )
+                self.master.after(
+                    0,
+                    lambda: self.ffmpeg_output.set(
+                        f"Saved partial recording to {filename}. {failure_message}"
+                    ),
+                )
+            else:
+                self.master.after(
+                    0, lambda: self.status_text.set("Screen recording stopped")
+                )
+                self.master.after(
+                    0, lambda: self.ffmpeg_output.set(f"Saved to {filename}")
+                )
 
             # Notify user
             MessageBeep(MB_ICONASTERISK)
@@ -4110,20 +4268,109 @@ class VideoConverterApp:
 
         except Exception as e:
             print(f"Finalization failed: {e}")
+            existing_parts = [
+                part for part in self.recording_parts if os.path.exists(part)
+            ]
+            recovery_hint = ""
+            if existing_parts:
+                recovery_hint = f" Segments were kept in {tempfile.gettempdir()}."
             self.master.after(
                 0, lambda: self.status_text.set("Error finishing recording")
             )
-            self.master.after(0, lambda msg=str(e): self.ffmpeg_output.set(msg))
+            self.master.after(
+                0,
+                lambda msg=f"{e}{recovery_hint}": self.ffmpeg_output.set(msg),
+            )
+        finally:
+            with self.recording_lock:
+                if self.recording_process is process or not self.is_recording:
+                    self.recording_process = None
+                self.recording_finalizing = False
+            if hasattr(self, "original_title"):
+                self.master.after(
+                    0, lambda: self.master.title(self.original_title)
+                )
+            self.master.after(
+                0,
+                lambda: self.screen_record_button.configure(
+                    text="Screen Record",
+                    fg_color=ACCENT_GREY,
+                    hover_color=HOVER_GREY,
+                    state="normal",
+                ),
+            )
+            if saved:
+                self.recording_parts = []
 
-    def _monitor_recording(self):
-        """Monitor the recording process output"""
-        while self.is_recording and self.recording_process:
+    def _restart_recording(self, failed_process, returncode):
+        """Start the next segment after an unexpected FFmpeg exit."""
+        with self.recording_lock:
+            if (
+                not self.is_recording
+                or self.recording_stopped_by_user
+                or self.recording_process is not failed_process
+            ):
+                return
+            self.recording_process = None
+
+        while self.is_recording and not self.recording_stopped_by_user:
+            if self.recording_restart_attempts >= self.max_restart_attempts:
+                self._recording_recovery_failed(
+                    f"FFmpeg exited with code {returncode}; restart limit reached."
+                )
+                return
+
+            self.recording_restart_attempts += 1
+            self.recording_part_index += 1
+            attempt = self.recording_restart_attempts
+            part_index = self.recording_part_index
+            self.master.after(
+                0,
+                lambda a=attempt: self.status_text.set(
+                    f"Display changed. Restarting recording ({a}/"
+                    f"{self.max_restart_attempts})..."
+                ),
+            )
+            self.master.after(
+                0,
+                lambda a=attempt, p=part_index: self.ffmpeg_output.set(
+                    f"FFmpeg stopped unexpectedly; starting segment {p} "
+                    f"(attempt {a})."
+                ),
+            )
+
+            # Let DXGI settle after the display topology change.
+            time.sleep(1.0)
+            if not self.is_recording or self.recording_stopped_by_user:
+                return
             try:
-                line = self.recording_process.stdout.readline()
+                if self._start_recording(restart=True):
+                    return
+            except Exception as e:
+                print(f"Failed to restart screen recording: {e}")
+                returncode = f"restart error: {e}"
+
+    def _recording_recovery_failed(self, message):
+        """Stop recovery after the retry limit and preserve captured material."""
+        with self.recording_lock:
+            if not self.is_recording or self.recording_stopped_by_user:
+                return
+            self.is_recording = False
+            process = self.recording_process
+            self.recording_process = None
+
+        self.master.after(0, lambda: self.master.deiconify())
+        self._begin_recording_finalization(process, message)
+
+    def _monitor_recording(self, process):
+        """Monitor one FFmpeg process without confusing it with a replacement."""
+        while True:
+            try:
+                line = process.stdout.readline()
                 if not line:
                     break
 
-                if self.is_recording:  # Check again in case it changed
+                if self.is_recording and self.recording_process is process:
                     self.master.after(
                         0, lambda l=line: self.ffmpeg_output.set(l.strip())
                     )
@@ -4131,9 +4378,18 @@ class VideoConverterApp:
             except Exception:
                 break
 
-        # If we get here and still recording, process ended unexpectedly
-        if self.is_recording:
-            self.master.after(0, self._stop_recording)
+        try:
+            returncode = process.wait()
+        except Exception:
+            returncode = process.poll()
+
+        # Manual stop clears is_recording first, so it can never trigger recovery.
+        if (
+            self.is_recording
+            and not self.recording_stopped_by_user
+            and self.recording_process is process
+        ):
+            self._restart_recording(process, returncode)
 
     def _toggle_conversion(self):
         # Check if single conversion is in progress

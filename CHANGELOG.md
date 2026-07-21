@@ -1,5 +1,13 @@
 # nvencFFX - Changelog
  
+## [1.8.2] - 2026-07-22
+- **Screen Recording Reliability**:
+    - Screen recordings are now written to numbered temporary segments;
+    - FFmpeg automatically restarts in a new segment when `ddagrab` loses access after a display topology change, such as switching projection modes with **Win+P**;
+    - Added a three-attempt restart limit to prevent infinite recovery loops;
+    - Stopping the recording manually now joins all captured segments with FFmpeg stream copy (`-c copy`) before muxing audio, without re-encoding or quality loss;
+    - Temporary segments are removed after the final recording is saved successfully and preserved if finalization fails.
+
 ## [1.8.1] - 2026-06-23
 - **Default output container**: Improved automatic output file naming. When a video file with an extension outside the preserved list (`.mp4`, `.mkv`, `.mov`, `.ts`, `.m2ts`, `.webm`) is selected, the output now defaults to `.mp4` for better HEVC/AV1 compatibility. Extensions from the preserved list remain unchanged.
 
