@@ -1,5 +1,9 @@
 # nvencFFX - Changelog
  
+## [1.8.3] - 2026-08-02
+- **FFmpeg & NVENC Encoding**:
+  - Fixed unrecognized option error by updating NVENC Adaptive Quantization flags syntax (`-spatial_aq` ➔ `-spatial-aq`, `-temporal_aq` ➔ `-temporal-aq`) for modern FFmpeg compatibility.
+
 ## [1.8.2] - 2026-07-22
 - **Screen Recording Reliability**:
     - Screen recordings are now written to numbered temporary segments;

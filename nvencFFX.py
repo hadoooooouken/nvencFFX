@@ -1254,7 +1254,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.8.2"
+        self.version = "1.8.3"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
@@ -5378,10 +5378,10 @@ class VideoConverterApp:
                 command.extend(["-split_encode_mode:v", self.split_encode_mode.get()])
 
         if self.spatial_aq.get():
-            command.extend(["-spatial_aq:v", "1"])
+            command.extend(["-spatial-aq:v", "1"])
 
         if self.temporal_aq.get():
-            command.extend(["-temporal_aq:v", "1"])
+            command.extend(["-temporal-aq:v", "1"])
 
         if self.strict_gop.get():
             command.extend(["-strict_gop:v", "1"])
@@ -5430,8 +5430,8 @@ class VideoConverterApp:
         # to avoid applying them to copied streams (like cover art/attached pics).
         v0_targets_with_v = {
             "-preset:v", "-tune:v", "-profile:v", "-level:v", "-tier:v", "-coder:v",
-            "-multipass:v", "-lookahead_level:v", "-split_encode_mode:v", "-spatial_aq:v",
-            "-temporal_aq:v", "-strict_gop:v", "-no-scenecut:v", "-weighted_pred:v",
+            "-multipass:v", "-lookahead_level:v", "-split_encode_mode:v", "-spatial-aq:v",
+            "-temporal-aq:v", "-strict_gop:v", "-no-scenecut:v", "-weighted_pred:v",
             "-rc:v", "-qp:v", "-b:v", "-maxrate:v", "-bufsize:v"
         }
         v0_targets_no_v = {
