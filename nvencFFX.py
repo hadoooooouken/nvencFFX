@@ -53,6 +53,23 @@ IDM_STOP_RECORDING = 1002
 IDM_OPEN_APP = 1003
 IDM_EXIT = 1004
 
+# Taskbar progress overlay (ITaskbarList3) constants
+CLSID_TASKBAR_LIST = "{56FDF344-FD6D-11D0-958A-006097C9A090}"
+IID_ITASKBARLIST3 = "{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}"
+CLSCTX_INPROC_SERVER = 0x1
+
+TBPF_NOPROGRESS = 0x0
+TBPF_INDETERMINATE = 0x1
+TBPF_NORMAL = 0x2
+TBPF_ERROR = 0x4
+TBPF_PAUSED = 0x8
+
+# ITaskbarList3 vtable slot indices (IUnknown -> ITaskbarList -> ITaskbarList2 -> ITaskbarList3)
+_TBL_VTBL_RELEASE = 2
+_TBL_VTBL_HR_INIT = 3
+_TBL_VTBL_SET_PROGRESS_VALUE = 9
+_TBL_VTBL_SET_PROGRESS_STATE = 10
+
 # Process snapshot constants for killing only our ffmpeg.exe
 TH32CS_SNAPPROCESS = 0x00000002
 PROCESS_QUERY_INFORMATION = 0x0400
@@ -108,6 +125,9 @@ _shell32.DragQueryFileW.restype = ctypes.wintypes.UINT
 
 # User32 — Window Proc & Clipboard
 _user32 = ctypes.windll.user32
+_user32.GetAncestor.argtypes = [ctypes.wintypes.HWND, ctypes.wintypes.UINT]
+_user32.GetAncestor.restype = ctypes.wintypes.HWND
+GA_ROOT = 2
 _user32.SetWindowLongPtrW.argtypes = [
     ctypes.wintypes.HWND,
     ctypes.c_int,
@@ -141,6 +161,54 @@ _kernel32.GlobalUnlock.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalUnlock.restype = ctypes.wintypes.BOOL
 _kernel32.GlobalFree.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalFree.restype = ctypes.wintypes.HANDLE
+
+# ole32 bindings for the Taskbar progress overlay (ITaskbarList3), used without
+# the comtypes dependency to stay consistent with the raw ctypes Win32 style
+# already used by DropTarget/TrayIcon above.
+_ole32 = ctypes.windll.ole32
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ("Data1", ctypes.wintypes.DWORD),
+        ("Data2", ctypes.wintypes.WORD),
+        ("Data3", ctypes.wintypes.WORD),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
+
+
+_ole32.CLSIDFromString.argtypes = [ctypes.wintypes.LPCWSTR, ctypes.POINTER(_GUID)]
+_ole32.CLSIDFromString.restype = ctypes.c_long
+
+_ole32.CoCreateInstance.argtypes = [
+    ctypes.POINTER(_GUID),
+    ctypes.c_void_p,
+    ctypes.wintypes.DWORD,
+    ctypes.POINTER(_GUID),
+    ctypes.POINTER(ctypes.c_void_p),
+]
+_ole32.CoCreateInstance.restype = ctypes.c_long
+
+_ole32.CoInitialize.argtypes = [ctypes.c_void_p]
+_ole32.CoInitialize.restype = ctypes.c_long
+
+
+def _com_vtable_call(interface_ptr, vtable_index, restype, *argtypes):
+    """Bind a callable to a COM vtable slot for a raw ctypes interface pointer.
+
+    interface_ptr must be the ctypes.c_void_p returned by CoCreateInstance.
+    The returned callable still expects interface_ptr as its first argument
+    (the COM 'this' pointer), followed by the method's own parameters.
+    """
+    vtable_address = ctypes.cast(
+        interface_ptr, ctypes.POINTER(ctypes.c_void_p)
+    ).contents.value
+    method_address = ctypes.cast(
+        vtable_address + vtable_index * ctypes.sizeof(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ).contents.value
+    method_type = ctypes.WINFUNCTYPE(restype, ctypes.c_void_p, *argtypes)
+    return method_type(method_address)
 
 
 def _set_clipboard_text(text: str) -> bool:
@@ -663,6 +731,98 @@ class TrayIcon:
             self._prev_wndproc = None
 
 
+class TaskbarProgress:
+    """Drives the Windows taskbar progress overlay (ITaskbarList3) for a window.
+
+    This is a cosmetic feature: any failure to create or use the underlying COM
+    object is swallowed so it can never block or crash a conversion.
+    """
+
+    def __init__(self, hwnd):
+        self.hwnd = hwnd
+        self._interface_ptr = None
+
+        try:
+            _ole32.CoInitialize(None)
+
+            clsid = _GUID()
+            iid = _GUID()
+            _ole32.CLSIDFromString(CLSID_TASKBAR_LIST, ctypes.byref(clsid))
+            _ole32.CLSIDFromString(IID_ITASKBARLIST3, ctypes.byref(iid))
+
+            ppv = ctypes.c_void_p()
+            result = _ole32.CoCreateInstance(
+                ctypes.byref(clsid),
+                None,
+                CLSCTX_INPROC_SERVER,
+                ctypes.byref(iid),
+                ctypes.byref(ppv),
+            )
+            if result != 0 or not ppv:
+                return
+
+            self._interface_ptr = ppv
+            hr_init = _com_vtable_call(
+                self._interface_ptr, _TBL_VTBL_HR_INIT, ctypes.c_long
+            )
+            hr_init(self._interface_ptr)
+        except OSError:
+            # Taskbar API unavailable (e.g. explorer.exe not running) - disable overlay.
+            self._interface_ptr = None
+
+    def _is_available(self):
+        return self._interface_ptr is not None
+
+    def set_progress(self, fraction, total=100):
+        """fraction: conversion completion in the 0.0-1.0 range."""
+        if not self._is_available():
+            return
+        completed = max(0, min(total, int(round(fraction * total))))
+        try:
+            set_value = _com_vtable_call(
+                self._interface_ptr,
+                _TBL_VTBL_SET_PROGRESS_VALUE,
+                ctypes.c_long,
+                ctypes.wintypes.HWND,
+                ctypes.c_ulonglong,
+                ctypes.c_ulonglong,
+            )
+            set_value(self._interface_ptr, self.hwnd, completed, total)
+        except OSError:
+            pass
+
+    def set_state(self, state):
+        if not self._is_available():
+            return
+        try:
+            set_state_fn = _com_vtable_call(
+                self._interface_ptr,
+                _TBL_VTBL_SET_PROGRESS_STATE,
+                ctypes.c_long,
+                ctypes.wintypes.HWND,
+                ctypes.wintypes.DWORD,
+            )
+            set_state_fn(self._interface_ptr, self.hwnd, state)
+        except OSError:
+            pass
+
+    def clear(self):
+        self.set_state(TBPF_NOPROGRESS)
+
+    def release(self):
+        if not self._is_available():
+            return
+        try:
+            release_fn = _com_vtable_call(
+                self._interface_ptr, _TBL_VTBL_RELEASE, ctypes.c_long
+            )
+            release_fn(self._interface_ptr)
+        except OSError:
+            pass
+        finally:
+            self._interface_ptr = None
+
+
 class BatchConverterWindow:
     def __init__(self, master, main_app):
         self.master = master
@@ -1045,6 +1205,7 @@ class BatchConverterWindow:
 
         self.is_converting = True
         self.current_file_index = 0
+        self._batch_had_error = False
 
         # Save original input/output so we can restore after batch
         self._saved_input_file = self.main_app.input_file.get()
@@ -1057,6 +1218,8 @@ class BatchConverterWindow:
         self.main_app.convert_button.configure(
             text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
         )
+        self.main_app.taskbar_progress.set_state(TBPF_NORMAL)
+        self.main_app.taskbar_progress.set_progress(0.0)
 
         self._convert_next_file()
 
@@ -1070,6 +1233,10 @@ class BatchConverterWindow:
             self.main_app.progress_frame.grid_remove()
             self.main_app.ffmpeg_output.set("")
             self.main_app.status_text.set("Batch conversion completed!")
+            if getattr(self, "_batch_had_error", False):
+                self.main_app.taskbar_progress.set_state(TBPF_ERROR)
+            else:
+                self.main_app.taskbar_progress.clear()
             self._update_main_convert_button()
             self._restore_input_output()
             return
@@ -1130,6 +1297,7 @@ class BatchConverterWindow:
             conversion_thread.start()
 
         except Exception as e:
+            self._batch_had_error = True
             self._update_file_status(self.current_file_index, f"Failed: {str(e)}")
             self.current_file_index += 1
             self.master.after(100, self._convert_next_file)
@@ -1187,6 +1355,7 @@ class BatchConverterWindow:
                     0, lambda: self._update_file_status(file_index, "Done")
                 )
             elif self.is_converting:
+                self._batch_had_error = True
                 self.master.after(
                     0, lambda: self._update_file_status(file_index, "Failed")
                 )
@@ -1198,6 +1367,8 @@ class BatchConverterWindow:
         except Exception as e:
             error_msg = str(e)
             status = "Cancelled" if not self.is_converting else f"Failed: {error_msg}"
+            if self.is_converting:
+                self._batch_had_error = True
             self.master.after(0, lambda: self._update_file_status(file_index, status))
 
         finally:
@@ -1216,6 +1387,7 @@ class BatchConverterWindow:
         self._update_main_convert_button()
         self.main_app.progress_frame.grid_remove()
         self.main_app.progress_value.set(0.0)
+        self.main_app.taskbar_progress.clear()
         self._restore_input_output()
 
     def _restore_input_output(self):
@@ -1379,6 +1551,12 @@ class VideoConverterApp:
             version=self.version,
         )
         self._tray_icon.show()
+
+        # Initialize Windows taskbar progress overlay for this window
+        # ITaskbarList3 needs the actual top-level frame HWND, not the client
+        # sub-window handle winfo_id() returns - GetAncestor resolves it.
+        taskbar_hwnd = _user32.GetAncestor(hwnd, GA_ROOT) or hwnd
+        self.taskbar_progress = TaskbarProgress(taskbar_hwnd)
 
         # JSON Settings
         self.ffmpeg_custom_path.trace_add(
@@ -3670,6 +3848,8 @@ class VideoConverterApp:
             text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
         )
         self.is_converting = True
+        self.taskbar_progress.set_state(TBPF_NORMAL)
+        self.taskbar_progress.set_progress(0.0)
 
         self.status_text.set("Conversion in progress...")
         self.ffmpeg_output.set("Starting conversion...")
@@ -5521,6 +5701,7 @@ class VideoConverterApp:
                     ),
                 )
                 self.master.after(0, lambda: MessageBeep(MB_ICONASTERISK))
+                self.master.after(0, self.taskbar_progress.clear)
             elif not self.is_converting:
                 self.master.after(
                     0, lambda: self.status_text.set("Conversion cancelled by user")
@@ -5539,6 +5720,7 @@ class VideoConverterApp:
                         "Cancelled", "Conversion was cancelled"
                     ),
                 )
+                self.master.after(0, self.taskbar_progress.clear)
             else:
                 self.master.after(0, lambda: self.status_text.set("Conversion error!"))
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
@@ -5559,6 +5741,9 @@ class VideoConverterApp:
                             f"Last output: {last_line}"
                         ),
                     ),
+                )
+                self.master.after(
+                    0, lambda: self.taskbar_progress.set_state(TBPF_ERROR)
                 )
             self.is_converting = False
         except FileNotFoundError:
@@ -5583,6 +5768,7 @@ class VideoConverterApp:
                     ),
                 ),
             )
+            self.master.after(0, lambda: self.taskbar_progress.set_state(TBPF_ERROR))
             self.is_converting = False
         except Exception:
             self.master.after(
@@ -5605,6 +5791,7 @@ class VideoConverterApp:
                     "Unexpected Error", "An unexpected error occurred during conversion"
                 ),
             )
+            self.master.after(0, lambda: self.taskbar_progress.set_state(TBPF_ERROR))
             self.is_converting = False
 
     def _run_ffprobe_for_size(
@@ -6121,6 +6308,7 @@ class VideoConverterApp:
                     progress = total_seconds / self.total_duration
                     self.progress_value.set(progress)
                     self.progress_label.configure(text=f"{progress * 100:.1f}%")
+                    self.taskbar_progress.set_progress(progress)
             except Exception:
                 pass
 
@@ -8528,6 +8716,10 @@ class VideoConverterApp:
         if hasattr(self, "_tray_icon") and self._tray_icon:
             self._tray_icon.destroy()
             self._tray_icon = None
+
+        # Release the taskbar progress overlay COM object
+        if hasattr(self, "taskbar_progress") and self.taskbar_progress:
+            self.taskbar_progress.release()
 
         # Properly release Windows API resources for Drag-and-Drop
         if hasattr(self, "drop_target") and getattr(self, "drop_target", None):
