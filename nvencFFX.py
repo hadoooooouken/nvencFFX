@@ -162,6 +162,33 @@ _kernel32.GlobalUnlock.restype = ctypes.wintypes.BOOL
 _kernel32.GlobalFree.argtypes = [ctypes.wintypes.HANDLE]
 _kernel32.GlobalFree.restype = ctypes.wintypes.HANDLE
 
+# Ntdll — NtSuspendProcess/NtResumeProcess, used to pause/resume the ffmpeg
+# child process for the Convert button's right-click pause feature.
+_ntdll = ctypes.windll.ntdll
+PROCESS_SUSPEND_RESUME = 0x0800
+
+
+def _suspend_process_by_pid(pid: int) -> bool:
+    """Suspend all threads of the given process (Windows only)."""
+    handle = _kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+    if not handle:
+        return False
+    try:
+        return _ntdll.NtSuspendProcess(handle) == 0
+    finally:
+        _kernel32.CloseHandle(handle)
+
+
+def _resume_process_by_pid(pid: int) -> bool:
+    """Resume all threads of the given process (Windows only)."""
+    handle = _kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+    if not handle:
+        return False
+    try:
+        return _ntdll.NtResumeProcess(handle) == 0
+    finally:
+        _kernel32.CloseHandle(handle)
+
 # ole32 bindings for the Taskbar progress overlay (ITaskbarList3), used without
 # the comtypes dependency to stay consistent with the raw ctypes Win32 style
 # already used by DropTarget/TrayIcon above.
@@ -311,6 +338,8 @@ ACCENT_GREY = "#b2b2b2"
 HOVER_GREY = "#8e8e8e"
 ACCENT_RED = "#ff5555"
 HOVER_RED = "#d83636"
+ACCENT_ORANGE = "#f0a020"
+HOVER_ORANGE = "#d38c1a"
 TEXT_COLOR_W = "#ffffff"
 TEXT_COLOR_B = "#000000"
 PLACEHOLDER_COLOR = "#a0a0a0"
@@ -828,6 +857,8 @@ class BatchConverterWindow:
         self.master = master
         self.main_app = main_app
         self.is_converting = False
+        self.is_paused = False
+        self.current_process = None
         self.files = main_app.batch_files.copy()
         self._saved_input_file = ""
         self._saved_output_file = ""
@@ -1186,6 +1217,9 @@ class BatchConverterWindow:
 
     def _update_main_convert_button(self):
         if hasattr(self.main_app, "convert_button"):
+            # Pause/resume (right-click) only applies to a single conversion,
+            # never to batch mode.
+            self.main_app.is_paused = False
             if self.is_converting:
                 self.main_app.convert_button.configure(
                     text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
@@ -1324,6 +1358,7 @@ class BatchConverterWindow:
                 encoding="utf-8",
                 errors="replace",
             )
+            self.current_process = process
 
             for line in process.stdout:
                 if not self.is_converting:
@@ -1379,6 +1414,12 @@ class BatchConverterWindow:
                 self.master.after(0, lambda: self.main_app.ffmpeg_output.set(""))
 
     def cancel_batch_conversion(self):
+        if self.is_paused and self.current_process:
+            # Unblock the reader loop in _run_single_conversion, which is
+            # stuck on a suspended process's stdout and can't otherwise see
+            # is_converting flip to False.
+            _resume_process_by_pid(self.current_process.pid)
+            self.is_paused = False
         self.is_converting = False
         if 0 <= self.current_file_index < len(self.files):
             self._update_file_status(self.current_file_index, "Cancelled")
@@ -1389,6 +1430,38 @@ class BatchConverterWindow:
         self.main_app.progress_value.set(0.0)
         self.main_app.taskbar_progress.clear()
         self._restore_input_output()
+
+    def toggle_pause(self):
+        if not self.is_converting or not self.current_process:
+            return
+        if self.is_paused:
+            self.resume_conversion()
+        else:
+            self.pause_conversion()
+
+    def pause_conversion(self):
+        if not self.current_process:
+            return
+        if not _suspend_process_by_pid(self.current_process.pid):
+            return
+        self.is_paused = True
+        self.main_app.convert_button.configure(
+            text="Resume", fg_color=ACCENT_ORANGE, hover_color=HOVER_ORANGE
+        )
+        self.main_app.status_text.set("Batch conversion paused")
+        self.main_app.taskbar_progress.set_state(TBPF_PAUSED)
+
+    def resume_conversion(self):
+        if not self.current_process:
+            return
+        if not _resume_process_by_pid(self.current_process.pid):
+            return
+        self.is_paused = False
+        self.main_app.convert_button.configure(
+            text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
+        )
+        self.main_app.status_text.set("Conversion in progress...")
+        self.main_app.taskbar_progress.set_state(TBPF_NORMAL)
 
     def _restore_input_output(self):
         """Restore original input/output file paths after batch conversion"""
@@ -1516,6 +1589,7 @@ class VideoConverterApp:
         self.conversion_process = None
         self.conversion_thread = None
         self.is_converting = False
+        self.is_paused = False
 
         self._create_trim_slider()
 
@@ -3133,6 +3207,8 @@ class VideoConverterApp:
             font=("", 14, "bold"),
         )
         self.convert_button.pack(fill="x", pady=5)
+        # Right-click on the button pauses/resumes the running conversion.
+        self.convert_button.bind("<Button-3>", self._on_convert_right_click)
 
         # Status
         ctk.CTkLabel(main_frame, textvariable=self.status_text).grid(
@@ -3847,6 +3923,7 @@ class VideoConverterApp:
         self.convert_button.configure(
             text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
         )
+        self.is_paused = False
         self.is_converting = True
         self.taskbar_progress.set_state(TBPF_NORMAL)
         self.taskbar_progress.set_progress(0.0)
@@ -3859,6 +3936,13 @@ class VideoConverterApp:
     def _cancel_conversion(self):
         # Cancel single conversion — just set the flag, _run_ffmpeg handles UI
         if self.is_converting:
+            if self.is_paused and self.conversion_process:
+                # The ffmpeg process is suspended and producing no output, so
+                # the reader loop in _run_ffmpeg is blocked and can't notice
+                # is_converting flip to False. Resume it first so it can be
+                # read from (and terminated) again.
+                _resume_process_by_pid(self.conversion_process.pid)
+                self.is_paused = False
             self.is_converting = False
 
         # Also cancel batch conversion if active
@@ -3869,6 +3953,59 @@ class VideoConverterApp:
             and self.batch_converter_window.is_converting
         ):
             self.batch_converter_window.cancel_batch_conversion()
+
+    def _on_convert_right_click(self, event=None):
+        """Right-click on the Convert/Cancel button pauses or resumes the
+        running conversion — single file or batch."""
+        batch_running = (
+            hasattr(self, "batch_converter_window")
+            and self.batch_converter_window
+            and self.batch_converter_window.is_converting
+        )
+        if batch_running:
+            self.batch_converter_window.toggle_pause()
+        elif self.is_converting:
+            self._toggle_pause()
+
+    def _toggle_pause(self):
+        if not self.is_converting or not self.conversion_process:
+            return
+        if self.is_paused:
+            self._resume_conversion()
+        else:
+            self._pause_conversion()
+
+    def _pause_conversion(self):
+        if not self.conversion_process:
+            return
+        if not _suspend_process_by_pid(self.conversion_process.pid):
+            return
+        self.is_paused = True
+        self.convert_button.configure(
+            text="Resume", fg_color=ACCENT_ORANGE, hover_color=HOVER_ORANGE
+        )
+        self.status_text.set("Conversion paused")
+        self.taskbar_progress.set_state(TBPF_PAUSED)
+
+    def _resume_conversion(self):
+        if not self.conversion_process:
+            return
+        if not _resume_process_by_pid(self.conversion_process.pid):
+            return
+        self.is_paused = False
+        self.convert_button.configure(
+            text="Cancel", fg_color=ACCENT_RED, hover_color=HOVER_RED
+        )
+        self.status_text.set("Conversion in progress...")
+        self.taskbar_progress.set_state(TBPF_NORMAL)
+
+    def _reset_convert_button(self):
+        """Restore the Convert button to its idle state after a single
+        conversion finishes, errors out, or is cancelled."""
+        self.convert_button.configure(
+            text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
+        )
+        self.is_paused = False
 
     def _cancel_preview(self):
         """Cancel preview creation"""
@@ -4583,8 +4720,14 @@ class VideoConverterApp:
         )
 
         if batch_running or single_running:
-            # If any conversion is running, cancel both
-            self._cancel_conversion()
+            # Left click on "Resume" resumes instead of cancelling; left
+            # click on "Cancel" cancels as before.
+            if batch_running and self.batch_converter_window.is_paused:
+                self.batch_converter_window.resume_conversion()
+            elif single_running and self.is_paused:
+                self._resume_conversion()
+            else:
+                self._cancel_conversion()
         else:
             # Otherwise, start conversion
             if self.batch_files:
@@ -5738,12 +5881,7 @@ class VideoConverterApp:
                 )
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(
-                    0,
-                    lambda: self.convert_button.configure(
-                        text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-                    ),
-                )
+                self.master.after(0, self._reset_convert_button)
                 self.master.after(0, lambda: MessageBeep(MB_ICONASTERISK))
                 self.master.after(0, self.taskbar_progress.clear)
             elif not self.is_converting:
@@ -5752,12 +5890,7 @@ class VideoConverterApp:
                 )
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(
-                    0,
-                    lambda: self.convert_button.configure(
-                        text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-                    ),
-                )
+                self.master.after(0, self._reset_convert_button)
                 self.master.after(
                     0,
                     lambda: messagebox.showinfo(
@@ -5769,12 +5902,7 @@ class VideoConverterApp:
                 self.master.after(0, lambda: self.status_text.set("Conversion error!"))
                 self.master.after(0, lambda: self.ffmpeg_output.set(""))
                 self.master.after(0, lambda: self.progress_frame.grid_remove())
-                self.master.after(
-                    0,
-                    lambda: self.convert_button.configure(
-                        text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-                    ),
-                )
+                self.master.after(0, self._reset_convert_button)
                 self.master.after(
                     0,
                     lambda: messagebox.showerror(
@@ -5796,12 +5924,7 @@ class VideoConverterApp:
             )
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
-            self.master.after(
-                0,
-                lambda: self.convert_button.configure(
-                    text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-                ),
-            )
+            self.master.after(0, self._reset_convert_button)
             self.master.after(
                 0,
                 lambda: messagebox.showerror(
@@ -5823,12 +5946,7 @@ class VideoConverterApp:
             )
             self.master.after(0, lambda: self.ffmpeg_output.set(""))
             self.master.after(0, lambda: self.progress_frame.grid_remove())
-            self.master.after(
-                0,
-                lambda: self.convert_button.configure(
-                    text="Convert", fg_color=ACCENT_GREEN, hover_color=HOVER_GREEN
-                ),
-            )
+            self.master.after(0, self._reset_convert_button)
             self.master.after(
                 0,
                 lambda: messagebox.showerror(
