@@ -5419,9 +5419,9 @@ class VideoConverterApp:
                     command.extend(["-map", "0", "-ignore_unknown"])
                 else:
                     command.extend([
-                        "-map", "0:v",
-                        "-map", "0:a",
-                        "-map", "0:s",
+                        "-map", "0:v?",
+                        "-map", "0:a?",
+                        "-map", "0:s?",
                         "-map_metadata", "0",
                         "-map_chapters", "0",
                         "-ignore_unknown"
@@ -5500,9 +5500,9 @@ class VideoConverterApp:
                 command.extend(["-map", "0", "-ignore_unknown"])
             else:
                 command.extend([
-                    "-map", "0:v",
-                    "-map", "0:a",
-                    "-map", "0:s",
+                    "-map", "0:v?",
+                    "-map", "0:a?",
+                    "-map", "0:s?",
                     "-map_metadata", "0",
                     "-map_chapters", "0",
                     "-ignore_unknown"
