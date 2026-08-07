@@ -6470,9 +6470,31 @@ class VideoConverterApp:
                     progress = total_seconds / self.total_duration
                     self.progress_value.set(progress)
                     self.progress_label.configure(text=f"{progress * 100:.1f}%")
-                    self.taskbar_progress.set_progress(progress)
+                    self.taskbar_progress.set_progress(
+                        self._get_taskbar_progress(progress)
+                    )
             except Exception:
                 pass
+
+    def _get_taskbar_progress(self, current_file_progress):
+        """Value to show on the Windows taskbar icon overlay.
+
+        Normally this is just the progress of the file currently being
+        converted. During a batch conversion it instead reflects overall
+        progress across the whole queue (files already finished plus the
+        progress of the file in flight, divided by the total file count),
+        so the taskbar icon shows one continuous bar for the entire batch
+        instead of resetting to 0% for every file.
+        """
+        bc = getattr(self, "batch_converter_window", None)
+        if bc and getattr(bc, "is_converting", False):
+            total_files = len(bc.files)
+            if total_files > 0:
+                overall = (
+                    bc.current_file_index + current_file_progress
+                ) / total_files
+                return min(max(overall, 0.0), 1.0)
+        return current_file_progress
 
     # TRIM & TIME LOGIC
     def _create_trim_slider(self):
