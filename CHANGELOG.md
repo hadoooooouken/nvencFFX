@@ -1,5 +1,11 @@
 # nvencFFX - Changelog
- 
+
+## [1.8.4] - 2026-08-07
+- Added Windows taskbar progress indicator for conversions;
+- Added pause/resume support for FFmpeg encoding tasks. Right-click the Cancel button to pause or resume the current conversion;
+- Batch conversion now shows overall progress in the taskbar;
+- Improved optional stream mapping handling. Missing or unsupported streams are now skipped instead of causing conversion failures.
+
 ## [1.8.3] - 2026-08-02
 - **FFmpeg & NVENC Encoding**:
   - Fixed unrecognized option error by updating NVENC Adaptive Quantization flags syntax (`-spatial_aq` ➔ `-spatial-aq`, `-temporal_aq` ➔ `-temporal-aq`) for modern FFmpeg compatibility.

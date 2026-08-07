@@ -1499,7 +1499,7 @@ class VideoConverterApp:
         self.batch_files = []
         self.video_metadata_cache = {}
         self.master = master
-        self.version = "1.8.3"
+        self.version = "1.8.4"
         master.title(f"nvencFFX {self.version}")
 
         dpi = get_real_dpi()
