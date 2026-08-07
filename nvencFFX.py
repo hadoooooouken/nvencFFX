@@ -5412,8 +5412,30 @@ class VideoConverterApp:
 
             command.extend(["-y", "-i", input_f])
 
+            # Mapping and subtitle codec handling
             if "-map" not in other_additional_options:
-                command.extend(["-map", "0", "-ignore_unknown"])
+                output_ext = os.path.splitext(output_f)[1].lower()
+                if output_ext == '.mkv':
+                    command.extend(["-map", "0", "-ignore_unknown"])
+                else:
+                    command.extend([
+                        "-map", "0:v",
+                        "-map", "0:a",
+                        "-map", "0:s",
+                        "-map_metadata", "0",
+                        "-map_chapters", "0",
+                        "-ignore_unknown"
+                    ])
+
+            # Force subtitle codec for non-MKV containers if not already set by user
+            output_ext = os.path.splitext(output_f)[1].lower()
+            if output_ext != '.mkv':
+                has_subtitle_codec = (
+                    any(part in ("-c:s", "-scodec") for part in other_additional_options) or
+                    any(part in ("-c:s", "-scodec") for part in command)
+                )
+                if not has_subtitle_codec:
+                    command.extend(["-c:s", "mov_text"])
 
             # Add other additional options (excluding trim options that were already added)
             if other_additional_options:
@@ -5471,8 +5493,30 @@ class VideoConverterApp:
 
         command.extend(["-y", "-i", input_f])
 
+        # Mapping and subtitle codec handling
         if "-map" not in other_additional_options:
-            command.extend(["-map", "0", "-ignore_unknown"])
+            output_ext = os.path.splitext(output_f)[1].lower()
+            if output_ext == '.mkv':
+                command.extend(["-map", "0", "-ignore_unknown"])
+            else:
+                command.extend([
+                    "-map", "0:v",
+                    "-map", "0:a",
+                    "-map", "0:s",
+                    "-map_metadata", "0",
+                    "-map_chapters", "0",
+                    "-ignore_unknown"
+                ])
+
+        # Force subtitle codec for non-MKV containers if not already set by user
+        output_ext = os.path.splitext(output_f)[1].lower()
+        if output_ext != '.mkv':
+            has_subtitle_codec = (
+                any(part in ("-c:s", "-scodec") for part in other_additional_options) or
+                any(part in ("-c:s", "-scodec") for part in command)
+            )
+            if not has_subtitle_codec:
+                command.extend(["-c:s", "mov_text"])
 
         # Normal encoding path
         if self.constant_qp_mode.get():
