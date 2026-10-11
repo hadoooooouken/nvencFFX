@@ -226,16 +226,29 @@ fn paint_control_label(ui: &Ui, box_rect: Rect, galley: Arc<Galley>) {
 /// CTkCheckBox: 24px rounded box, 3px grey border; filled green with a checkmark
 /// when on. Hovering fills the box with the hover green, like CTk does.
 pub fn checkbox(ui: &mut Ui, value: &mut bool, text: &str) -> Response {
-    let (_, box_rect, mut response, galley) =
+    checkbox_enabled(ui, value, text, true)
+}
+
+/// [`checkbox`] that can be disabled: grey border and text, not clickable.
+pub fn checkbox_enabled(ui: &mut Ui, value: &mut bool, text: &str, enabled: bool) -> Response {
+    let (_, box_rect, mut response, mut galley) =
         control_with_label(ui, dimensions::CHECKBOX_SIZE, text);
-    if response.clicked() {
+    if enabled && response.clicked() {
         *value = !*value;
         response.mark_changed();
     }
 
     let painter = ui.painter();
     let rounding = CornerRadius::same(dimensions::CORNER_RADIUS);
-    if response.hovered() {
+    if !enabled {
+        painter.rect_stroke(
+            box_rect,
+            rounding,
+            Stroke::new(dimensions::CHECKBOX_BORDER, colors::ENTRY_BORDER),
+            StrokeKind::Inside,
+        );
+        galley = layout_text(ui, text, body_font(), colors::TEXT_DISABLED);
+    } else if response.hovered() {
         painter.rect_filled(box_rect, rounding, colors::HOVER_GREEN);
     } else if *value {
         painter.rect_filled(box_rect, rounding, colors::ACCENT_GREEN);
@@ -460,6 +473,18 @@ pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> R
     }
     for x in [sx, ex] {
         painter.circle_filled(pos2(x, y), 8.0, colors::ACCENT_GREEN);
+    }
+    response
+}
+
+/// CTkProgressBar: 8px pill, `SECONDARY_BG` track, green progress (`fraction` 0..=1).
+pub fn progress_bar(ui: &mut Ui, width: f32, fraction: f32) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(width, 8.0), Sense::hover());
+    let pill = CornerRadius::same(4);
+    ui.painter().rect_filled(rect, pill, colors::SECONDARY_BG);
+    let done = rect.with_max_x(rect.min.x + rect.width() * fraction.clamp(0.0, 1.0));
+    if done.width() > 0.0 {
+        ui.painter().rect_filled(done, pill, colors::ACCENT_GREEN);
     }
     response
 }

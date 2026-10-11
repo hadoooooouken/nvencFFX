@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod config;
+mod core;
 #[cfg(windows)]
 mod win32;
 pub mod ui;

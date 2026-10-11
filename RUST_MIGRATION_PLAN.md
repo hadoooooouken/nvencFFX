@@ -166,27 +166,41 @@ Completed:
 - [x] CTk look-alike widgets (`widgets.rs`): `button`/`bold_button`, `entry` (incl. disabled grey state), `checkbox`, `radio`/`radio_value`, `option_menu` (dark field + green arrow, dropdown with green hover), `text_checkbox`, `trim_slider`, `reset_button`, `section_frame`, `file_drag_drop_overlay`
 - [x] Layout helpers `row` / `cell` / `sub_rect` / `place` for absolute placement on that grid
 
+- [x] `rfd` file dialogs on Browse / Save As / FFmpeg (parented to the main window); right-click opens the containing folder
+- [x] Modal dialogs replacing Tk `messagebox` / `simpledialog` (`ui/dialogs.rs`: info, warning, error, yes/no, text prompt)
+- [x] Self-drawn title bar for secondary windows (`dialogs::title_bar`, undecorated viewport); the main window keeps the native dark title bar for Aero Snap and native resizing
+
 Remaining:
-- [ ] Hook up `rfd` file dialogs to Browse / Save As / FFmpeg buttons (currently stub-only)
 - [ ] Context menu widget (right-click on Convert = Pause; right-click on log = Copy)
 
-### Phase 2: Complete Main UI Layout 🔧 IN PROGRESS
+### Phase 2: Complete Main UI Layout ✅ DONE
 
-All controls of the 1.8.4 main window are now on screen with their original option lists (encoder dropdowns, codec-dependent Profile/Level/Tier/Coder, FPS + Custom, all 9 audio modes, trimming, filter fields + quick buttons, presets scanned from `presets/`). Most of them are not wired to any logic yet. Remaining:
+Every control of the 1.8.4 main window is on screen and wired to the original's logic, apart from those listed under Remaining below. The UI now binds to one `config::Settings` value (the preset / `nff_settings.json` model), so presets and the command builder read the same state.
 
-- [ ] **Quick filter / Trim / Auto / Save / Delete buttons**: wire up actions (currently visual only)
-- [ ] **Trim slider**: map handles to `trim_start`/`trim_end` using the probed duration
-- [ ] **Output auto-naming**: improve to match Python logic (consider last_output_dir, custom container)
-- [ ] **Estimated file size bar**: calculate from bitrate × duration (requires ffprobe)
-- [ ] **FFmpeg output log panel**: scrollable real-time log area below status bar
-- [ ] **Custom command mode**: ability to paste and execute arbitrary FFmpeg command
+- [x] **Quick filter buttons** (`core/filters.rs`): append-once `-vf`/`-af` chains, speed x2 / x0.5 (with `atempo` + AAC fallback), Stereo out (`-ac 2`), Clear
+- [x] **Trim / Auto / Default / Save / Save As / Delete**: Trim validates `HH:MM:SS` against the duration and the other field (also on focus loss / Enter) and writes `-ss … -to …`; Auto sets every "auto"-capable encoder menu to auto and clears the flags; Default and the FHD/HD radios apply `_apply_preset`; preset files are saved in the original key order with 4-space indent and merged on load like `_apply_settings_dict`
+- [x] **Trim slider**: handles map to `trim_start`/`trim_end` via the ffprobe duration (1 s minimum gap, end stops 0.1 s before the last frame); reset restores the full range; a new input sets `trim_end` to its duration
+- [x] **Output auto-naming**: `<stem>_<codec>_custom.<ext>` in `last_output_dir` (if it exists) or next to the input, container kept for mp4/mkv/mov/ts/mts/m2ts/webm; a codec switch renames only auto-named outputs
+- [x] **Estimated file size**: `(video + audio kbps) × duration / 8 / 1024` from a background, cached ffprobe run (`core/probe.rs`, `core/estimate.rs`)
+- [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame; the full log inspector stays in Phase 8)
+- [x] **Custom command mode**: Output opens an editable preview window (Copy / Apply / Reset / Close); Apply validates `-i` + output file; right-click on Output copies the command with spaced paths quoted
+- [x] Parity fixes: H.264 hides Lookahead Level (as the original), CUDA Output Format is disabled unless HW Accel = cuda, tune = lossless turns AQ off, `Send to nvencFFX` argument is loaded at startup, ffmpeg / ffprobe auto-detected (exe folder, then `PATH`)
+
+Remaining (moved to later phases):
+- [ ] **Streams** button (stream map window) and the `?` / Help buttons → Phase 8
+- [ ] Thumbnail preview while dragging the trim handles → Phase 8
+- [ ] Play / Preview / Batch / Screen Record / Convert actions → Phases 4, 6, 7
+
+Deliberate differences from 1.8.4:
+- Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
+- The command preview quotes arguments with spaces and its parser removes double quotes, so `-metadata title="a b"` style arguments round-trip (Python's non-POSIX `shlex` kept the quote characters).
 
 ### Phase 3: Configuration Persistence & Presets
 
-1. Define `AppSettings` struct with all 47 fields from `nff_settings.json` using `#[derive(Serialize, Deserialize)]`
-2. Implement `#[serde(default)]` for each field to handle missing keys in old settings files
+1. ✅ `config::Settings` holds all 46 keys of `_get_current_settings` (same order); `apply_json` merges like `_apply_settings_dict` (missing / empty keys keep the current value)
+2. ✅ Missing keys in old files are handled by the merge
 3. Load `nff_settings.json` on startup; auto-save on every settings change with debounced writes (~500ms)
-4. Implement preset loading from `presets/*.json`:
+4. ✅ (done in Phase 2) Preset loading from `presets/*.json`:
    - Scan preset directory at startup, populate preset list
    - Save/Load/Delete presets
    - Preset files use the same field schema as settings (minus paths)
@@ -195,7 +209,7 @@ All controls of the 1.8.4 main window are now on screen with their original opti
 
 ### Phase 4: FFmpeg Core Engine & Process Runner
 
-1. **Command Line Builder** (`command.rs`):
+1. **Command Line Builder** (`command.rs`) ✅ ported in Phase 2 for the command preview, with tests against the original's output:
    - 3 operating modes: **Encoding** (NVENC), **Stream Copy** (`-c:v copy`), **Custom Command** (raw CLI)
    - NVENC codecs: `h264_nvenc`, `hevc_nvenc`, `av1_nvenc`
    - Full parameter matrix: preset (p1–p7), tune (hq/ll/ull), profile, level, tier, coder, multipass, rc (constqp/vbr/cbr), lookahead_level, split_encode_mode
@@ -229,7 +243,7 @@ All controls of the 1.8.4 main window are now on screen with their original opti
    - Kill only our ffmpeg.exe children (match by parent PID)
    - Use on Abort, window close, and recording stop
 
-5. **Size Estimation** (`estimate.rs`):
+5. **Size Estimation** (`estimate.rs`) ✅ done in Phase 2:
    - Run ffprobe to get input duration in seconds
    - Calculate: `(video_bitrate + audio_bitrate) × duration / 8 / 1024` → MB
    - Display in status bar as "Estimated size: ~X MB"
@@ -318,25 +332,25 @@ All controls of the 1.8.4 main window are now on screen with their original opti
 | Phase | Status | Key Files | LOC |
 |---|---|---|---|
 | Phase 0 — Setup | ✅ Done | `Cargo.toml`, `build.rs`, `main.rs` | ~50 |
-| Phase 1 — Theme & Widgets | 🟢 ~95% (dialogs, context menu left) | `ui/theme.rs`, `ui/widgets.rs` | ~750 |
-| Phase 2 — Main UI Layout | 🟡 ~60% (all controls shown, logic pending) | `app.rs` | ~840 |
-| Phase 3 — Settings & Presets | ⬜ Not started | — | — |
-| Phase 4 — FFmpeg Core | ⬜ Not started | — | — |
+| Phase 1 — Theme & Widgets | 🟢 ~98% (context menu left) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
+| Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
+| Phase 3 — Settings & Presets | 🟡 Model + presets done; `nff_settings.json` load/auto-save left | `config/settings.rs`, `config/presets.rs` | ~470 |
+| Phase 4 — FFmpeg Core | 🟡 Builder, duration probe, estimate done; runner left | `core/command.rs`, `core/probe.rs`, `core/estimate.rs` | ~600 |
 | Phase 5 — Win32 Integration | ⬜ Not started | — | — |
 | Phase 6 — Batch Converter | ⬜ Not started | — | — |
 | Phase 7 — Screen Recording | ⬜ Not started | — | — |
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~1,234 LOC across 6 files.
+**Current Rust codebase**: ~4,000 LOC across 17 files (29 tests).
 
 ---
 
 ## 7. Critical Risks & Notes
 
 1. **egui file dialogs**: egui has no built-in file dialog. The `rfd` crate is **required** for Browse/Save As/Output Folder buttons — this is a hard dependency, not optional.
-2. **Audio options gap**: Current Rust UI only shows Copy/AAC/AC3 chips. Python supports 9 audio modes including Opus and Custom. Must match before Phase 4.
-3. **Custom command mode**: Python supports pasting arbitrary FFmpeg commands and executing them. This is a power-user feature that must not be lost.
+2. ~~**Audio options gap**~~: resolved; all 9 audio modes are in the UI and the command builder.
+3. **Custom command mode**: editing / applying is done (Phase 2); executing the stored `custom_command` comes with the Phase 4 runner.
 4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
 5. **Process tree kill**: Simply calling `process.kill()` on Windows may leave orphan ffmpeg.exe processes. Must implement toolhelp32 snapshot-based child process enumeration (same as Python's `PROCESSENTRY32W` approach).
 6. **Screen recording complexity**: The segmented recording system with WASAPI audio muxing is the most complex feature (~650 LOC in Python). Consider deferring to a later release if needed.
