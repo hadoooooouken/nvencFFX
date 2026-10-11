@@ -51,7 +51,7 @@ const IDM_OPEN_APP: usize = 1003;
 const IDM_EXIT: usize = 1004;
 const HOTKEY_START_ID: i32 = 2001;
 const HOTKEY_STOP_ID: i32 = 2002;
-const TIP: &str = concat!("nvencFFX ", env!("CARGO_PKG_VERSION"));
+const TIP: &str = crate::WINDOW_TITLE;
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain([0]).collect()
@@ -138,7 +138,6 @@ impl Tray {
     }
 
     /// `show_balloon`: a notification from the tray icon.
-    #[allow(dead_code, reason = "used by screen recording (Phase 7)")]
     pub fn balloon(&self, title: &str, message: &str) {
         let mut nid = self.icon.data();
         nid.uFlags |= NIF_INFO;

@@ -29,6 +29,7 @@ nvencffx/
 │   ├── main.rs               # Entry point, winit/eframe setup, windows_subsystem attribute
 │   ├── app.rs                # Main App state (eframe::App implementation)
 │   ├── app/batch.rs          # Batch Converter window + queue (child module of app)
+│   ├── app/record.rs         # Screen Record button, title, minimize, balloons (child module of app)
 │   ├── ui/                   # egui interface components
 │   │   ├── mod.rs
 │   │   ├── theme.rs          # Color palette (#4FB62F accent, dark mode, styles)
@@ -59,9 +60,9 @@ nvencffx/
 │   │   ├── tray.rs           # Tray icon, menu, balloons + global hotkeys (Alt+F8 / Alt+F9)
 │   │   └── process_tree.rs   # Kill ffmpeg.exe child tree via CreateToolhelp32Snapshot
 │   └── recording/            # Screen recording subsystem
-│       ├── mod.rs
-│       ├── capture.rs        # FFmpeg ddagrab screen capture, segmented recording with auto-restart
-│       └── audio.rs          # Desktop audio loopback via WASAPI (cpal or raw bindings)
+│       ├── mod.rs            # Session worker: segments, auto-restart, stop via `q`, join + mux
+│       ├── capture.rs        # ddagrab command line, temp file names, concat list, mux command
+│       └── audio.rs          # Desktop audio: WASAPI loopback (raw COM) -> 16-bit WAV
 ```
 
 ---
@@ -87,23 +88,25 @@ open = "5.4"
 # Clipboard: reading for the text menu's Paste (eframe already uses it for copying)
 arboard = { version = "3.6", default-features = false }
 
-# Win32 API (ITaskbarList3, NtSuspendProcess, tray icon + RegisterHotKey, CreateToolhelp32Snapshot)
-# Tray and hotkeys are raw Win32 too (Phase 5): `tray-icon` has no balloons, `global-hotkey` is not needed
+# Win32 API (ITaskbarList3, NtSuspendProcess, tray icon + RegisterHotKey, CreateToolhelp32Snapshot,
+# WASAPI loopback). Tray and hotkeys are raw Win32 too (Phase 5): `tray-icon` has no balloons,
+# `global-hotkey` is not needed. WASAPI is raw COM too (Phase 7): `cpal` would pull in the
+# `windows` crate for one capture stream.
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
     "Win32_System_Com",
     "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_LibraryLoader",
+    "Win32_System_Performance",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
-
-# Audio loopback capture (WASAPI)
-cpal = "0.18"
 
 [build-dependencies]
 winresource = "0.1.31"  # maintained fork of the abandoned `winres`
@@ -188,7 +191,7 @@ Remaining (moved to later phases):
 - [ ] **Streams** button (stream map window) and the `?` / Help buttons → Phase 8
 - [ ] Thumbnail preview while dragging the trim handles → Phase 8
 - [x] Play Input / Play Output / Play 10s Preview / Convert actions (Phase 4)
-- [ ] Batch / Screen Record actions → Phases 6, 7
+- [x] Batch / Screen Record actions (Phases 6, 7)
 
 Deliberate differences from 1.8.4:
 - Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
@@ -268,7 +271,7 @@ All raw `windows-sys` like the rest of `src/win32/`; neither `tray-icon` nor `gl
    - Native menu: "Start Recording (Alt + F8)", "Stop Recording (Alt + F9)", separator, "Open nvencFFX", "Exit"; double-click = Open
    - Open restores and focuses the window (`_restore_app`), Exit closes it like the title bar's X (so `on_exit` runs)
    - `Tray::balloon` (`show_balloon`, `NIF_INFO`) is ready for the recording notifications
-   - Start / Stop Recording reach the app as commands but do nothing until Phase 7
+   - Start / Stop Recording reach the app as commands (wired to the recorder in Phase 7)
 
 4. ✅ **Global Hotkeys** (in `win32/tray.rs`):
    - `RegisterHotKey` Alt+F8 / Alt+F9 on the tray's hidden window, which runs on its own thread with its own message loop; commands reach the UI over `mpsc` + `request_repaint`
@@ -322,25 +325,40 @@ Deliberate differences from 1.8.4:
 - Dropping several unsupported files shows one warning instead of one per file.
 - The next file starts right away instead of after 100 ms, and durations are probed in the background instead of blocking the window before every file.
 
-### Phase 7: Screen Recording & WASAPI Audio Capture
+### Phase 7: Screen Recording & WASAPI Audio Capture ✅ DONE
 
-1. **Screen Capture** (`capture.rs`):
-   - Build FFmpeg command with `-f lavfi -i ddagrab=framerate={fps}` and `-vf setparams=range=limited`
-   - Segmented recording: write numbered video segments to temp files (`nvencffx_record_{timestamp}_{pid}_{ns}`)
-   - Auto-restart on segment failure (up to 3 attempts)
-   - Audio is captured separately and muxed after recording stops
-   - Final mux: concatenate video segments + merge WAV audio into output file
+The recording code of 1.8.4 (`_start_recording` … `_monitor_recording`, `_record_audio_loop`) ported in `src/recording/` and `app/record.rs`. One worker thread per recording (`recording::Session`) runs the whole session and reports `Event`s over `mpsc` + `request_repaint`, like the conversion runner; the UI only reacts to them in `update_state`, so the recording keeps going while the window is minimized.
 
-2. **WASAPI Audio Loopback** (`audio.rs`):
-   - `cpal` with WASAPI loopback device (captures desktop/game audio without virtual cable)
-   - Write to temp `.wav` file concurrently with video recording
-   - Synchronize start/stop with video segments
+1. ✅ **Screen Capture** (`recording/capture.rs`, `recording/mod.rs`):
+   - Command as in 1.8.4: `-y -thread_queue_size 4096 -use_wallclock_as_timestamps 1 -f lavfi -i ddagrab=framerate=<fps> -vf setparams=range=limited -c:v <codec>_nvenc [-preset:v] -rc:v constqp -qp:v <q>` (or `-rc:v <vbr|cbr> -b:v <k>`), the Add FF Options while that section is open, `-fps_mode <mode> -an`; FPS "Source" (or empty) records at 60
+   - Output: the Output File field, else `screen_record-<dd_mm_yy-HH_MM_SS>.mp4` on the Desktop
+   - Segments `%TEMP%\nvencffx_record_<date>_<pid>_<ns>_part<n><ext>`, started 2 s after the click; an ffmpeg that ends on its own (ddagrab stops on a display mode change) starts the next segment after 1 s, at most 3 times per recording, then the recording is given up and what was captured is saved ("Saved partial recording to …")
+   - Stop writes `q` to ffmpeg's stdin (killed after 5 s if it does not finish); the segments are joined with the concat demuxer (`-c copy`), one segment is used as it is
+   - Final mux: `-i <video> -i <wav> -c:v copy <Audio Settings> -map 0:v:0 -map 1:a:0`, or a move if there is no audio; temp files are deleted only after the output is saved, otherwise they stay and the message says where
+   - Messages, status texts and the restart / error wording are the original's ("Display changed. Restarting recording (n/3)...", "Joining recording segments...", "Error finishing recording", …)
 
-3. **Recording UI Integration**:
-   - Toggle button: "Screen Record" ↔ "Stop Recording" (green → red)
-   - Minimize window 1 second after recording starts
-   - Tray icon balloon notifications for recording state changes
-   - Title bar update: "Screen is recording now - nvencFFX"
+2. ✅ **WASAPI Audio Loopback** (`recording/audio.rs`):
+   - Raw COM like the taskbar overlay: `IMMDeviceEnumerator` → default render endpoint → `IAudioClient` (shared mode, `AUDCLNT_STREAMFLAGS_LOOPBACK`, the device's mix format) → `IAudioCaptureClient`, polled every 10 ms on its own thread
+   - Written as 16-bit PCM WAV (as `paInt16` did) with the mix format's channels and rate; float / 16 / 24 / 32-bit mix formats are converted
+   - Recorded once per session, from the first segment's start to the stop (also across restarts); "Disable" in Audio Settings records none
+   - Errors (no playback device, unsupported format) only leave the recording without audio, as before
+
+3. ✅ **Recording UI Integration** (`app/record.rs`):
+   - Screen Record (grey) ↔ Stop Recording (red); disabled while the recording is saved; "Please wait until the previous recording is saved." on a start meanwhile
+   - Title "Screen is recording now - nvencFFX" while recording; the window minimizes 1 s after the start (not if stopped before) and is restored if ffmpeg cannot start or the restarts run out
+   - Tray balloons "Recording Started" / "Recording Saved", completion beep
+   - Alt+F8 / Alt+F9 and the tray's Start / Stop Recording drive it
+   - Closing the app during a recording stops it and waits (up to 5 min) until it is saved
+
+Deliberate differences from 1.8.4:
+- Alt+F8 / the tray's Start do nothing while a recording runs. 1.8.4 started a new session over the running one, orphaning its ffmpeg and segments.
+- Alt+F9 / the tray's Stop do nothing without a recording. 1.8.4 set "Screen recording cancelled" and reset the title, also over a running conversion's status.
+- The audio settings are read when the recording starts (1.8.4 read them when it ended), so an invalid custom audio bitrate is reported before recording ("Failed to start screen recording: Custom audio bitrate must be a number.") instead of failing the save afterwards.
+- Stretches where nothing plays are written as silence. WASAPI loopback delivers no packets then; packets are placed by their timestamps, so the audio keeps its place against the video (gaps over 100 ms, also before the first sound and up to the stop).
+- The default output goes to the shell's Desktop folder (also when it was moved, e.g. into OneDrive) instead of `~\Desktop`.
+- The title changes only after the FFmpeg path check (1.8.4 left "Screen is recording now" in the title when the path was empty).
+- Closing the app during a recording saves it first. 1.8.4 started the save on a daemon thread and quit, so the recording was lost (the segments stayed in `%TEMP%`).
+- An ffmpeg that cannot be started for the join / mux gives the same "Failed to join … / Failed to mux …" message as a failed run (1.8.4 showed the Python exception text).
 
 ### Phase 8: UI Polish, Tooltips & Help
 
@@ -371,13 +389,13 @@ Deliberate differences from 1.8.4:
 | Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
 | Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
 | Phase 4 — FFmpeg Core | ✅ Done | `core/command.rs`, `core/probe.rs`, `core/process.rs`, `core/progress.rs`, `win32/process_tree.rs` | ~1,300 |
-| Phase 5 — Win32 Integration | ✅ Done (recording commands wait for Phase 7) | `win32/taskbar.rs`, `win32/suspend.rs`, `win32/tray.rs`, `ui/widgets.rs` (context menu) | ~800 |
+| Phase 5 — Win32 Integration | ✅ Done (recording commands wired in Phase 7) | `win32/taskbar.rs`, `win32/suspend.rs`, `win32/tray.rs`, `ui/widgets.rs` (context menu) | ~800 |
 | Phase 6 — Batch Converter | ✅ Done | `app/batch.rs`, `ui/dialogs.rs` (resize edges), `win32/mod.rs` (dialog parent) | ~750 |
-| Phase 7 — Screen Recording | ⬜ Not started | — | — |
+| Phase 7 — Screen Recording | ✅ Done | `recording/mod.rs`, `recording/capture.rs`, `recording/audio.rs`, `app/record.rs`, `win32/mod.rs` (local time, Desktop folder) | ~1,450 |
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~7,000 LOC across 23 files (57 tests).
+**Current Rust codebase**: ~8,500 LOC across 27 files (71 tests).
 
 ---
 
@@ -387,9 +405,9 @@ Deliberate differences from 1.8.4:
 2. ~~**Audio options gap**~~: resolved; all 9 audio modes are in the UI and the command builder.
 3. ~~**Custom command mode**~~: resolved; editing / applying (Phase 2) and running the applied command (Phase 4) are done.
 4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
-5. ~~**Process tree kill**~~: resolved in Phase 4 (`win32/process_tree.rs`); reuse it for recording stop in Phase 7.
-6. **Screen recording complexity**: The segmented recording system with WASAPI audio muxing is the most complex feature (~650 LOC in Python). Consider deferring to a later release if needed.
-7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, and in Phase 7 the recording state) belongs in `update_state`, which runs from `logic`.
-8. **Tray / hotkey commands for recording**: Alt+F8 / Alt+F9 and the tray's Start / Stop Recording are delivered but ignored until Phase 7 wires them to the recorder; the `Tray::balloon` API is unused until then.
+5. ~~**Process tree kill**~~: resolved in Phase 4 (`win32/process_tree.rs`). A recording is stopped with `q` (killed after 5 s) by its own worker; on exit it is saved before the process tree kill runs.
+6. **Screen recording, manual checks**: the session (restart limit, stop, join, mux, cleanup) is covered by tests with stand-in commands and with the real ffmpeg (`testsrc`) plus real WASAPI capture, and a full desktop recording (ddagrab + hevc_nvenc + AAC) was checked once through the app layer. Still to try by hand: a restart after a real display mode change (a fullscreen game switching resolution), audio while sound plays, and the minimize / balloons / hotkeys in the running app. A default playback device that changes mid-recording (headphones unplugged) ends the audio there; the WAV stays valid, so the output just has shorter audio.
+7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, the recording's events and its delayed minimize) belongs in `update_state`, which runs from `logic`.
+8. ~~**Tray / hotkey commands for recording**~~: resolved in Phase 7; Alt+F8 / Alt+F9 and the tray menu drive the recorder, and `Tray::balloon` shows its notifications.
 9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.

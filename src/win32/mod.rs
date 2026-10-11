@@ -5,21 +5,22 @@ pub mod suspend;
 pub mod taskbar;
 pub mod tray;
 
-use std::ffi::c_void;
-use std::os::windows::ffi::OsStrExt;
-use std::path::Path;
+use std::ffi::{OsString, c_void};
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use raw_window_handle::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawWindowHandle,
     Win32WindowHandle, WindowHandle,
 };
 use windows_sys::Win32::{
-    Foundation::HWND,
-    System::Diagnostics::Debug::MessageBeep,
+    Foundation::{HWND, SYSTEMTIME},
+    System::{Com::CoTaskMemFree, Diagnostics::Debug::MessageBeep, SystemInformation::GetLocalTime},
     UI::{
-        Shell::ShellExecuteW,
+        Shell::{FOLDERID_Desktop, SHGetKnownFolderPath, ShellExecuteW},
         WindowsAndMessaging::{GetForegroundWindow, MB_ICONASTERISK, SW_SHOWNORMAL},
     },
 };
+use windows_sys::core::PWSTR;
 
 #[link(name = "dwmapi")]
 unsafe extern "system" {
@@ -107,4 +108,33 @@ pub fn open_file(path: &Path) -> Result<(), String> {
 /// The "conversion complete" sound (`MessageBeep(MB_ICONASTERISK)`).
 pub fn beep() {
     unsafe { MessageBeep(MB_ICONASTERISK) };
+}
+
+/// Local time as `datetime.now().strftime("%d_%m_%y-%H_%M_%S")`.
+pub fn local_timestamp() -> String {
+    let mut t: SYSTEMTIME = unsafe { std::mem::zeroed() };
+    unsafe { GetLocalTime(&mut t) };
+    format!(
+        "{:02}_{:02}_{:02}-{:02}_{:02}_{:02}",
+        t.wDay,
+        t.wMonth,
+        t.wYear % 100,
+        t.wHour,
+        t.wMinute,
+        t.wSecond
+    )
+}
+
+/// The user's Desktop folder, also when it was moved (e.g. into OneDrive);
+/// `%USERPROFILE%\Desktop` if the shell does not know it.
+pub fn desktop_dir() -> PathBuf {
+    let mut path: PWSTR = std::ptr::null_mut();
+    let hr = unsafe { SHGetKnownFolderPath(&FOLDERID_Desktop, 0, std::ptr::null_mut(), &mut path) };
+    let known = (hr >= 0 && !path.is_null()).then(|| {
+        let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();
+        PathBuf::from(OsString::from_wide(unsafe { std::slice::from_raw_parts(path, len) }))
+    });
+    // Freed even on failure, as the API requires
+    unsafe { CoTaskMemFree(path as *const c_void) };
+    known.unwrap_or_else(|| PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default()).join("Desktop"))
 }

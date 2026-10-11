@@ -28,6 +28,7 @@ use crate::ui::{
 };
 
 mod batch;
+mod record;
 
 /// Pixel grid of the original CustomTkinter layout (`nvencFFX.py`, 100% scaling).
 /// X offsets are relative to the content origin, which sits 31px from the window edge.
@@ -220,6 +221,10 @@ pub struct NvencFfxApp {
     preview_files: Vec<PathBuf>,
     /// The Batch Converter's files and window; its conversions run as `task`.
     batch: batch::Batch,
+    /// The screen recording, until it is saved; runs alongside `task`.
+    recording: Option<record::Recording>,
+    /// When the window minimizes after a recording started.
+    minimize_due: Option<Instant>,
 
     dialog: Option<(ViewportId, Dialog<Action>)>,
     icon: Arc<egui::IconData>,
@@ -269,6 +274,8 @@ impl Default for NvencFfxApp {
             task: None,
             preview_files: Vec::new(),
             batch: batch::Batch::default(),
+            recording: None,
+            minimize_due: None,
 
             dialog: None,
             icon: Arc::new(egui::IconData::default()),
@@ -1262,8 +1269,10 @@ impl NvencFfxApp {
         }
     }
 
-    /// On exit: stops the running ffmpeg and any other ffmpeg / ffprobe we started.
+    /// On exit: saves a running recording, stops the running ffmpeg and any other
+    /// ffmpeg / ffprobe we started.
     fn stop_processes(&mut self) {
+        self.finish_recording();
         if let Some(task) = self.task.take() {
             task.runner.stop(STOP_TIMEOUT);
         }
@@ -1826,7 +1835,7 @@ impl NvencFfxApp {
             ("Play Output File", ButtonKind::Grey),
             preview,
             ("Batch Convert", ButtonKind::Grey),
-            ("Screen Record", ButtonKind::Grey),
+            self.record_button(),
         ];
         let mut clicked = None;
         for (i, (text, kind)) in buttons.into_iter().enumerate() {
@@ -1841,6 +1850,7 @@ impl NvencFfxApp {
             Some(1) => self.play(true),
             Some(2) => self.toggle_preview(&ctx),
             Some(3) => self.open_batch_converter(&ctx),
+            Some(4) => self.toggle_recording(&ctx),
             _ => {}
         }
 
@@ -1888,6 +1898,8 @@ impl NvencFfxApp {
     /// other settings.
     fn update_state(&mut self, ctx: &egui::Context) {
         self.poll_task(ctx);
+        self.poll_recording(ctx);
+        self.minimize_when_due(ctx);
         self.poll_tray(ctx);
         self.durations.poll();
         // Probe the current input (size estimate, trim slider)
@@ -1924,8 +1936,8 @@ impl NvencFfxApp {
                     }
                     // Closes like the title bar's X, so `on_exit` cleans up
                     Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
-                    // Screen recording arrives in Phase 7
-                    Command::StartRecording | Command::StopRecording => {}
+                    Command::StartRecording => self.start_recording(ctx),
+                    Command::StopRecording => self.stop_recording(ctx),
                 }
             }
         }

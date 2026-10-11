@@ -3,12 +3,16 @@
 mod app;
 mod config;
 mod core;
+mod recording;
 #[cfg(windows)]
 mod win32;
 pub mod ui;
 
 use app::NvencFfxApp;
 use eframe::egui;
+
+/// Main window title, restored after a screen recording.
+pub const WINDOW_TITLE: &str = concat!("nvencFFX ", env!("CARGO_PKG_VERSION"));
 
 /// Title bar / taskbar icon: the 32x32 entry of `nff.ico` (the same file `build.rs`
 /// embeds into the exe). That entry is an uncompressed 32bpp BMP: BGRA rows, bottom-up.
@@ -54,7 +58,7 @@ fn main() -> eframe::Result<()> {
             .with_inner_size([820.0, 700.0])
             .with_min_inner_size([820.0, 600.0])
             .with_max_inner_size([820.0, 4096.0])
-            .with_title(concat!("nvencFFX ", env!("CARGO_PKG_VERSION")))
+            .with_title(WINDOW_TITLE)
             .with_icon(window_icon()),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()

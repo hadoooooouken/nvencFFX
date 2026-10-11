@@ -148,27 +148,11 @@ fn run_step(
         reader
     };
 
-    // ffmpeg ends its progress lines with '\r'
-    let mut emit = |line: &mut Vec<u8>| {
-        let text = String::from_utf8_lossy(line).trim().to_owned();
-        line.clear();
-        if !text.is_empty() {
-            last_line.clone_from(&text);
-            let _ = tx.send(Event::Line { step, text });
-            ctx.request_repaint();
-        }
-    };
-    let (mut buf, mut line) = ([0u8; 4096], Vec::new());
-    while let Ok(n @ 1..) = reader.read(&mut buf) {
-        for &b in &buf[..n] {
-            if b == b'\r' || b == b'\n' {
-                emit(&mut line);
-            } else {
-                line.push(b);
-            }
-        }
-    }
-    emit(&mut line);
+    for_each_line(&mut reader, |text| {
+        last_line.clone_from(&text);
+        let _ = tx.send(Event::Line { step, text });
+        ctx.request_repaint();
+    });
 
     // Poll instead of a blocking wait so `cancel` never waits for the lock
     let status = loop {
@@ -197,6 +181,29 @@ fn run_step(
             None => Exit::Failed(None),
         }
     }
+}
+
+/// Calls `on_line` with each trimmed, non-empty line until `reader` ends. ffmpeg ends
+/// its progress lines with '\r', so that ends a line too.
+pub fn for_each_line(mut reader: impl Read, mut on_line: impl FnMut(String)) {
+    let mut emit = |line: &mut Vec<u8>| {
+        let text = String::from_utf8_lossy(line).trim().to_owned();
+        line.clear();
+        if !text.is_empty() {
+            on_line(text);
+        }
+    };
+    let (mut buf, mut line) = ([0u8; 4096], Vec::new());
+    while let Ok(n @ 1..) = reader.read(&mut buf) {
+        for &b in &buf[..n] {
+            if b == b'\r' || b == b'\n' {
+                emit(&mut line);
+            } else {
+                line.push(b);
+            }
+        }
+    }
+    emit(&mut line);
 }
 
 #[cfg(all(test, windows))]
