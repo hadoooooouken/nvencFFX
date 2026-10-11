@@ -69,7 +69,20 @@ fn install_fonts(ctx: &egui::Context) {
         .or_default()
         .insert(0, "roboto".to_owned());
 
+    // `font=("Consolas", 14)` of the input tooltip, command preview and help windows.
+    // Read from the system (it cannot be redistributed); egui's Hack stays the fallback.
+    if let Some(consolas) = system_font("consola.ttf") {
+        fonts.font_data.insert("consolas".to_owned(), Arc::new(FontData::from_owned(consolas)));
+        fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "consolas".to_owned());
+    }
+
     ctx.set_fonts(fonts);
+}
+
+/// A font file from `%WINDIR%\Fonts`.
+fn system_font(file: &str) -> Option<Vec<u8>> {
+    let windir = std::env::var_os("WINDIR")?;
+    std::fs::read(std::path::Path::new(&windir).join("Fonts").join(file)).ok()
 }
 
 fn visuals() -> egui::Visuals {
@@ -145,6 +158,8 @@ pub fn apply_theme(ctx: &egui::Context) {
             style.spacing.button_padding = egui::vec2(10.0, 4.0);
             style.spacing.menu_margin = egui::Margin::same(3);
             style.spacing.interact_size.y = dimensions::WIDGET_HEIGHT;
+            // CTkToolTip(delay=0.3) of the buttons' right-click hints
+            style.interaction.tooltip_delay = 0.3;
 
             // CTkScrollableFrame: 8px grey pill, 4px from the window edge
             let mut scroll = egui::style::ScrollStyle::solid();
@@ -181,5 +196,21 @@ mod tests {
                 assert_eq!(style.visuals.override_text_color, Some(colors::LABEL_TEXT));
             });
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn consolas_comes_from_the_system() {
+        assert!(system_font("consola.ttf").is_some(), "every Windows has Consolas");
+        assert!(system_font("nvencffx-none.ttf").is_none());
+        // egui parses it on the first frame
+        let ctx = egui::Context::default();
+        apply_theme(&ctx);
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            ui.label(egui::RichText::new("Stream #0:0 — тест").font(egui::FontId::monospace(14.0)));
+        });
+        out.textures_delta.clear();
+        let families = ctx.fonts(|f| f.definitions().families[&FontFamily::Monospace].clone());
+        assert_eq!(families[0], "consolas");
     }
 }

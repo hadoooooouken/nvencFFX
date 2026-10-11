@@ -69,9 +69,9 @@ mod tests {
             .spawn()
             .unwrap();
         assert!(children_named(&["PING.EXE"]).contains(&child.id()), "names match case-insensitively");
-        kill_children(&["ffmpeg.exe"]);
+        // A name nothing runs under: other tests run ffmpeg and ping in parallel
+        kill_children(&["nvencffx-test-none.exe"]);
         assert!(child.try_wait().unwrap().is_none(), "other children are left alone");
-        // Not `kill_children(&["ping.exe"])`: other tests run ping in parallel
         terminate(child.id());
         assert!(!child.wait().unwrap().success());
     }

@@ -2,8 +2,9 @@
 //! UI thread.
 
 use std::collections::{HashMap, VecDeque};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 /// `_find_executable`: next to our executable first, then on `PATH`.
@@ -38,6 +39,55 @@ pub fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     cmd
 }
 
+/// Runs `cmd` with its output captured, killing it after `timeout` (`Ok(None)`).
+pub fn output_with_timeout(mut cmd: Command, timeout: std::time::Duration) -> std::io::Result<Option<Output>> {
+    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    // Both pipes are drained while waiting, so a chatty child cannot block on them
+    let stdout = drain(child.stdout.take());
+    let stderr = drain(child.stderr.take());
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    Ok(Some(Output { status, stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default() }))
+}
+
+fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut pipe) = pipe {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    })
+}
+
+/// `_get_video_resolution`: width and height of the first video stream.
+pub fn resolution(ffprobe: &Path, file: &str) -> Option<(u32, u32)> {
+    let mut cmd = hidden_command(ffprobe);
+    cmd.args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0"])
+        .arg(file);
+    let out = output_with_timeout(cmd, std::time::Duration::from_secs(10)).ok()??;
+    if !out.status.success() {
+        return None;
+    }
+    parse_resolution(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// `1920,1080` → (1920, 1080).
+fn parse_resolution(text: &str) -> Option<(u32, u32)> {
+    let (w, h) = text.trim().split_once(',')?;
+    Some((w.parse().ok()?, h.parse().ok()?))
+}
+
 /// `ffprobe -show_entries format=duration`, in seconds.
 pub fn duration(ffprobe: &Path, file: &str) -> Option<f64> {
     let out = hidden_command(ffprobe)
@@ -53,35 +103,27 @@ pub fn duration(ffprobe: &Path, file: &str) -> Option<f64> {
 
 /// `ffprobe -hide_banner <file>` for the input tooltip (`_update_tooltip_async`).
 pub fn media_info(ffprobe: &Path, file: &str) -> String {
-    let child = hidden_command(ffprobe)
-        .arg("-hide_banner")
-        .arg(file)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
-    let child = match child {
-        Ok(child) => child,
-        Err(e) => return format!("Error reading metadata:
-{e}"),
-    };
-    let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(child.wait_with_output());
-    });
-    match rx.recv_timeout(std::time::Duration::from_secs(10)) {
-        Ok(Ok(out)) => {
-            // ffprobe prints the stream overview to stderr
-            let text = match String::from_utf8_lossy(&out.stderr).trim() {
-                "" => String::from_utf8_lossy(&out.stdout).trim().to_owned(),
-                err => err.to_owned(),
-            };
-            compact_info(&text)
-        }
-        Ok(Err(e)) => format!("Error reading metadata:
-{e}"),
-        Err(_) => "Timeout: ffprobe took too long".to_owned(),
+    match overview(ffprobe, file, Some(std::time::Duration::from_secs(10))) {
+        Ok(Some(text)) => compact_info(&text),
+        Ok(None) => "Timeout: ffprobe took too long".to_owned(),
+        Err(e) => format!("Error reading metadata:\n{e}"),
     }
+}
+
+/// The stream overview of `ffprobe -hide_banner <file>`; `None` if it took longer
+/// than `timeout`.
+pub fn overview(ffprobe: &Path, file: &str, timeout: Option<std::time::Duration>) -> std::io::Result<Option<String>> {
+    let mut cmd = hidden_command(ffprobe);
+    cmd.arg("-hide_banner").arg(file);
+    let out = match timeout {
+        Some(timeout) => output_with_timeout(cmd, timeout)?,
+        None => Some(cmd.stdin(Stdio::null()).output()?),
+    };
+    // ffprobe prints it to stderr
+    Ok(out.map(|out| match String::from_utf8_lossy(&out.stderr).trim() {
+        "" => String::from_utf8_lossy(&out.stdout).trim().to_owned(),
+        err => err.to_owned(),
+    }))
 }
 
 /// Drops the `Metadata:` and `Chapters:` blocks to keep the tooltip compact.
@@ -250,6 +292,28 @@ mod tests {
   Stream #0:0: Video: hevc (Main), yuv420p10le, 1920x1080, 60 fps
   Stream #0:1: Audio: opus, 48000 Hz, stereo"
         );
+    }
+
+    #[test]
+    fn resolution_is_read_from_csv() {
+        assert_eq!(parse_resolution("1920,1080\r\n"), Some((1920, 1080)));
+        assert_eq!(parse_resolution("1920,1080,"), None, "as the original's two-value split");
+        assert_eq!(parse_resolution(""), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_slow_command_is_killed() {
+        let mut cmd = hidden_command("ping");
+        cmd.args(["-n", "30", "127.0.0.1"]);
+        let started = std::time::Instant::now();
+        assert!(output_with_timeout(cmd, std::time::Duration::from_millis(300)).unwrap().is_none());
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        let mut cmd = hidden_command("cmd");
+        cmd.args(["/c", "echo out & echo err 1>&2"]);
+        let out = output_with_timeout(cmd, std::time::Duration::from_secs(10)).unwrap().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "out");
+        assert_eq!(String::from_utf8_lossy(&out.stderr).trim(), "err");
     }
 
     #[test]

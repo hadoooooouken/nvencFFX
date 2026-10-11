@@ -4,4 +4,7 @@ pub mod filters;
 pub mod probe;
 pub mod process;
 pub mod progress;
+pub mod streams;
+pub mod thumbnail;
 pub mod timecode;
+pub mod vmaf;

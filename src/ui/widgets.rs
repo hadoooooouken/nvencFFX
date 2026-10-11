@@ -432,7 +432,8 @@ pub fn radio(ui: &mut Ui, selected: bool, text: &str) -> Response {
         (false, false) => (dimensions::RADIO_BORDER_UNCHECKED, colors::CONTROL_BORDER),
         (false, true) => (dimensions::RADIO_BORDER_UNCHECKED, colors::HOVER_GREEN),
     };
-    let radius = dimensions::RADIO_SIZE / 2.0 - width / 2.0;
+    // epaint strokes circles outside the radius: keep the ring within the 22px circle
+    let radius = dimensions::RADIO_SIZE / 2.0 - width;
     ui.painter().circle_stroke(box_rect.center(), radius, Stroke::new(width, color));
     paint_control_label(ui, box_rect, galley);
     response
@@ -772,5 +773,38 @@ mod tests {
         let c = cell(r, 226.0, 350.0);
         assert_eq!(c.min, pos2(257.0, 100.0));
         assert_eq!(c.size(), vec2(350.0, 38.0));
+    }
+
+    /// CTkRadioButton is 22px across, checked or not; the checked ring leaves a 10px hole.
+    #[test]
+    fn radio_circle_is_22px() {
+        let ctx = Context::default();
+        for selected in [false, true] {
+            let mut center = Pos2::ZERO;
+            let mut out = ctx.run_ui(Default::default(), |ui| {
+                ui.allocate_space(vec2(0.0, 50.0));
+                let r = radio(ui, selected, "Source");
+                center = pos2(r.rect.min.x + dimensions::RADIO_SIZE / 2.0, r.rect.center().y);
+            });
+            out.textures_delta.clear();
+            let meshes = ctx.tessellate(std::mem::take(&mut out.shapes), out.pixels_per_point);
+            // Opaque ring vertices only (feathering adds a transparent fringe)
+            let distances: Vec<f32> = meshes
+                .iter()
+                .filter_map(|m| match &m.primitive {
+                    egui::epaint::Primitive::Mesh(mesh) => Some(mesh),
+                    _ => None,
+                })
+                .flat_map(|mesh| mesh.vertices.iter())
+                .filter(|v| v.color.a() == 255 && v.color != colors::LABEL_TEXT && (v.pos - center).length() < 15.0)
+                .map(|v| (v.pos - center).length())
+                .collect();
+            let outer = distances.iter().copied().fold(0.0, f32::max);
+            assert!((outer - 11.0).abs() < 0.6, "outer radius {outer} (selected: {selected})");
+            if selected {
+                let inner = distances.iter().copied().fold(f32::MAX, f32::min);
+                assert!((inner - 5.0).abs() < 0.6, "inner radius {inner}");
+            }
+        }
     }
 }

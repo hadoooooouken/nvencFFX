@@ -30,6 +30,10 @@ nvencffx/
 │   ├── app.rs                # Main App state (eframe::App implementation)
 │   ├── app/batch.rs          # Batch Converter window + queue (child module of app)
 │   ├── app/record.rs         # Screen Record button, title, minimize, balloons (child module of app)
+│   ├── app/help.rs           # Help window (Manual / About / License) and the `?` ffmpeg help windows
+│   ├── app/streams.rs        # Streams window (stream checkboxes → -map options)
+│   ├── app/thumbnail.rs      # Frame preview above the trim slider
+│   ├── app/vmaf.rs           # VMAF analysis (right click on Play Output File)
 │   ├── ui/                   # egui interface components
 │   │   ├── mod.rs
 │   │   ├── theme.rs          # Color palette (#4FB62F accent, dark mode, styles)
@@ -39,15 +43,17 @@ nvencffx/
 │   │   ├── fps_scale_section.rs # FPS mode, scaling, interpolation
 │   │   ├── audio_section.rs  # Audio codec selection (Copy, AAC, Opus, Custom, Disable)
 │   │   ├── trim_section.rs   # Trimming controls (timeline slider, -ss/-to, streamcopy, precise)
-│   │   ├── presets_section.rs # Preset selector with save/load/delete
-│   │   └── log_view.rs       # Real-time streaming FFmpeg output log
+│   │   └── presets_section.rs # Preset selector with save/load/delete
 │   ├── core/                 # FFmpeg business logic
 │   │   ├── mod.rs
 │   │   ├── command.rs        # FFmpeg CLI argument builder (encoding, streamcopy, custom command modes)
 │   │   ├── probe.rs          # ffprobe runner (media info, duration, codec detection, LRU cache)
 │   │   ├── process.rs        # Process management (spawn, stderr reader, cancel, kill tree via toolhelp32)
 │   │   ├── progress.rs       # Stream parser for progress (time=, fps=, speed=, size=, bitrate=, percentage)
-│   │   └── estimate.rs       # Output file size estimation (ffprobe duration × bitrate)
+│   │   ├── estimate.rs       # Output file size estimation (ffprobe duration × bitrate)
+│   │   ├── streams.rs        # Stream list from ffprobe, -map options
+│   │   ├── thumbnail.rs      # Trim slider frame grabs (CUDA nv12 / p010le, CPU), raw RGBA
+│   │   └── vmaf.rs           # libvmaf command and score parsing
 │   ├── config/               # Settings & presets
 │   │   ├── mod.rs
 │   │   ├── settings.rs       # AppSettings: serde model for nff_settings.json (all 47 fields)
@@ -171,7 +177,7 @@ Completed:
 - [x] Modal dialogs replacing Tk `messagebox` / `simpledialog` (`ui/dialogs.rs`: info, warning, error, yes/no, text prompt)
 - [x] Self-drawn title bar for secondary windows (`dialogs::title_bar`, undecorated viewport); the main window keeps the native dark title bar for Aero Snap and native resizing
 
-- [x] Context menu widget (done in Phase 5): Cut / Copy / Paste / Delete / Select All on text fields; right-click on Convert pauses; the log's Copy comes with the log inspector (Phase 8)
+- [x] Context menu widget (done in Phase 5): Cut / Copy / Paste / Delete / Select All on text fields; right-click on Convert pauses
 
 ### Phase 2: Complete Main UI Layout ✅ DONE
 
@@ -183,13 +189,13 @@ Every control of the 1.8.4 main window is on screen and wired to the original's 
 - [x] **Output auto-naming**: `<stem>_<codec>_custom.<ext>` in `last_output_dir` (if it exists) or next to the input, container kept for mp4/mkv/mov/ts/mts/m2ts/webm; a codec switch renames only auto-named outputs
 - [x] **Estimated file size**: `(video + audio kbps) × duration / 8 / 1024` from a background, cached ffprobe run (`core/probe.rs`, `core/estimate.rs`)
 - [x] **Window height follows the sections** (`_update_window_size`): opening or closing a section sets the height to 700 + what the open sections add, capped at 1.8.4's `maxsize` (900 / 800 / 650 px at <125% / ≥125% / ≥200% scaling); only on a toggle, so a height dragged by hand stays until then
-- [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame; the full log inspector stays in Phase 8)
+- [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame)
 - [x] **Custom command mode**: Output opens an editable preview window (Copy / Apply / Reset / Close); Apply validates `-i` + output file; right-click on Output copies the command with spaced paths quoted
 - [x] Parity fixes: H.264 hides Lookahead Level (as the original), CUDA Output Format is disabled unless HW Accel = cuda, tune = lossless turns AQ off, `Send to nvencFFX` argument is loaded at startup, ffmpeg / ffprobe auto-detected (exe folder, then `PATH`)
 
 Remaining (moved to later phases):
-- [ ] **Streams** button (stream map window) and the `?` / Help buttons → Phase 8
-- [ ] Thumbnail preview while dragging the trim handles → Phase 8
+- [x] **Streams** button (stream map window) and the `?` / Help buttons (Phase 8)
+- [x] Thumbnail preview while dragging the trim handles (Phase 8)
 - [x] Play Input / Play Output / Play 10s Preview / Convert actions (Phase 4)
 - [x] Batch / Screen Record actions (Phases 6, 7)
 
@@ -222,7 +228,7 @@ Deliberate differences from 1.8.4:
    - Durations: background probes, cached per file (`DurationCache`)
    - `media_info`: `ffprobe -hide_banner <file>` (stderr), `Metadata:` / `Chapters:` blocks removed, 10 s timeout; `InfoCache` keeps the 50 most recently used results
    - Shown as the Input File hover tooltip (monospace, 600 px wide), probed lazily on first hover
-   - JSON mode (`-show_streams -show_format`) is only needed by the Streams window → Phase 8
+   - No JSON mode (`-show_streams -show_format`) needed: the Streams window (Phase 8) parses the `-hide_banner` overview like the original
 
 3. ✅ **Process Runner** (`core/process.rs`, `core/progress.rs`):
    - `CREATE_NO_WINDOW` (stable Rust has no `STARTUPINFO` access; console apps need nothing else to stay hidden)
@@ -282,7 +288,6 @@ All raw `windows-sys` like the rest of `src/win32/`; neither `tray-icon` nor `gl
    - Right-click in any enabled entry and in the command preview opens Cut / Copy / Paste / Delete / Select All (`SECONDARY_BG`, radius 10, 120×28 items with green hover); Copy without a selection copies the whole text, Cut / Delete need a selection
    - egui moves the cursor on any pointer press, so the selection is saved before a right-click reaches the `TextEdit` and restored after it
    - Ctrl+A / C / V / X on non-Latin keyboard layouts (`_handle_key_press`) need no port: egui-winit falls back to the physical key
-   - The log's "Copy" belongs to the log inspector → Phase 8
 
 Also: the per-frame bookkeeping (`update_state`: ffmpeg output, probes, tray commands, autosave) moved from `App::ui` to `App::logic`. eframe 0.36 does not call `ui` while the window is minimized, only `logic`, so before this the taskbar progress, the completion beep and the tray's Open stalled until the window was restored.
 
@@ -360,14 +365,35 @@ Deliberate differences from 1.8.4:
 - Closing the app during a recording saves it first. 1.8.4 started the save on a daemon thread and quit, so the recording was lost (the segments stayed in `%TEMP%`).
 - An ffmpeg that cannot be started for the join / mux gives the same "Failed to join … / Failed to mux …" message as a failed run (1.8.4 showed the Python exception text).
 
-### Phase 8: UI Polish, Tooltips & Help
+### Phase 8: Help, Streams, Frame Preview & VMAF ✅ DONE
 
-1. Port descriptive tooltips to all encoder settings via `.on_hover_text(...)` — the Python version has extensive technical tooltips for every NVENC option
-2. Real-time FFmpeg log inspector with search, auto-scroll, word-wrap toggle, and "Copy" context menu
-3. Integrated Help dialog (port `nff-help.txt` — 20 KB of documentation)
-4. Integrated About dialog (port `nff-about.txt` — version, author, license)
-5. File association: "Send to nvencFFX" shell integration (equivalent of `Send to nvencFFX.bat`)
-6. ffprobe tooltip on input file hover (shows codec, resolution, duration, bitrate)
+The rest of the 1.8.4 main window: the Help and `?` windows, the Streams window, the frame preview of the trim slider and the VMAF analysis. The earlier draft of this section listed technical tooltips on every encoder option and a log inspector with search, auto-scroll, word wrap and Copy; 1.8.4 has neither (it has five right-click hints and the one-line output under the status), so they were not added. The input file's ffprobe tooltip was already done in Phase 4, and the "Send to" argument in Phase 2.
+
+1. ✅ **Help window** (`app/help.rs`, `_show_main_help`): "nvencFFX Help", 800×700, Manual / About / License tabs (106 px, the open one green); `nff-help.txt` with its `#` lines as green headings without the `#`, `nff-about.txt`, `nff-license.txt`; monospace 14 px, word-wrapped, selectable; Close
+2. ✅ **`?` windows** (`_show_help_window`, `_fetch_help_info`): "NVENC Encoder Options" (`ffmpeg -h encoder=<codec>_nvenc`) on Add FF Options, "FFmpeg Video Filters" (`ffmpeg -filters`) on Add Video Filters; "Loading help information..." until ffmpeg (run in the background) answers, stdout or else stderr, "Error retrieving help information:" if it cannot start
+3. ✅ **Streams window** (`app/streams.rs`, `core/streams.rs`, `_open_map_window`, `_create_stream_map_window`):
+   - "Stream Selection - <file>", 600×600 (min 600×550), centered on the main window; the original's warnings for no input / a missing file / no ffprobe
+   - `ffprobe -hide_banner` in the background ("Analyzing file, please wait..."), parsed like the original's `Stream #0:N...: Video|Audio|Subtitle: ...` regex; Video / Audio / Subtitle / Pictures (cover art) sections, map codes `0:v:N` / `0:a:N` / `0:s:N` by position within the type
+   - Apply / Check All / Uncheck All enabled once loaded; Apply drops the old `-map` / `-ignore_unknown` from Add FF Options and adds `-ignore_unknown -map ...` for the checked streams (nothing if all are checked; "At least one stream must be selected." if none)
+   - The selection is kept per input file for the session and restored on reopening (also after Close)
+4. ✅ **Frame preview on the trim slider** (`app/thumbnail.rs`, `core/thumbnail.rs`, `_show_thumbnail_preview`): pressing the slider shows the frame at the pointer's time at once, dragging a handle refreshes it 200 ms after the handle rests, releasing hides it; tried as in the original: CUDA decode + `scale_cuda` with an 8-bit (`nv12`), then 10-bit (`p010le`) download, then the CPU, 5 s each; "Preview unavailable" if all fail
+5. ✅ **VMAF** (`app/vmaf.rs`, `core/vmaf.rs`, `_on_vmaf_right_click`, `_run_vmaf_analysis`, `_execute_vmaf`): right click on Play Output File (hint "Right-click to run VMAF analysis"); both sizes from ffprobe, the output scaled to the input's size with the Interpolation Algo if they differ; `-t 30` of both through `libvmaf=n_threads=<cores>:n_subsample=10`; status "VMAF Analysis in progress...", the output lines under it, then "VMAF score: 95.13" / "VMAF score (with scaling): ..." with the completion beep; a second right click cancels ("VMAF analysis cancelled"); runs alongside a conversion, as in the original
+6. ✅ Tooltip delay 0.3 s (`CTkToolTip(delay=0.3)`) for the right-click hints
+7. ✅ Consolas 14 px (`font=("Consolas", 14)`) in the input tooltip, the command preview and the help windows, as in 1.8.4: read at startup from `%WINDIR%\Fonts\consola.ttf` (Microsoft's font cannot be embedded), egui's Hack as the fallback; until now these used Hack
+
+Also: `probe::output_with_timeout` (a child with captured output, killed after a timeout) now backs the input tooltip's 10 s limit too; before, a hung ffprobe was left running. The process tree test killed every `ffmpeg.exe` child of the test binary, which broke other tests running ffmpeg in parallel; it now uses a name nothing runs under. Radio buttons were 25 px (28 px checked) instead of CTk's 22 px: epaint 0.36 strokes circles outside the radius, so the ring now sits inside it (checked: 6 px ring around a 10 px hole).
+
+Deliberate differences from 1.8.4:
+- The help texts are embedded in the exe instead of read from files next to it, so the single exe needs no text files (and the "File not found" case is gone).
+- Clicking Help or a `?` again brings its open window to the front (1.8.4 ignored the click; its Streams window already did this).
+- Help and `?` windows open centered on the main window (1.8.4 left the position to the window manager) and have a 400×300 minimum size.
+- The `?` windows scroll horizontally as well; 1.8.4's label cut off lines wider than the window.
+- The frame preview is grabbed in the background and drawn inside the main window, kept within it (below the slider if there is no room above); 1.8.4 ran ffmpeg on the UI thread (the window froze for each frame) and at >100% display scaling moved the popup to the screen's top-left corner.
+- ffmpeg delivers the frame as raw RGBA instead of an MJPEG decoded with Pillow, so no image decoder is needed.
+- The preview keeps the video's aspect ratio inside the 352×198 box; 1.8.4 stretched every frame to 16:9.
+- A press on the slider (not on a handle) picks the nearer handle, as since Phase 2, so the preview follows that drag; 1.8.4 showed the frame of the click and moved nothing.
+- The input file tooltip appears after 0.3 s like the other hints (1.8.4: 0.5 s); egui has one tooltip delay.
+- "Preview unavailable" appears in the box above the slider; 1.8.4 put it in a popup at the screen's top-left corner if the very first frame failed.
 
 ### Phase 9: Binary Optimization & Release Packaging
 
@@ -377,6 +403,7 @@ Deliberate differences from 1.8.4:
 4. Post-build: optional UPX compression for ~4–6 MB final binary
 5. Output: **Single executable (~12–15 MB)** with native DX12/Vulkan hardware acceleration
 6. Test: verify nff_settings.json and presets/*.json backward compatibility with Python version files
+7. README "Send to" section: the shortcut in `%APPDATA%\Microsoft\Windows\SendTo` can point straight at `nvencFFX.exe` (the file arrives as the first argument, no console window); `Send to nvencFFX.bat` is no longer needed
 
 ---
 
@@ -386,16 +413,16 @@ Deliberate differences from 1.8.4:
 |---|---|---|---|
 | Phase 0 — Setup | ✅ Done | `Cargo.toml`, `build.rs`, `main.rs` | ~50 |
 | Phase 1 — Theme & Widgets | ✅ Done (context menu added in Phase 5) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
-| Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
+| Phase 2 — Main UI Layout | ✅ Done (Streams / help windows done in Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
 | Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
 | Phase 4 — FFmpeg Core | ✅ Done | `core/command.rs`, `core/probe.rs`, `core/process.rs`, `core/progress.rs`, `win32/process_tree.rs` | ~1,300 |
 | Phase 5 — Win32 Integration | ✅ Done (recording commands wired in Phase 7) | `win32/taskbar.rs`, `win32/suspend.rs`, `win32/tray.rs`, `ui/widgets.rs` (context menu) | ~800 |
 | Phase 6 — Batch Converter | ✅ Done | `app/batch.rs`, `ui/dialogs.rs` (resize edges), `win32/mod.rs` (dialog parent) | ~750 |
 | Phase 7 — Screen Recording | ✅ Done | `recording/mod.rs`, `recording/capture.rs`, `recording/audio.rs`, `app/record.rs`, `win32/mod.rs` (local time, Desktop folder) | ~1,450 |
-| Phase 8 — Polish & Help | ⬜ Not started | — | — |
+| Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~8,500 LOC across 27 files (71 tests).
+**Current Rust codebase**: ~10,100 LOC across 34 files (91 tests).
 
 ---
 
@@ -411,3 +438,4 @@ Deliberate differences from 1.8.4:
 8. ~~**Tray / hotkey commands for recording**~~: resolved in Phase 7; Alt+F8 / Alt+F9 and the tray menu drive the recorder, and `Tray::balloon` shows its notifications.
 9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.
+11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` still credits CustomTkinter / Pillow / CTkToolTip and says 1.8.4; it is shared with the Python version, so it changes with the release (Phase 9).

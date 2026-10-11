@@ -28,7 +28,11 @@ use crate::ui::{
 };
 
 mod batch;
+mod help;
 mod record;
+mod streams;
+mod thumbnail;
+mod vmaf;
 
 /// Pixel grid of the original CustomTkinter layout (`nvencFFX.py`, 100% scaling).
 /// X offsets are relative to the content origin, which sits 31px from the window edge.
@@ -223,6 +227,14 @@ pub struct NvencFfxApp {
     batch: batch::Batch,
     /// The screen recording, until it is saved; runs alongside `task`.
     recording: Option<record::Recording>,
+    /// VMAF analysis (right click on Play Output File); runs alongside `task`.
+    vmaf: Option<vmaf::Vmaf>,
+    /// Frame preview above the trim slider.
+    thumbnail: thumbnail::Thumbnail,
+    help: help::Help,
+    /// The Streams window and the selections it saved per input file.
+    streams: Option<streams::StreamsWindow>,
+    map_selections: streams::Selections,
     /// When the window minimizes after a recording started.
     minimize_due: Option<Instant>,
 
@@ -275,6 +287,11 @@ impl Default for NvencFfxApp {
             preview_files: Vec::new(),
             batch: batch::Batch::default(),
             recording: None,
+            vmaf: None,
+            thumbnail: thumbnail::Thumbnail::default(),
+            help: help::Help::default(),
+            streams: None,
+            map_selections: streams::Selections::default(),
             minimize_due: None,
 
             dialog: None,
@@ -1276,6 +1293,9 @@ impl NvencFfxApp {
         if let Some(task) = self.task.take() {
             task.runner.stop(STOP_TIMEOUT);
         }
+        if let Some(vmaf::Vmaf::Running { runner, .. }) = self.vmaf.take() {
+            runner.stop(STOP_TIMEOUT);
+        }
         #[cfg(windows)]
         {
             let ffmpeg = Path::new(&self.s.ffmpeg_path).file_name().map(|n| n.to_string_lossy().into_owned());
@@ -1395,9 +1415,12 @@ impl NvencFfxApp {
                 self.set_codec(codec);
             }
         }
-        place(ui, cell(r, grid::BUTTON_X, dimensions::BUTTON_WIDTH), |ui| {
+        let help = place(ui, cell(r, grid::BUTTON_X, dimensions::BUTTON_WIDTH), |ui| {
             button(ui, vec2(dimensions::BUTTON_WIDTH, dimensions::WIDGET_HEIGHT), "Help", ButtonKind::Grey)
         });
+        if help.clicked() {
+            self.open_main_help(ui.ctx());
+        }
     }
 
     /// TextCheckbox header row; returns the row rect.
@@ -1638,6 +1661,17 @@ impl NvencFfxApp {
                 self.trim_handle_moved(false, end, d);
             }
         }
+        // Frame preview while the button is held on the slider: at the pointer's time
+        // (the first frame without a duration), refreshed as a handle is dragged
+        let held = slider.is_pointer_button_down_on();
+        let track = slider.rect.shrink2(vec2(10.0, 0.0));
+        let x = ui.input(|i| i.pointer.interact_pos()).map_or(track.min.x, |p| p.x.clamp(track.min.x, track.max.x));
+        let seconds = duration.map_or(0.0, |d| {
+            let secs = ((x - track.min.x) / track.width().max(1.0)) as f64 * d;
+            if secs >= d { (d - 0.1).max(0.0) } else { secs }
+        });
+        let moved = slider.dragged() && duration.is_some() && ui.input(|i| i.pointer.delta().x != 0.0);
+        self.thumbnail.track(slider.rect, held, moved, x, seconds);
         if place(ui, sub_rect(f, 692.0, 10.0, 30.0, 30.0), |ui| reset_button(ui, vec2(30.0, 30.0))).clicked() {
             self.reset_trim();
         }
@@ -1672,20 +1706,26 @@ impl NvencFfxApp {
 
         // Option / filter entries
         let entry_w = 537.0;
-        let fields: [(&str, &str, &mut String, &str, bool); 3] = [
-            ("Add FF Options:", "ff_options", &mut s.additional_options, FF_OPTIONS_PLACEHOLDER, true),
-            ("Add Video Filters (-vf):", "vf", &mut s.additional_filter_options, VF_PLACEHOLDER, true),
-            ("Add Audio Filters (-af):", "af", &mut s.additional_audio_filter_options, AF_PLACEHOLDER, false),
+        let fields: [(&str, &str, &mut String, &str, Option<help::Topic>); 3] = [
+            ("Add FF Options:", "ff_options", &mut s.additional_options, FF_OPTIONS_PLACEHOLDER, Some(help::Topic::Encoder)),
+            ("Add Video Filters (-vf):", "vf", &mut s.additional_filter_options, VF_PLACEHOLDER, Some(help::Topic::Filters)),
+            ("Add Audio Filters (-af):", "af", &mut s.additional_audio_filter_options, AF_PLACEHOLDER, None),
         ];
+        let mut help_clicked = None;
         for (i, (text, id, value, placeholder, help)) in fields.into_iter().enumerate() {
             let r = sub_rect(f, 0.0, 88.0 + 48.0 * i as f32, f.width(), 48.0);
             place_label(ui, cell(r, 10.0, 140.0), text);
             place(ui, cell(r, 152.0, entry_w), |ui| {
                 entry(ui, id, vec2(entry_w, h), value, EntryStyle { placeholder, ..Default::default() })
             });
-            if help {
-                place(ui, cell(r, 696.0, 30.0), |ui| button(ui, vec2(30.0, h), "?", ButtonKind::Grey));
+            if let Some(topic) = help
+                && place(ui, cell(r, 696.0, 30.0), |ui| button(ui, vec2(30.0, h), "?", ButtonKind::Grey)).clicked()
+            {
+                help_clicked = Some(topic);
             }
+        }
+        if let Some(topic) = help_clicked {
+            self.open_help(topic, ui.ctx());
         }
 
         // Quick filter buttons
@@ -1698,7 +1738,10 @@ impl NvencFfxApp {
                 };
                 let rect = sub_rect(f, 10.0 + 116.0 * bi as f32, 232.0 + 38.0 * ri as f32, 106.0, h);
                 if place(ui, rect, |ui| button(ui, rect.size(), text, kind)).clicked() {
-                    filters::apply(&mut self.s, quick);
+                    match quick {
+                        Quick::Streams => self.open_streams(ui.ctx()),
+                        _ => filters::apply(&mut self.s, quick),
+                    }
                 }
             }
         }
@@ -1838,13 +1881,22 @@ impl NvencFfxApp {
             self.record_button(),
         ];
         let mut clicked = None;
+        let mut vmaf = false;
         for (i, (text, kind)) in buttons.into_iter().enumerate() {
             let rect = cell(r, (w + gap) * i as f32, w);
-            if place(ui, rect, |ui| button(ui, rect.size(), text, kind)).clicked() {
+            let mut response = place(ui, rect, |ui| button(ui, rect.size(), text, kind));
+            if i == 1 {
+                response = response.on_hover_text("Right-click to run VMAF analysis");
+                vmaf = response.secondary_clicked();
+            }
+            if response.clicked() {
                 clicked = Some(i);
             }
         }
         let ctx = ui.ctx().clone();
+        if vmaf {
+            self.toggle_vmaf(&ctx);
+        }
         match clicked {
             Some(0) => self.play(false),
             Some(1) => self.play(true),
@@ -1899,6 +1951,8 @@ impl NvencFfxApp {
     fn update_state(&mut self, ctx: &egui::Context) {
         self.poll_task(ctx);
         self.poll_recording(ctx);
+        self.poll_vmaf(ctx);
+        self.thumbnail.poll(ctx, &self.s.ffmpeg_path, &self.input_file);
         self.minimize_when_due(ctx);
         self.poll_tray(ctx);
         self.durations.poll();
@@ -2052,6 +2106,7 @@ impl eframe::App for NvencFfxApp {
                 });
         });
 
+        self.thumbnail.show(&ctx);
         file_drag_drop_overlay(&ctx, "Drop video file to load into nvencFFX");
         self.dialog_ui(ui, ViewportId::ROOT);
 
@@ -2065,6 +2120,8 @@ impl eframe::App for NvencFfxApp {
             ctx.show_viewport_immediate(command_viewport(), builder, |ui, _| self.command_window_ui(ui));
         }
         self.show_batch_window(&ctx);
+        self.show_streams_window(&ctx);
+        self.show_help_windows(&ctx);
     }
 }
 
