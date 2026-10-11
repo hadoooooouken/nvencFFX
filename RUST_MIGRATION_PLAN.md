@@ -195,6 +195,8 @@ Deliberate differences from 1.8.4:
 - The main scroll bar is shown only when the content does not fit (CTkScrollableFrame always showed it, even with nothing to scroll); the layout does not move when it appears.
 - The auto height uses the measured height a section adds (the original added `winfo_reqheight() + 10`, 10 px short for sections with `pady=10`) and also stops 80 px short of the monitor height, so the window never extends under the taskbar on small screens.
 - The command preview quotes arguments with spaces and its parser removes double quotes, so `-metadata title="a b"` style arguments round-trip (Python's non-POSIX `shlex` kept the quote characters).
+- The Input / Output / FFmpeg Path fields, the quality field + Constant QP checkbox and the codec radios start at x = 120 instead of 226 (the original's empty gap after the labels came from CTk grid column sizing); the path fields widen from 350 to 478 px up to the buttons. The Auto / Default buttons on the encoder section header stay at 226.
+- The right-hand buttons (Browse … Help) move from x = 586 to 608 and the section frames widen from 736 to 738 px, so everything ends 41 px from the right window edge, the same as the labels on the left (1.8.4 left 63 px on the right).
 
 ### Phase 3: Configuration Persistence & Presets ✅ DONE
 

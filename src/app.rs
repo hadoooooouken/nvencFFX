@@ -33,12 +33,17 @@ mod batch;
 /// X offsets are relative to the content origin, which sits 31px from the window edge.
 mod grid {
     pub const LABEL_X: f32 = 10.0;
-    pub const ENTRY_X: f32 = 226.0;
-    pub const ENTRY_W: f32 = 350.0;
-    pub const BUTTON_X: f32 = 586.0;
+    /// Fields of the top rows; 1.8.4 has them at 226 (CTk grid column width),
+    /// 120 clears the longest label ("Video Bitrate (k):", 96px).
+    pub const ENTRY_X: f32 = 120.0;
+    /// Buttons end at 748, as far from the right window edge (820) as the labels are from the left.
+    pub const BUTTON_X: f32 = 608.0;
+    pub const ENTRY_W: f32 = BUTTON_X - 10.0 - ENTRY_X;
+    /// Auto / Default next to the "Advanced Encoder Settings" header.
+    pub const HEADER_BUTTON_X: f32 = 226.0;
     pub const ROW_H: f32 = 38.0; // 28px widget + 2 * 5px grid pady
     pub const SECTION_X: f32 = 10.0;
-    pub const SECTION_W: f32 = 736.0;
+    pub const SECTION_W: f32 = 738.0;
     pub const SMALL_BUTTON_W: f32 = 80.0;
     /// Center of grid columns 0..=2, where the status line is centered.
     pub const STATUS_CENTER_X: f32 = 366.0;
@@ -1401,10 +1406,10 @@ impl NvencFfxApp {
             return;
         }
         let small = vec2(grid::SMALL_BUTTON_W, dimensions::WIDGET_HEIGHT);
-        if place(ui, cell(header, grid::ENTRY_X, small.x), |ui| button(ui, small, "Auto", ButtonKind::Green)).clicked() {
+        if place(ui, cell(header, grid::HEADER_BUTTON_X, small.x), |ui| button(ui, small, "Auto", ButtonKind::Green)).clicked() {
             self.apply_auto_encoder_settings();
         }
-        if place(ui, cell(header, grid::ENTRY_X + 90.0, small.x), |ui| {
+        if place(ui, cell(header, grid::HEADER_BUTTON_X + 90.0, small.x), |ui| {
             button(ui, small, "Default", ButtonKind::Green)
         })
         .clicked()
