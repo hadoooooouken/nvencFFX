@@ -189,7 +189,8 @@ Every control of the 1.8.4 main window is on screen and wired to the original's 
 Remaining (moved to later phases):
 - [ ] **Streams** button (stream map window) and the `?` / Help buttons → Phase 8
 - [ ] Thumbnail preview while dragging the trim handles → Phase 8
-- [ ] Play / Preview / Batch / Screen Record / Convert actions → Phases 4, 6, 7
+- [x] Play Input / Play Output / Play 10s Preview / Convert actions (Phase 4)
+- [ ] Batch / Screen Record actions → Phases 6, 7
 
 Deliberate differences from 1.8.4:
 - Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
@@ -207,47 +208,43 @@ Deliberate differences from 1.8.4:
 5. ✅ `last_input_dir` / `last_output_dir` persist with the rest and seed Browse / Save As / auto-naming (a folder that no longer exists falls back to the working directory / the input's folder)
 6. ✅ `version`: the stored value is ignored on load and every save writes this build's version, as the original does; the schema is unchanged since 1.x, so a future migration step goes into `Settings::load`
 
-### Phase 4: FFmpeg Core Engine & Process Runner
+### Phase 4: FFmpeg Core Engine & Process Runner ✅ DONE
 
-1. **Command Line Builder** (`command.rs`) ✅ ported in Phase 2 for the command preview, with tests against the original's output:
-   - 3 operating modes: **Encoding** (NVENC), **Stream Copy** (`-c:v copy`), **Custom Command** (raw CLI)
-   - NVENC codecs: `h264_nvenc`, `hevc_nvenc`, `av1_nvenc`
-   - Full parameter matrix: preset (p1–p7), tune (hq/ll/ull), profile, level, tier, coder, multipass, rc (constqp/vbr/cbr), lookahead_level, split_encode_mode
-   - AQ flags: spatial_aq, temporal_aq, strict_gop, no_scenecut, weighted_pred (with `-bf 0`)
-   - Rate control: CQP mode (`-rc constqp -qp <val>`) vs VBR/CBR with maxrate/bufsize auto-calculation
-   - Video filters chain: fps, scale with interpolation algo, additional_filter_options
-   - Audio filter chain: `-af` from additional_audio_filter_options
-   - Stream mapping: `-map 0:v? -map 0:a? -map 0:s?` (MP4) vs `-map 0` (MKV), `-map_metadata 0 -map_chapters 0`
-   - Subtitle codec: auto-insert `-c:s mov_text` for non-MKV outputs
-   - Trim: `-ss`/`-to` positioning — before `-i` (fast seek) vs after (precise), streamcopy mode
-   - Post-process: retarget all video encoder options from `:v` to `:v:0` to avoid applying to cover art streams
-   - Hardware acceleration: `-hwaccel:v cuda/d3d11va/vulkan`, `-hwaccel_output_format cuda`
-   - Additional raw options injection and `-filter_complex` detection (skip `-vf` if present)
+1. ✅ **Command Line Builder** (`core/command.rs`), ported in Phase 2 with tests against the original's output: encoding / stream copy / custom command modes, the full NVENC parameter matrix, CQP vs VBR/CBR with maxrate/bufsize, `-vf`/`-af` chains, stream mapping + `mov_text`, fast vs precise trim, `:v` → `:v:0` retargeting, hwaccel, `-filter_complex` detection. Phase 4 adds `preview_clip` (the two commands of Play 10s Preview: 10 s stream copy from the middle, then the encode with `-ss`/`-to` removed and `-map 0` inserted for custom commands).
 
-2. **ffprobe Integration** (`probe.rs`):
-   - Derive ffprobe path from ffmpeg path (`ffprobe.exe` in same directory)
-   - Run `ffprobe -hide_banner <file>` and parse stderr output
-   - LRU cache (max 50 entries) with `OrderedDict`-like behavior
-   - Extract: duration, codec, resolution, bitrate, audio tracks for tooltip display
-   - JSON mode: `-print_format json -show_streams -show_format` for size estimation
+2. ✅ **ffprobe Integration** (`core/probe.rs`):
+   - ffprobe next to the ffmpeg path, else beside the exe / on `PATH`
+   - Durations: background probes, cached per file (`DurationCache`)
+   - `media_info`: `ffprobe -hide_banner <file>` (stderr), `Metadata:` / `Chapters:` blocks removed, 10 s timeout; `InfoCache` keeps the 50 most recently used results
+   - Shown as the Input File hover tooltip (monospace, 600 px wide), probed lazily on first hover
+   - JSON mode (`-show_streams -show_format`) is only needed by the Streams window → Phase 8
 
-3. **Process Runner** (`process.rs`):
-   - Spawn with `CREATE_NO_WINDOW` + `STARTF_USESHOWWINDOW` on Windows
-   - Line-by-line stderr/stdout reader in a worker thread, no UI blocking
-   - Parse progress: `fps=`, `q=`, `size=`, `time=`, `bitrate=`, `speed=`
-   - Calculate percentage from `time=` vs known duration
-   - Send progress snapshots to UI via `std::sync::mpsc` or `crossbeam-channel`
+3. ✅ **Process Runner** (`core/process.rs`, `core/progress.rs`):
+   - `CREATE_NO_WINDOW` (stable Rust has no `STARTUPINFO` access; console apps need nothing else to stay hidden)
+   - stdout and stderr share one `std::io::pipe` (like `stderr=STDOUT`); a worker thread splits on `` and `
+` and sends lines over `mpsc`, waking the UI with `request_repaint`
+   - Several commands run in sequence, each only after the previous one succeeded (preview = copy + encode)
+   - Cancel terminates the process; `stop` also waits for it to exit (used on close, so temp files can be deleted)
+   - `time=` parsing accepts every ffmpeg time syntax (`HH:MM:SS.ms`, `MM:SS`, `12.5`, `1500ms`, negative values, `N/A`)
 
-4. **Process Tree Kill** (`process_tree.rs`):
-   - `CreateToolhelp32Snapshot` + `Process32FirstW`/`Process32NextW` to find ffmpeg child PIDs
-   - Kill only our ffmpeg.exe children (match by parent PID)
-   - Use on Abort, window close, and recording stop
+4. ✅ **Process Tree Kill** (`win32/process_tree.rs`): Toolhelp32 snapshot of the children of our process named `ffmpeg.exe` / `ffprobe.exe` / the configured ffmpeg file name, terminated on window close (after the running task is stopped)
 
-5. **Size Estimation** (`estimate.rs`) ✅ done in Phase 2:
-   - Run ffprobe to get input duration in seconds
-   - Calculate: `(video_bitrate + audio_bitrate) × duration / 8 / 1024` → MB
-   - Display in status bar as "Estimated size: ~X MB"
-   - Show "Not available for CQP" when in constant QP mode
+5. ✅ **Size Estimation** (`core/estimate.rs`), done in Phase 2
+
+6. ✅ **App wiring**:
+   - Convert ↔ Cancel (red); status / output line / progress bar with `0%` then one decimal like the original; completion beep (`MessageBeep(MB_ICONASTERISK)`), "Cancelled" info box, error box with exit code (unsigned, as Python showed it) and the last output line, "ffmpeg.exe not found" box
+   - An applied custom command runs as it is (`_build_ffmpeg_command(preview=False)`)
+   - Play 10s Preview ↔ Cancel Preview; disabled (grey) in Copy mode, but a running preview stays cancellable; temp clips in `%TEMP%` deleted before the next preview and on exit; the result opens in the default player
+   - Play Input / Play Output open the file with `ShellExecuteW` (`os.startfile`)
+   - Convert during a preview and preview during a conversion show the original's "Please wait..." errors
+
+Deliberate differences from 1.8.4:
+- Progress is measured against the command's `-ss`/`-to`/`-t` range (capped by the input duration) instead of the full input duration, so trimmed conversions reach 100%.
+- The preview's stream copy runs in the background thread; the original ran it synchronously and froze the window meanwhile.
+- The process kill on exit matches our own children by parent PID, not every `ffmpeg.exe` started from the same path (which also hit other programs' instances).
+- The input tooltip is probed on first hover instead of on every input change.
+
+Left for Phase 5: pause / resume (`NtSuspendProcess`, right-click on Convert) and the taskbar progress overlay.
 
 ### Phase 5: Win32 Platform Integration
 
@@ -335,14 +332,14 @@ Deliberate differences from 1.8.4:
 | Phase 1 — Theme & Widgets | 🟢 ~98% (context menu left) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
 | Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
 | Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
-| Phase 4 — FFmpeg Core | 🟡 Builder, duration probe, estimate done; runner left | `core/command.rs`, `core/probe.rs`, `core/estimate.rs` | ~600 |
+| Phase 4 — FFmpeg Core | ✅ Done | `core/command.rs`, `core/probe.rs`, `core/process.rs`, `core/progress.rs`, `win32/process_tree.rs` | ~1,300 |
 | Phase 5 — Win32 Integration | ⬜ Not started | — | — |
 | Phase 6 — Batch Converter | ⬜ Not started | — | — |
 | Phase 7 — Screen Recording | ⬜ Not started | — | — |
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~4,200 LOC across 16 files (32 tests).
+**Current Rust codebase**: ~5,250 LOC across 19 files (45 tests).
 
 ---
 
@@ -350,8 +347,8 @@ Deliberate differences from 1.8.4:
 
 1. **egui file dialogs**: egui has no built-in file dialog. The `rfd` crate is **required** for Browse/Save As/Output Folder buttons — this is a hard dependency, not optional.
 2. ~~**Audio options gap**~~: resolved; all 9 audio modes are in the UI and the command builder.
-3. **Custom command mode**: editing / applying is done (Phase 2); executing the stored `custom_command` comes with the Phase 4 runner.
+3. ~~**Custom command mode**~~: resolved; editing / applying (Phase 2) and running the applied command (Phase 4) are done.
 4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
-5. **Process tree kill**: Simply calling `process.kill()` on Windows may leave orphan ffmpeg.exe processes. Must implement toolhelp32 snapshot-based child process enumeration (same as Python's `PROCESSENTRY32W` approach).
+5. ~~**Process tree kill**~~: resolved in Phase 4 (`win32/process_tree.rs`); reuse it for recording stop in Phase 7.
 6. **Screen recording complexity**: The segmented recording system with WASAPI audio muxing is the most complex feature (~650 LOC in Python). Consider deferring to a later release if needed.
 7. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.

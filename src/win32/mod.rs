@@ -1,7 +1,15 @@
 //! Thin Win32 helpers.
 
+pub mod process_tree;
+
 use std::ffi::c_void;
+use std::os::windows::ffi::OsStrExt;
+use std::path::Path;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use windows_sys::Win32::{
+    System::Diagnostics::Debug::MessageBeep,
+    UI::{Shell::ShellExecuteW, WindowsAndMessaging::{MB_ICONASTERISK, SW_SHOWNORMAL}},
+};
 
 #[link(name = "dwmapi")]
 unsafe extern "system" {
@@ -31,4 +39,30 @@ pub fn use_dark_title_bar(window: &impl HasWindowHandle) {
             break;
         }
     }
+}
+
+/// `os.startfile`: opens `path` with its default application.
+pub fn open_file(path: &Path) -> Result<(), String> {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            wide.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // Values up to 32 are error codes; apart from SE_ERR_NOASSOC they match Win32 errors
+    match result as usize {
+        31 => Err("No application is associated with this file type".to_owned()),
+        code @ 0..=32 => Err(std::io::Error::from_raw_os_error(code as i32).to_string()),
+        _ => Ok(()),
+    }
+}
+
+/// The "conversion complete" sound (`MessageBeep(MB_ICONASTERISK)`).
+pub fn beep() {
+    unsafe { MessageBeep(MB_ICONASTERISK) };
 }

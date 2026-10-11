@@ -81,11 +81,14 @@ pub enum ButtonKind {
     Grey,
     Red,
     Orange,
+    /// `state="disabled"` with a `SECONDARY_BG` fill; ignores clicks.
+    Disabled,
 }
 
 impl ButtonKind {
     fn fill(self, hovered: bool) -> Color32 {
         match (self, hovered) {
+            (Self::Disabled, _) => colors::SECONDARY_BG,
             (Self::Green, false) => colors::ACCENT_GREEN,
             (Self::Green, true) => colors::HOVER_GREEN,
             (Self::Grey, false) => colors::ACCENT_GREY,
@@ -96,10 +99,15 @@ impl ButtonKind {
             (Self::Orange, true) => colors::HOVER_ORANGE,
         }
     }
+
+    fn text_color(self) -> Color32 {
+        if self == Self::Disabled { colors::TEXT_DISABLED } else { colors::TEXT_COLOR_B }
+    }
 }
 
 fn paint_button(ui: &mut Ui, size: Vec2, kind: ButtonKind) -> (Rect, Response) {
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let sense = if kind == ButtonKind::Disabled { Sense::hover() } else { Sense::click() };
+    let (rect, response) = ui.allocate_exact_size(size, sense);
     if ui.is_rect_visible(rect) {
         ui.painter().rect_filled(
             rect,
@@ -113,7 +121,7 @@ fn paint_button(ui: &mut Ui, size: Vec2, kind: ButtonKind) -> (Rect, Response) {
 /// CTkButton: flat rounded fill, black 13px text.
 pub fn button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response {
     let (rect, response) = paint_button(ui, size, kind);
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, body_font(), colors::TEXT_COLOR_B);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, body_font(), kind.text_color());
     response
 }
 
@@ -121,7 +129,7 @@ pub fn button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response
 pub fn bold_button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response {
     let (rect, response) = paint_button(ui, size, kind);
     let font = FontId::proportional(14.0);
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, font, colors::TEXT_COLOR_B);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, font, kind.text_color());
     response
 }
 

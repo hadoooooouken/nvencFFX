@@ -1,6 +1,7 @@
 //! FFmpeg argument builder (`_build_ffmpeg_command`) and the parsing / quoting
 //! used by the editable command preview (custom command mode).
 
+use std::path::{Path, PathBuf};
 use crate::config::settings::{Settings, VideoCodec};
 
 /// Inputs to the builder besides the persisted settings.
@@ -268,6 +269,68 @@ pub fn preview(custom: Option<&[String]>, s: &Settings, job: &Job<'_>) -> Result
     Ok(cmd)
 }
 
+/// The commands behind "Play 10s Preview" (`_create_10s_preview`): 10 seconds from
+/// the middle of the input are stream-copied to `clip`, which is then encoded to
+/// `encoded` with the current settings (or custom command) minus any trimming.
+pub struct PreviewClip {
+    pub copy: Vec<String>,
+    pub encode: Vec<String>,
+    pub clip: PathBuf,
+    pub encoded: PathBuf,
+}
+
+pub const PREVIEW_SECONDS: f64 = 10.0;
+
+pub fn preview_clip(
+    custom: Option<&[String]>,
+    s: &Settings,
+    job: &Job<'_>,
+    duration: f64,
+    temp_dir: &Path,
+) -> Result<PreviewClip, String> {
+    let input = Path::new(job.input);
+    let stem = input.file_stem().unwrap_or_default().to_string_lossy();
+    let ext = |p: &Path| p.extension().map(|e| format!(".{}", e.to_string_lossy()));
+    let input_ext = ext(input).unwrap_or_else(|| ".mp4".to_owned());
+    let output_ext = ext(Path::new(job.output)).unwrap_or_else(|| input_ext.clone());
+    let clip = temp_dir.join(format!("{stem}_streamcopy10s{input_ext}"));
+    let encoded = temp_dir.join(format!("{stem}_encoded10s{output_ext}"));
+    let (clip_str, encoded_str) = (clip.to_string_lossy(), encoded.to_string_lossy());
+
+    let mid = ((duration - PREVIEW_SECONDS) / 2.0).max(0.0).to_string();
+    let copy = [
+        job.ffmpeg, "-ss", &mid, "-i", job.input, "-map", "0", "-ignore_unknown",
+        "-t", "10", "-c", "copy", "-y", &clip_str,
+    ]
+    .map(str::to_owned)
+    .to_vec();
+
+    let clip_job = Job { input: &clip_str, output: &encoded_str, ..*job };
+    let mut encode = without_trim(preview(custom, s, &clip_job)?);
+    // Keep every stream of the clip unless the user maps streams themselves
+    if !s.additional_options.contains("-map")
+        && let Some(i) = encode.iter().position(|a| a == "-i")
+        && encode.get(i + 2).is_some_and(|a| a != "-map")
+    {
+        encode.splice(i + 2..i + 2, ["-map", "0", "-ignore_unknown"].map(str::to_owned));
+    }
+    Ok(PreviewClip { copy, encode, clip, encoded })
+}
+
+/// Drops `-ss X` / `-to X` pairs.
+fn without_trim(args: Vec<String>) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg == "-ss" || arg == "-to" {
+            args.next();
+        } else {
+            out.push(arg);
+        }
+    }
+    out
+}
+
 /// Joins arguments for display, quoting the ones with spaces so the text can be
 /// split back losslessly by [`split`].
 pub fn join(args: &[String]) -> String {
@@ -430,6 +493,32 @@ mod tests {
         assert_eq!(parse_custom("ffmpeg out.mp4 x").unwrap_err(), "Missing input file (-i option)");
         assert_eq!(parse_custom("ffmpeg -i").unwrap_err(), "Command too short - not a valid FFmpeg command");
         assert_eq!(parse_custom("ffmpeg -i in.mp4 -y").unwrap_err(), "Missing output file");
+    }
+
+    #[test]
+    fn preview_clip_cuts_the_middle_and_drops_trimming() {
+        let s = Settings { additional_options: "-ss 00:00:05 -to 00:00:20".into(), ..Default::default() };
+        let temp = Path::new(r"T:\tmp");
+        let clip = preview_clip(None, &s, &job("out.mkv"), 70.0, temp).unwrap();
+        assert_eq!(clip.clip, temp.join("in put_streamcopy10s.mp4"));
+        assert_eq!(clip.encoded, temp.join("in put_encoded10s.mkv"));
+        assert_eq!(
+            join(&clip.copy),
+            r#"ffmpeg.exe -ss 30 -i "C:\in put.mp4" -map 0 -ignore_unknown -t 10 -c copy -y "T:\tmp\in put_streamcopy10s.mp4""#
+        );
+        let encode = join(&clip.encode);
+        assert!(encode.starts_with(r#"ffmpeg.exe -hide_banner -hwaccel:v cuda -threads 4 -y -i "T:\tmp\in put_streamcopy10s.mp4" -map 0 -ignore_unknown -c:v copy"#), "{encode}");
+        assert!(!encode.contains("-ss") && !encode.contains("-to"));
+        assert!(encode.ends_with(r#""T:\tmp\in put_encoded10s.mkv""#));
+
+        // A custom command gets the clip swapped in and `-map 0` after its input
+        let custom = split("ffmpeg -ss 1 -i a.mp4 -c:v hevc_nvenc b.mp4");
+        let clip = preview_clip(Some(&custom), &Settings::default(), &job(""), 4.0, temp).unwrap();
+        assert_eq!(clip.copy[2], "0", "a clip shorter than 10 s starts at 0");
+        assert_eq!(
+            join(&clip.encode),
+            r#"ffmpeg -i "T:\tmp\in put_streamcopy10s.mp4" -map 0 -ignore_unknown -c:v hevc_nvenc "T:\tmp\in put_encoded10s.mp4""#
+        );
     }
 
     #[test]

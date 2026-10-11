@@ -12,8 +12,9 @@ use crate::config::{
 use crate::core::{
     command, estimate,
     filters::{self, QUICK_BUTTONS, Quick},
-    probe::{self, Duration, DurationCache},
-    timecode,
+    probe::{self, Duration, DurationCache, InfoCache},
+    process::{self, Event, Exit, Runner},
+    progress, timecode,
 };
 use crate::ui::{
     dialogs::{self, Dialog, Kind, Outcome},
@@ -119,6 +120,22 @@ struct CommandWindow {
     text: String,
 }
 
+/// What the running ffmpeg is doing.
+enum TaskKind {
+    /// Convert; the command and its input give the length `time=` counts towards.
+    Convert { input: String, args: Vec<String> },
+    /// Play 10s Preview: stream copy (step 0), then encoding to `encoded`.
+    Preview { encoded: PathBuf },
+}
+
+struct Task {
+    kind: TaskKind,
+    runner: Runner,
+}
+
+/// How long closing the app waits for a cancelled ffmpeg to exit.
+const STOP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 pub struct NvencFfxApp {
     /// Everything a preset / `nff_settings.json` holds.
     pub s: Settings,
@@ -146,12 +163,19 @@ pub struct NvencFfxApp {
     // ffprobe
     ffprobe: Option<PathBuf>,
     durations: DurationCache,
+    /// Input tooltip texts
+    media_info: InfoCache,
     /// Input whose `trim_end` should be set to its duration once probed.
     trim_end_follows: Option<String>,
 
     // Custom command mode
     custom_command: Option<Vec<String>>,
     command_window: Option<CommandWindow>,
+
+    /// The running conversion or preview.
+    task: Option<Task>,
+    /// Temp clips of the last 10 s preview, deleted before the next one and on exit.
+    preview_files: Vec<PathBuf>,
 
     dialog: Option<(ViewportId, Dialog<Action>)>,
     icon: Arc<egui::IconData>,
@@ -187,10 +211,14 @@ impl Default for NvencFfxApp {
 
             ffprobe: None,
             durations: DurationCache::default(),
+            media_info: InfoCache::default(),
             trim_end_follows: None,
 
             custom_command: None,
             command_window: None,
+
+            task: None,
+            preview_files: Vec::new(),
 
             dialog: None,
             icon: Arc::new(egui::IconData::default()),
@@ -262,6 +290,13 @@ fn renamed_output(output: &str, input: &str, codec: VideoCodec) -> Option<String
     };
     let name = format!("{base}_{}_custom{}", codec.suffix(), output_extension(out));
     Some(dir.join(name).to_string_lossy().into_owned())
+}
+
+/// "FFmpeg exited with error code N" with the last output line; Windows codes are
+/// shown unsigned, as Python reported them.
+fn exit_message(code: Option<i32>, last_line: &str) -> String {
+    let code = code.map_or_else(|| "unknown".to_owned(), |c| (c as u32).to_string());
+    format!("FFmpeg exited with error code {code}.\nLast output: {last_line}")
 }
 
 /// `_explore_path`: selects a file in Explorer, or opens a folder.
@@ -896,6 +931,216 @@ impl NvencFfxApp {
         }
     }
 
+    // -- Running ffmpeg ------------------------------------------------------
+
+    /// Convert / Cancel (`_toggle_conversion`).
+    fn toggle_conversion(&mut self, ctx: &egui::Context) {
+        match &self.task {
+            Some(Task { kind: TaskKind::Convert { .. }, runner }) => runner.cancel(),
+            Some(_) => self.message(Kind::Error, "Error", "Please wait until preview creation completes"),
+            None => self.start_conversion(ctx),
+        }
+    }
+
+    /// `_start_conversion`: an applied custom command runs as it is.
+    fn start_conversion(&mut self, ctx: &egui::Context) {
+        let args = match &self.custom_command {
+            Some(custom) => custom.clone(),
+            None => match command::build(&self.s, &self.job()) {
+                Ok(args) => args,
+                Err(e) => return self.message(Kind::Error, "Error", e),
+            },
+        };
+        let input = args.iter().position(|a| a == "-i").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
+        self.progress = Some(0.0);
+        self.status_message = "Conversion in progress...".to_owned();
+        self.ffmpeg_output = "Starting conversion...".to_owned();
+        let runner = Runner::start(vec![args.clone()], ctx);
+        self.task = Some(Task { kind: TaskKind::Convert { input, args }, runner });
+    }
+
+    /// Play 10s Preview / Cancel Preview (`_create_10s_preview`).
+    fn toggle_preview(&mut self, ctx: &egui::Context) {
+        match &self.task {
+            Some(Task { kind: TaskKind::Preview { .. }, runner }) => return runner.cancel(),
+            Some(_) => return self.message(Kind::Error, "Error", "Please wait until current process completes"),
+            None => {}
+        }
+        if self.s.trim_streamcopy {
+            return self.message(Kind::Error, "Error", "Preview is not available in Streamcopy mode");
+        }
+        if self.input_file.is_empty() {
+            return self.message(Kind::Error, "Error", "Please select input file first");
+        }
+        let duration = match self.durations.state(&self.input_file) {
+            Some(Duration::Known(d)) => Some(d),
+            Some(Duration::Failed) => None,
+            // Still probing: ask directly, as the original did
+            _ => self.ffprobe.as_deref().and_then(|p| probe::duration(p, &self.input_file)),
+        };
+        let Some(duration) = duration.filter(|d| *d > 0.0) else {
+            return self.message(Kind::Error, "Error", "Could not get video duration");
+        };
+        self.cleanup_preview_files();
+        let temp = std::env::temp_dir();
+        let clip = match command::preview_clip(self.custom_command.as_deref(), &self.s, &self.job(), duration, &temp) {
+            Ok(clip) => clip,
+            Err(e) => return self.message(Kind::Error, "Error", format!("Preview encoding failed: {e}")),
+        };
+        self.preview_files = vec![clip.clip, clip.encoded.clone()];
+        self.status_message = "Creating 10-second preview...".to_owned();
+        self.ffmpeg_output = "Starting preview encoding...".to_owned();
+        self.progress = Some(0.0);
+        let runner = Runner::start(vec![clip.copy, clip.encode], ctx);
+        self.task = Some(Task { kind: TaskKind::Preview { encoded: clip.encoded }, runner });
+    }
+
+    fn poll_task(&mut self, ctx: &egui::Context) {
+        let Some(task) = &self.task else { return };
+        for event in task.runner.poll() {
+            match event {
+                Event::Line { step, text } => self.task_line(step, text, ctx),
+                Event::Finished(outcome) => {
+                    if let Some(task) = self.task.take() {
+                        self.task_finished(task.kind, outcome);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Shows an output line and the progress from its `time=` (`_update_progress`).
+    fn task_line(&mut self, step: usize, text: String, ctx: &egui::Context) {
+        let Some(task) = &self.task else { return };
+        let total = match &task.kind {
+            TaskKind::Convert { input, args } => {
+                let duration = match self.durations.get(self.ffprobe.as_deref(), input, ctx) {
+                    Some(Duration::Known(d)) => Some(d),
+                    _ => None,
+                };
+                progress::expected_duration(args, duration)
+            }
+            // The preview's stream copy is not part of its progress
+            TaskKind::Preview { .. } if step == 0 => return,
+            TaskKind::Preview { .. } => Some(command::PREVIEW_SECONDS),
+        };
+        if let (Some(time), Some(total)) = (progress::time(&text), total) {
+            self.progress = Some(progress::fraction(time, total));
+        }
+        self.ffmpeg_output = text;
+    }
+
+    fn task_finished(&mut self, kind: TaskKind, outcome: process::Outcome) {
+        self.progress = None;
+        self.ffmpeg_output.clear();
+        match kind {
+            TaskKind::Convert { .. } => self.conversion_finished(outcome),
+            TaskKind::Preview { encoded } => self.preview_finished(outcome, &encoded),
+        }
+    }
+
+    fn conversion_finished(&mut self, outcome: process::Outcome) {
+        match outcome.exit {
+            Exit::Success => {
+                self.status_message = "Conversion complete!".to_owned();
+                #[cfg(windows)]
+                crate::win32::beep();
+            }
+            Exit::Cancelled => {
+                self.status_message = "Conversion cancelled by user".to_owned();
+                self.message(Kind::Info, "Cancelled", "Conversion was cancelled");
+            }
+            Exit::Failed(code) => {
+                self.status_message = "Conversion error!".to_owned();
+                self.message(Kind::Error, "Error", exit_message(code, &outcome.last_line));
+            }
+            Exit::SpawnFailed(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.status_message = "Error: ffmpeg.exe not found.".to_owned();
+                self.message(Kind::Error, "Error", "ffmpeg.exe not found. Ensure it's in the program folder or system PATH.");
+            }
+            Exit::SpawnFailed(e) => {
+                self.status_message = "An unexpected error occurred during conversion".to_owned();
+                let text = format!("An unexpected error occurred during conversion:\n{e}");
+                self.message(Kind::Error, "Unexpected Error", text);
+            }
+        }
+    }
+
+    fn preview_finished(&mut self, outcome: process::Outcome, encoded: &Path) {
+        self.status_message = match (outcome.step, outcome.exit) {
+            (_, Exit::Cancelled) => "Preview creation cancelled".to_owned(),
+            (_, Exit::Success) => {
+                if encoded.exists() {
+                    self.open_file(encoded);
+                }
+                "Preview created successfully!".to_owned()
+            }
+            // The stream copy: the original showed this error and left the status alone
+            (0, failure) => {
+                let reason = match failure {
+                    Exit::Failed(code) => exit_message(code, &outcome.last_line),
+                    Exit::SpawnFailed(e) => e.to_string(),
+                    _ => unreachable!(),
+                };
+                self.message(Kind::Error, "Error", format!("Streamcopy failed: {reason}"));
+                "Preview creation failed!".to_owned()
+            }
+            (_, Exit::SpawnFailed(e)) => format!("Preview error: {e}"),
+            (_, Exit::Failed(_)) => "Preview creation failed!".to_owned(),
+        };
+    }
+
+    /// Play Input File / Play Output File (`_play_input_file`, `_play_output_file`).
+    fn play(&mut self, output: bool) {
+        let (path, unset, missing) = if output {
+            (&self.output_file, "Output file is not specified", "Output file does not exist")
+        } else {
+            (&self.input_file, "Please select input file using Browse button", "Input file does not exist")
+        };
+        let path = PathBuf::from(path.trim());
+        if path.as_os_str().is_empty() {
+            self.message(Kind::Error, "Error", unset);
+        } else if !path.exists() {
+            self.message(Kind::Error, "Error", missing);
+        } else {
+            self.open_file(&path);
+        }
+    }
+
+    /// Opens `path` in its default application (`os.startfile`).
+    fn open_file(&mut self, path: &Path) {
+        #[cfg(windows)]
+        if let Err(e) = crate::win32::open_file(path) {
+            self.message(Kind::Error, "Error", format!("Could not play file: {e}"));
+        }
+    }
+
+    /// `_cleanup_preview_files`
+    fn cleanup_preview_files(&mut self) {
+        for file in self.preview_files.drain(..) {
+            if file.exists()
+                && let Err(e) = std::fs::remove_file(&file)
+            {
+                eprintln!("Error deleting temp file {}: {e}", file.display());
+            }
+        }
+    }
+
+    /// On exit: stops the running ffmpeg and any other ffmpeg / ffprobe we started.
+    fn stop_processes(&mut self) {
+        if let Some(task) = self.task.take() {
+            task.runner.stop(STOP_TIMEOUT);
+        }
+        #[cfg(windows)]
+        {
+            let ffmpeg = Path::new(&self.s.ffmpeg_path).file_name().map(|n| n.to_string_lossy().into_owned());
+            let mut names = vec!["ffmpeg.exe", "ffprobe.exe"];
+            names.extend(ffmpeg.as_deref());
+            crate::win32::process_tree::kill_children(&names);
+        }
+        self.cleanup_preview_files();
+    }
+
     // -- Top rows ------------------------------------------------------------
 
     /// Label, entry and button of a path row; returns (entry, button) responses.
@@ -927,8 +1172,15 @@ impl NvencFfxApp {
     }
 
     fn path_rows(&mut self, ui: &mut Ui, frame: &eframe::Frame) {
-        let (_, browse) = Self::path_row(ui, "Input File:", &mut self.input_file, "input",
+        let (input, browse) = Self::path_row(ui, "Input File:", &mut self.input_file, "input",
             INPUT_PLACEHOLDER, "Browse", ButtonKind::Green);
+        if !self.input_file.is_empty() {
+            input.on_hover_ui(|ui| {
+                let info = self.media_info.get(self.ffprobe.as_deref(), &self.input_file, ui.ctx());
+                ui.set_max_width(600.0);
+                ui.label(egui::RichText::new(info).font(FontId::monospace(14.0)));
+            });
+        }
         if browse.clicked() {
             self.browse_input(frame);
         } else if browse.secondary_clicked() {
@@ -1397,7 +1649,7 @@ impl NvencFfxApp {
             ui.painter().text(
                 egui::pos2(r.min.x + grid::SECTION_X + grid::SECTION_W / 2.0, r.center().y),
                 Align2::CENTER_CENTER,
-                format!("{:.0}%", progress * 100.0),
+                if progress == 0.0 { "0%".to_owned() } else { format!("{:.1}%", progress * 100.0) },
                 egui::FontId::proportional(dimensions::FONT_SIZE),
                 colors::LABEL_TEXT,
             );
@@ -1427,22 +1679,49 @@ impl NvencFfxApp {
         let gap = 4.0;
         let r = row(ui, h);
         let w = (r.width() - gap * 4.0) / 5.0;
-        for (i, text) in ["Play Input File", "Play Output File", "Play 10s Preview", "Batch Convert", "Screen Record"]
-            .into_iter()
-            .enumerate()
-        {
+        // The preview stays cancellable even if Copy mode is switched on meanwhile
+        let preview = match &self.task {
+            Some(Task { kind: TaskKind::Preview { .. }, .. }) => ("Cancel Preview", ButtonKind::Red),
+            _ if self.s.trim_streamcopy => ("Play 10s Preview", ButtonKind::Disabled),
+            _ => ("Play 10s Preview", ButtonKind::Grey),
+        };
+        let buttons = [
+            ("Play Input File", ButtonKind::Grey),
+            ("Play Output File", ButtonKind::Grey),
+            preview,
+            ("Batch Convert", ButtonKind::Grey),
+            ("Screen Record", ButtonKind::Grey),
+        ];
+        let mut clicked = None;
+        for (i, (text, kind)) in buttons.into_iter().enumerate() {
             let rect = cell(r, (w + gap) * i as f32, w);
-            place(ui, rect, |ui| button(ui, rect.size(), text, ButtonKind::Grey));
+            if place(ui, rect, |ui| button(ui, rect.size(), text, kind)).clicked() {
+                clicked = Some(i);
+            }
         }
+        let ctx = ui.ctx().clone();
+        match clicked {
+            Some(0) => self.play(false),
+            Some(1) => self.play(true),
+            Some(2) => self.toggle_preview(&ctx),
+            _ => {}
+        }
+
         ui.add_space(10.0);
         let r = row(ui, h);
-        if place(ui, r, |ui| bold_button(ui, r.size(), "Convert", ButtonKind::Green)).clicked() {
-            self.status_message = "Starting conversion...".to_owned();
+        let (text, kind) = match &self.task {
+            Some(Task { kind: TaskKind::Convert { .. }, .. }) => ("Cancel", ButtonKind::Red),
+            _ => ("Convert", ButtonKind::Green),
+        };
+        if place(ui, r, |ui| bold_button(ui, r.size(), text, kind)).clicked() {
+            self.toggle_conversion(&ctx);
         }
     }
 
-    /// Per-frame bookkeeping: finished probes and state that follows other settings.
+    /// Per-frame bookkeeping: ffmpeg output, finished probes and state that follows
+    /// other settings.
     fn update_state(&mut self, ctx: &egui::Context) {
+        self.poll_task(ctx);
         self.durations.poll();
         // Probe the current input (size estimate, trim slider)
         self.durations.get(self.ffprobe.as_deref(), &self.input_file, ctx);
@@ -1493,6 +1772,7 @@ impl NvencFfxApp {
 
 impl eframe::App for NvencFfxApp {
     fn on_exit(&mut self) {
+        self.stop_processes();
         self.save_settings();
     }
 
@@ -1719,6 +1999,73 @@ mod tests {
         saved.load(&file).unwrap();
         assert_eq!(saved.bitrate, "9500");
         let _ = std::fs::remove_file(&file);
+    }
+
+    /// Polls until the running task is done.
+    fn finish_task(app: &mut NvencFfxApp, ctx: &egui::Context) {
+        let deadline = Instant::now() + std::time::Duration::from_secs(20);
+        while app.task.is_some() && Instant::now() < deadline {
+            app.poll_task(ctx);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(app.task.is_none(), "task finished");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn conversion_reports_progress_and_errors() {
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp::default();
+        // A stand-in for ffmpeg: prints a status line, then fails
+        let fake = "cmd /c echo frame=1 time=00:00:05.00 -t 10 & exit 2";
+        app.custom_command = Some(fake.split(' ').map(str::to_owned).collect());
+        app.toggle_conversion(&ctx);
+        assert_eq!(app.status_message, "Conversion in progress...");
+        app.task_line(0, "frame=1 time=00:00:05.00".into(), &ctx);
+        assert_eq!(app.progress, Some(0.5), "-t 10 is the expected length");
+
+        finish_task(&mut app, &ctx);
+        assert_eq!(app.status_message, "Conversion error!");
+        assert_eq!(app.progress, None);
+        let (_, dialog) = app.dialog.as_ref().expect("error dialog");
+        assert_eq!(dialog.message, "FFmpeg exited with error code 2.\nLast output: frame=1 time=00:00:05.00 -t 10");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cancel_and_missing_ffmpeg() {
+        let ctx = egui::Context::default();
+        let ping = "ping -n 30 127.0.0.1".split(' ').map(str::to_owned).collect();
+        let mut app = NvencFfxApp { custom_command: Some(ping), ..Default::default() };
+        app.toggle_conversion(&ctx);
+        app.toggle_conversion(&ctx);
+        finish_task(&mut app, &ctx);
+        assert_eq!(app.status_message, "Conversion cancelled by user");
+
+        app.custom_command = Some(vec![r"Z:\missing\ffmpeg.exe".into(), "-i".into(), "a".into(), "b".into()]);
+        app.toggle_conversion(&ctx);
+        finish_task(&mut app, &ctx);
+        assert_eq!(app.status_message, "Error: ffmpeg.exe not found.");
+    }
+
+    #[test]
+    fn preview_and_play_check_their_inputs() {
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp { s: Settings { trim_streamcopy: true, ..Default::default() }, ..Default::default() };
+        app.toggle_preview(&ctx);
+        assert_eq!(app.dialog.take().unwrap().1.message, "Preview is not available in Streamcopy mode");
+        app.s.trim_streamcopy = false;
+        app.toggle_preview(&ctx);
+        assert_eq!(app.dialog.take().unwrap().1.message, "Please select input file first");
+        app.input_file = r"Z:\missing.mp4".into();
+        app.toggle_preview(&ctx);
+        assert_eq!(app.dialog.take().unwrap().1.message, "Could not get video duration");
+        assert!(app.task.is_none());
+
+        app.play(false);
+        assert_eq!(app.dialog.take().unwrap().1.message, "Input file does not exist");
+        app.play(true);
+        assert_eq!(app.dialog.take().unwrap().1.message, "Output file is not specified");
     }
 
     #[test]
