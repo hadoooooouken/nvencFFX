@@ -3,9 +3,12 @@
 
 use std::path::PathBuf;
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontId, Galley, Layout, Popup, PopupCloseBehavior,
-    Pos2, Rect, Response, RichText, Sense, Shape, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2,
-    pos2, vec2,
+    self, Align, Align2, Color32, Context, CornerRadius, FontId, Galley, Id, Layout, Popup,
+    PopupCloseBehavior, Pos2, PointerButton, Rect, Response, RichText, Sense, Shape, Stroke,
+    StrokeKind, TextEdit, Ui, UiBuilder, Vec2, pos2,
+    text::{CCursor, CCursorRange},
+    text_edit::TextEditState,
+    vec2,
 };
 use std::sync::Arc;
 use super::theme::{colors, dimensions};
@@ -187,8 +190,9 @@ pub fn entry(
     );
 
     let text_rect = rect.shrink2(vec2(8.0, border + 1.0));
+    let id = ui.make_persistent_id(id_salt);
     let mut edit = TextEdit::singleline(value)
-        .id_salt(id_salt)
+        .id(id)
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(body_font())
@@ -202,7 +206,135 @@ pub fn entry(
     if style.centered {
         edit = edit.horizontal_align(Align::Center);
     }
-    ui.put(text_rect, edit)
+    let selection = selection_before_right_click(ui.ctx(), id);
+    let response = ui.put(text_rect, edit);
+    if !style.disabled {
+        text_context_menu(ui, &response, selection, value, false);
+    }
+    response
+}
+
+// ---------------------------------------------------------------------------
+// Text context menu (CTkContextMenu)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextAction {
+    Cut,
+    Copy,
+    Paste,
+    Delete,
+    SelectAll,
+}
+
+/// egui moves the text cursor on any pointer press, which would drop the selection
+/// the menu acts on. Call before showing the `TextEdit` `id`; hand the result to
+/// [`text_context_menu`].
+pub fn selection_before_right_click(ctx: &Context, id: Id) -> Option<TextEditState> {
+    let pressed = ctx.input(|i| i.pointer.button_pressed(PointerButton::Secondary));
+    if pressed && ctx.read_response(id).is_some_and(|r| r.contains_pointer()) {
+        TextEditState::load(ctx, id)
+    } else {
+        None
+    }
+}
+
+/// `CTkContextMenu`: Cut / Copy / Paste / Delete / Select All on a right click
+/// into a text field. `selection` comes from [`selection_before_right_click`].
+pub fn text_context_menu(
+    ui: &Ui,
+    response: &Response,
+    selection: Option<TextEditState>,
+    text: &mut String,
+    multiline: bool,
+) {
+    if let Some(state) = selection {
+        state.store(ui.ctx(), response.id);
+    }
+    const ITEMS: [(&str, TextAction); 5] = [
+        ("Cut", TextAction::Cut),
+        ("Copy", TextAction::Copy),
+        ("Paste", TextAction::Paste),
+        ("Delete", TextAction::Delete),
+        ("Select All", TextAction::SelectAll),
+    ];
+    let mut chosen = None;
+    Popup::context_menu(response)
+        .frame(egui::Frame::new().fill(colors::SECONDARY_BG).corner_radius(10).inner_margin(3))
+        .width(120.0)
+        .show(|ui| {
+            ui.spacing_mut().item_spacing = vec2(0.0, 6.0);
+            for (label, action) in ITEMS {
+                let (rect, item) = ui.allocate_exact_size(vec2(120.0, 28.0), Sense::click());
+                if item.hovered() {
+                    ui.painter().rect_filled(rect, CornerRadius::same(6), colors::HOVER_GREEN);
+                }
+                ui.painter().text(
+                    pos2(rect.min.x + 8.0, rect.center().y),
+                    Align2::LEFT_CENTER,
+                    label,
+                    body_font(),
+                    colors::TEXT_COLOR_W,
+                );
+                if item.clicked() {
+                    chosen = Some(action);
+                }
+            }
+        });
+    if let Some(action) = chosen {
+        let clipboard = (action == TextAction::Paste)
+            .then(|| arboard::Clipboard::new().and_then(|mut c| c.get_text()).ok())
+            .flatten();
+        edit_text(ui.ctx(), response.id, text, action, clipboard.as_deref(), multiline);
+    }
+}
+
+/// Runs a menu action on the `TextEdit` `id` and focuses it (`_cut_text`,
+/// `_copy_text`, `_paste_text`, `_delete_text`, `_select_all`). Copy takes the whole
+/// text if nothing is selected; Cut and Delete need a selection.
+pub fn edit_text(
+    ctx: &Context,
+    id: Id,
+    text: &mut String,
+    action: TextAction,
+    clipboard: Option<&str>,
+    multiline: bool,
+) {
+    let mut state = TextEditState::load(ctx, id).unwrap_or_default();
+    let chars = text.chars().count();
+    let range = state.cursor.char_range().unwrap_or_else(|| CCursorRange::one(CCursor::new(chars)));
+    let sel = range.as_sorted_char_range();
+    let (first, last) = (sel.start.0.min(chars), sel.end.0.min(chars));
+    let byte = |c: usize| text.char_indices().nth(c).map_or(text.len(), |(b, _)| b);
+    let bytes = byte(first)..byte(last);
+    let cursor = match action {
+        TextAction::SelectAll => CCursorRange::two(CCursor::new(0), CCursor::new(chars)),
+        TextAction::Copy => {
+            let copied = if bytes.is_empty() { text.as_str() } else { &text[bytes] };
+            if !copied.is_empty() {
+                ctx.copy_text(copied.to_owned());
+            }
+            range
+        }
+        TextAction::Cut | TextAction::Delete if bytes.is_empty() => range,
+        TextAction::Cut | TextAction::Delete => {
+            if action == TextAction::Cut {
+                ctx.copy_text(text[bytes.clone()].to_owned());
+            }
+            text.replace_range(bytes, "");
+            CCursorRange::one(CCursor::new(first))
+        }
+        TextAction::Paste => {
+            let Some(pasted) = clipboard.filter(|t| !t.is_empty()) else { return };
+            // As egui pastes: one line in single-line fields
+            let pasted = if multiline { pasted.replace("\r\n", "\n") } else { pasted.replace(['\r', '\n'], " ") };
+            text.replace_range(bytes, &pasted);
+            CCursorRange::one(CCursor::new(first + pasted.chars().count()))
+        }
+    };
+    state.cursor.set_char_range(Some(cursor));
+    state.store(ctx, id);
+    ctx.memory_mut(|m| m.request_focus(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +692,48 @@ pub fn file_drag_drop_overlay(ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_actions_follow_the_original() {
+        let ctx = egui::Context::default();
+        let id = Id::new("field");
+        let select = |from: usize, to: usize| {
+            let mut state = TextEditState::default();
+            state.cursor.set_char_range(Some(CCursorRange::two(CCursor::new(from), CCursor::new(to))));
+            state.store(&ctx, id);
+        };
+        let copied = |mut out: egui::FullOutput| {
+            out.textures_delta.clear();
+            out.platform_output.commands.into_iter().find_map(|c| match c {
+                egui::OutputCommand::CopyText(t) => Some(t),
+                _ => None,
+            })
+        };
+        let mut text = "héllo world".to_owned();
+        let run = |action, clipboard: Option<&str>, text: &mut String| {
+            copied(ctx.run_ui(Default::default(), |ui| edit_text(ui.ctx(), id, text, action, clipboard, false)))
+        };
+
+        // Copy without a selection takes everything; Cut / Delete need one
+        select(3, 3);
+        assert_eq!(run(TextAction::Copy, None, &mut text).as_deref(), Some("héllo world"));
+        assert_eq!(run(TextAction::Cut, None, &mut text), None);
+        assert_eq!(text, "héllo world");
+
+        select(6, 1); // backwards selection of "éllo "
+        assert_eq!(run(TextAction::Cut, None, &mut text).as_deref(), Some("éllo "));
+        assert_eq!(text, "hworld");
+
+        select(1, 1);
+        run(TextAction::Paste, Some("a\r\nb"), &mut text);
+        assert_eq!(text, "ha  bworld", "one line in a single-line field");
+        let state = TextEditState::load(&ctx, id).unwrap();
+        assert_eq!(state.cursor.char_range().unwrap().primary.index.0, 5, "cursor after the paste");
+
+        run(TextAction::SelectAll, None, &mut text);
+        run(TextAction::Delete, None, &mut text);
+        assert_eq!(text, "");
+    }
 
     #[test]
     fn test_drag_hovering_empty() {

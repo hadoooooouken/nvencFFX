@@ -42,12 +42,16 @@ pub fn children_named(names: &[&str]) -> Vec<u32> {
 /// Terminates every child process named in `names`.
 pub fn kill_children(names: &[&str]) {
     for pid in children_named(names) {
-        let process = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
-        if !process.is_null() {
-            unsafe {
-                TerminateProcess(process, 1);
-                CloseHandle(process);
-            }
+        terminate(pid);
+    }
+}
+
+fn terminate(pid: u32) {
+    let process = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
+    if !process.is_null() {
+        unsafe {
+            TerminateProcess(process, 1);
+            CloseHandle(process);
         }
     }
 }
@@ -67,7 +71,8 @@ mod tests {
         assert!(children_named(&["PING.EXE"]).contains(&child.id()), "names match case-insensitively");
         kill_children(&["ffmpeg.exe"]);
         assert!(child.try_wait().unwrap().is_none(), "other children are left alone");
-        kill_children(&["ping.exe"]);
+        // Not `kill_children(&["ping.exe"])`: other tests run ping in parallel
+        terminate(child.id());
         assert!(!child.wait().unwrap().success());
     }
 }

@@ -144,7 +144,7 @@ pub fn apply_theme(ctx: &egui::Context) {
             style.spacing.menu_margin = egui::Margin::same(3);
             style.spacing.interact_size.y = dimensions::WIDGET_HEIGHT;
 
-            // CTkScrollableFrame: 8px grey pill, 4px from the window edge, always shown
+            // CTkScrollableFrame: 8px grey pill, 4px from the window edge
             let mut scroll = egui::style::ScrollStyle::solid();
             scroll.bar_width = 8.0;
             scroll.bar_inner_margin = 0.0;

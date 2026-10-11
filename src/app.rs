@@ -22,8 +22,8 @@ use crate::ui::{
     widgets::{
         ButtonKind, EntryStyle, bold_button, button, cell, checkbox, checkbox_enabled,
         colored_label, entry, file_drag_drop_overlay, handle_dropped_files, label, option_menu,
-        place, progress_bar, radio_value, reset_button, row, section_frame, sub_rect,
-        text_checkbox, trim_slider,
+        place, progress_bar, radio_value, reset_button, row, section_frame,
+        selection_before_right_click, sub_rect, text_checkbox, text_context_menu, trim_slider,
     },
 };
 
@@ -131,6 +131,39 @@ enum TaskKind {
 struct Task {
     kind: TaskKind,
     runner: Runner,
+    /// Suspended by a right click on Convert (`is_paused`).
+    paused: bool,
+}
+
+/// Taskbar button overlay updates (`TaskbarProgress`).
+enum Taskbar {
+    /// Green, empty
+    Start,
+    Progress(f32),
+    Paused,
+    Resumed,
+    Error,
+    Clear,
+}
+
+/// `_update_window_size`: the window height with every section closed.
+const BASE_HEIGHT: f32 = 700.0;
+/// Room left on the monitor for the title bar and the taskbar.
+const SCREEN_MARGIN: f32 = 80.0;
+
+/// `_update_window_size`: [`BASE_HEIGHT`] plus the height the open sections add,
+/// capped at the original's `maxsize` for the display scaling (`scaling` in %) and
+/// at the monitor height.
+fn fitted_height(sections: f32, scaling: f32, monitor_height: Option<f32>) -> f32 {
+    let max: f32 = if scaling >= 200.0 {
+        650.0
+    } else if scaling >= 125.0 {
+        800.0
+    } else {
+        900.0
+    };
+    let max = monitor_height.map_or(max, |m| max.min(m - SCREEN_MARGIN));
+    (BASE_HEIGHT + sections).min(max).round()
 }
 
 /// How long closing the app waits for a cancelled ffmpeg to exit.
@@ -153,6 +186,8 @@ pub struct NvencFfxApp {
     pub expand_audio_settings: bool,
     pub expand_additional_options: bool,
     pub expand_presets: bool,
+    /// Sections open when the window height was last fitted to them.
+    fitted_sections: Option<[bool; 5]>,
 
     // Presets
     presets_dir: PathBuf,
@@ -179,6 +214,10 @@ pub struct NvencFfxApp {
 
     dialog: Option<(ViewportId, Dialog<Action>)>,
     icon: Arc<egui::IconData>,
+    #[cfg(windows)]
+    taskbar: Option<crate::win32::taskbar::TaskbarProgress>,
+    #[cfg(windows)]
+    tray: Option<crate::win32::tray::Tray>,
 
     // Status display
     pub status_message: String,
@@ -203,6 +242,7 @@ impl Default for NvencFfxApp {
             expand_audio_settings: false,
             expand_additional_options: false,
             expand_presets: false,
+            fitted_sections: None,
 
             presets_dir: PathBuf::from("presets"),
             custom_presets: Vec::new(),
@@ -222,6 +262,10 @@ impl Default for NvencFfxApp {
 
             dialog: None,
             icon: Arc::new(egui::IconData::default()),
+            #[cfg(windows)]
+            taskbar: None,
+            #[cfg(windows)]
+            tray: None,
 
             status_message: "Ready for conversion".to_owned(),
             ffmpeg_output: String::new(),
@@ -341,6 +385,12 @@ impl NvencFfxApp {
             icon: Arc::new(crate::window_icon()),
             ..Self::default()
         };
+        #[cfg(windows)]
+        {
+            app.taskbar = crate::win32::hwnd(cc).and_then(crate::win32::taskbar::TaskbarProgress::new);
+            let ctx = cc.egui_ctx.clone();
+            app.tray = crate::win32::tray::Tray::start(move || ctx.request_repaint());
+        }
         if let Some(ffmpeg) = probe::find_executable("ffmpeg.exe") {
             app.s.ffmpeg_path = ffmpeg.to_string_lossy().into_owned();
         }
@@ -881,14 +931,17 @@ impl NvencFfxApp {
                     .inner_margin(Margin::same(8))
                     .show(ui, |ui| {
                         ScrollArea::vertical().auto_shrink([false, false]).max_height(text_h - 16.0).show(ui, |ui| {
-                            ui.add_sized(
+                            let id = ui.make_persistent_id("command_text");
+                            let selection = selection_before_right_click(ui.ctx(), id);
+                            let response = ui.add_sized(
                                 vec2(ui.available_width(), text_h - 16.0),
                                 TextEdit::multiline(&mut window.text)
-                                    .id_salt("command_text")
+                                    .id(id)
                                     .font(FontId::monospace(14.0))
                                     .text_color(colors::TEXT_COLOR_W)
                                     .frame(egui::Frame::NONE),
                             );
+                            text_context_menu(ui, &response, selection, &mut window.text, true);
                         });
                     });
                 ui.add_space(15.0);
@@ -933,10 +986,11 @@ impl NvencFfxApp {
 
     // -- Running ffmpeg ------------------------------------------------------
 
-    /// Convert / Cancel (`_toggle_conversion`).
+    /// Convert / Cancel / Resume (`_toggle_conversion`).
     fn toggle_conversion(&mut self, ctx: &egui::Context) {
         match &self.task {
-            Some(Task { kind: TaskKind::Convert { .. }, runner }) => runner.cancel(),
+            Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => self.resume_conversion(),
+            Some(Task { kind: TaskKind::Convert { .. }, runner, .. }) => runner.cancel(),
             Some(_) => self.message(Kind::Error, "Error", "Please wait until preview creation completes"),
             None => self.start_conversion(ctx),
         }
@@ -953,16 +1007,70 @@ impl NvencFfxApp {
         };
         let input = args.iter().position(|a| a == "-i").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
         self.progress = Some(0.0);
+        self.taskbar(Taskbar::Start);
         self.status_message = "Conversion in progress...".to_owned();
         self.ffmpeg_output = "Starting conversion...".to_owned();
         let runner = Runner::start(vec![args.clone()], ctx);
-        self.task = Some(Task { kind: TaskKind::Convert { input, args }, runner });
+        self.task = Some(Task { kind: TaskKind::Convert { input, args }, runner, paused: false });
+    }
+
+    /// Right click on Convert (`_on_convert_right_click`, `_toggle_pause`).
+    fn toggle_pause(&mut self) {
+        match &self.task {
+            Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => self.resume_conversion(),
+            Some(Task { kind: TaskKind::Convert { .. }, .. }) => self.pause_conversion(),
+            _ => {}
+        }
+    }
+
+    /// `_pause_conversion`
+    fn pause_conversion(&mut self) {
+        let Some(task) = &mut self.task else { return };
+        #[cfg(windows)]
+        if !task.runner.pause() {
+            return;
+        }
+        task.paused = true;
+        self.status_message = "Conversion paused".to_owned();
+        self.taskbar(Taskbar::Paused);
+    }
+
+    /// `_resume_conversion`
+    fn resume_conversion(&mut self) {
+        let Some(task) = &mut self.task else { return };
+        #[cfg(windows)]
+        if !task.runner.resume() {
+            return;
+        }
+        task.paused = false;
+        self.status_message = "Conversion in progress...".to_owned();
+        self.taskbar(Taskbar::Resumed);
+    }
+
+    fn taskbar(&self, update: Taskbar) {
+        #[cfg(windows)]
+        if let Some(taskbar) = &self.taskbar {
+            use crate::win32::taskbar::State;
+            match update {
+                Taskbar::Start => {
+                    taskbar.set_state(State::Normal);
+                    taskbar.set_progress(0.0);
+                }
+                Taskbar::Progress(fraction) => taskbar.set_progress(fraction),
+                Taskbar::Paused => taskbar.set_state(State::Paused),
+                Taskbar::Resumed => taskbar.set_state(State::Normal),
+                Taskbar::Error => taskbar.set_state(State::Error),
+                Taskbar::Clear => taskbar.set_state(State::Off),
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = update;
     }
 
     /// Play 10s Preview / Cancel Preview (`_create_10s_preview`).
     fn toggle_preview(&mut self, ctx: &egui::Context) {
         match &self.task {
-            Some(Task { kind: TaskKind::Preview { .. }, runner }) => return runner.cancel(),
+            Some(Task { kind: TaskKind::Preview { .. }, runner, .. }) => return runner.cancel(),
             Some(_) => return self.message(Kind::Error, "Error", "Please wait until current process completes"),
             None => {}
         }
@@ -992,7 +1100,7 @@ impl NvencFfxApp {
         self.ffmpeg_output = "Starting preview encoding...".to_owned();
         self.progress = Some(0.0);
         let runner = Runner::start(vec![clip.copy, clip.encode], ctx);
-        self.task = Some(Task { kind: TaskKind::Preview { encoded: clip.encoded }, runner });
+        self.task = Some(Task { kind: TaskKind::Preview { encoded: clip.encoded }, runner, paused: false });
     }
 
     fn poll_task(&mut self, ctx: &egui::Context) {
@@ -1025,7 +1133,11 @@ impl NvencFfxApp {
             TaskKind::Preview { .. } => Some(command::PREVIEW_SECONDS),
         };
         if let (Some(time), Some(total)) = (progress::time(&text), total) {
-            self.progress = Some(progress::fraction(time, total));
+            let fraction = progress::fraction(time, total);
+            self.progress = Some(fraction);
+            if matches!(task.kind, TaskKind::Convert { .. }) {
+                self.taskbar(Taskbar::Progress(fraction));
+            }
         }
         self.ffmpeg_output = text;
     }
@@ -1040,15 +1152,18 @@ impl NvencFfxApp {
     }
 
     fn conversion_finished(&mut self, outcome: process::Outcome) {
+        let failed = matches!(outcome.exit, Exit::Failed(_) | Exit::SpawnFailed(_));
         match outcome.exit {
             Exit::Success => {
                 self.status_message = "Conversion complete!".to_owned();
                 #[cfg(windows)]
                 crate::win32::beep();
+                self.taskbar(Taskbar::Clear);
             }
             Exit::Cancelled => {
                 self.status_message = "Conversion cancelled by user".to_owned();
                 self.message(Kind::Info, "Cancelled", "Conversion was cancelled");
+                self.taskbar(Taskbar::Clear);
             }
             Exit::Failed(code) => {
                 self.status_message = "Conversion error!".to_owned();
@@ -1063,6 +1178,9 @@ impl NvencFfxApp {
                 let text = format!("An unexpected error occurred during conversion:\n{e}");
                 self.message(Kind::Error, "Unexpected Error", text);
             }
+        }
+        if failed {
+            self.taskbar(Taskbar::Error);
         }
     }
 
@@ -1710,18 +1828,47 @@ impl NvencFfxApp {
         ui.add_space(10.0);
         let r = row(ui, h);
         let (text, kind) = match &self.task {
+            Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => ("Resume", ButtonKind::Orange),
             Some(Task { kind: TaskKind::Convert { .. }, .. }) => ("Cancel", ButtonKind::Red),
             _ => ("Convert", ButtonKind::Green),
         };
-        if place(ui, r, |ui| bold_button(ui, r.size(), text, kind)).clicked() {
+        let convert = place(ui, r, |ui| bold_button(ui, r.size(), text, kind));
+        if convert.clicked() {
             self.toggle_conversion(&ctx);
+        } else if convert.secondary_clicked() {
+            self.toggle_pause();
         }
+    }
+
+    /// `_update_window_size`: after a section is opened or closed, the window grows
+    /// (or shrinks back) so the open sections fit. `opened` is the height they add.
+    fn fit_height(&mut self, ctx: &egui::Context, opened: f32) {
+        let open = [
+            self.expand_encoder_settings,
+            self.expand_fps_scale_settings,
+            self.expand_audio_settings,
+            self.expand_additional_options,
+            self.expand_presets,
+        ];
+        let previous = self.fitted_sections.replace(open);
+        // Only on a toggle, as in the original: the startup size and a height the
+        // user dragged stay until then
+        if previous.is_none_or(|p| p == open) {
+            return;
+        }
+        let (scaling, monitor) = ctx.input(|i| {
+            let vp = i.viewport();
+            (vp.native_pixels_per_point.unwrap_or(1.0) * 100.0, vp.monitor_size.map(|m| m.y))
+        });
+        let height = fitted_height(opened, scaling.round(), monitor);
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(vec2(820.0, height)));
     }
 
     /// Per-frame bookkeeping: ffmpeg output, finished probes and state that follows
     /// other settings.
     fn update_state(&mut self, ctx: &egui::Context) {
         self.poll_task(ctx);
+        self.poll_tray(ctx);
         self.durations.poll();
         // Probe the current input (size estimate, trim slider)
         self.durations.get(self.ffprobe.as_deref(), &self.input_file, ctx);
@@ -1740,6 +1887,30 @@ impl NvencFfxApp {
             self.s.cuda_output_format = false;
         }
         self.autosave(ctx);
+    }
+
+    /// Tray menu and hotkey commands.
+    fn poll_tray(&mut self, ctx: &egui::Context) {
+        #[cfg(windows)]
+        {
+            use crate::win32::tray::Command;
+            let commands = self.tray.as_ref().map(|t| t.poll()).unwrap_or_default();
+            for command in commands {
+                match command {
+                    // `_restore_app`
+                    Command::Open => {
+                        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(ViewportCommand::Focus);
+                    }
+                    // Closes like the title bar's X, so `on_exit` cleans up
+                    Command::Exit => ctx.send_viewport_cmd(ViewportCommand::Close),
+                    // Screen recording arrives in Phase 7
+                    Command::StartRecording | Command::StopRecording => {}
+                }
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = ctx;
     }
 
     /// Restarts the save delay on every settings change and saves once it runs out.
@@ -1774,12 +1945,22 @@ impl eframe::App for NvencFfxApp {
     fn on_exit(&mut self) {
         self.stop_processes();
         self.save_settings();
+        #[cfg(windows)]
+        {
+            self.tray = None;
+            self.taskbar = None;
+        }
+    }
+
+    /// Runs before every frame and also while the window is minimized, so ffmpeg
+    /// progress, the taskbar overlay and tray commands keep going then.
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.update_state(ctx);
     }
 
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.handle_drag_and_drop(&ctx);
-        self.update_state(&ctx);
 
         egui::Panel::bottom("action_bar")
             .show_separator_line(false)
@@ -1801,7 +1982,8 @@ impl eframe::App for NvencFfxApp {
         egui::CentralPanel::default_margins().frame(panel_frame).show(ui, |ui| {
             ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                // Hidden while everything fits (CTkScrollableFrame always showed it)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
                     egui::Frame::new()
                         .inner_margin(Margin {
@@ -1817,11 +1999,21 @@ impl eframe::App for NvencFfxApp {
                             self.quality_row(ui);
                             self.codec_row(ui);
 
-                            self.encoder_section(ui);
-                            self.fps_section(ui);
-                            self.audio_section(ui);
-                            self.additional_section(ui);
-                            self.presets_section(ui);
+                            let sections: [fn(&mut Self, &mut Ui); 5] = [
+                                Self::encoder_section,
+                                Self::fps_section,
+                                Self::audio_section,
+                                Self::additional_section,
+                                Self::presets_section,
+                            ];
+                            // Height the open sections add below their header rows
+                            let mut opened = 0.0;
+                            for section in sections {
+                                let top = ui.cursor().min.y;
+                                section(self, ui);
+                                opened += ui.cursor().min.y - top - grid::ROW_H;
+                            }
+                            self.fit_height(&ctx, opened);
 
                             self.status_rows(ui);
                         });
@@ -1882,6 +2074,15 @@ mod tests {
     /// Clicks at `pos` (primary or secondary button) on the top rows + additional
     /// section laid out as in the window (zero item spacing, origin at 0,0).
     fn click(app: &mut NvencFfxApp, pos: egui::Pos2, secondary: bool) {
+        click_in(app, pos, secondary, |app, ui| {
+            app.quality_row(ui);
+            app.codec_row(ui);
+            app.additional_section(ui);
+        });
+    }
+
+    /// Clicks at `pos` on whatever `draw` lays out from the origin.
+    fn click_in(app: &mut NvencFfxApp, pos: egui::Pos2, secondary: bool, mut draw: impl FnMut(&mut NvencFfxApp, &mut Ui)) {
         let ctx = egui::Context::default();
         apply_theme(&ctx);
         let button = if secondary { egui::PointerButton::Secondary } else { egui::PointerButton::Primary };
@@ -1894,9 +2095,7 @@ mod tests {
             let input = egui::RawInput { events, ..Default::default() };
             let mut out = ctx.run_ui(input, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
-                app.quality_row(ui);
-                app.codec_row(ui);
-                app.additional_section(ui);
+                draw(app, ui);
             });
             out.textures_delta.clear();
         }
@@ -1931,6 +2130,34 @@ mod tests {
         assert_eq!(app.s.additional_options, "-ss 00:00:00 -to 00:00:30");
         click(&mut app, egui::pos2(grid::SECTION_X + 10.0 + 232.0 + 50.0, section_y + 232.0 + 14.0), false);
         assert_eq!(app.s.additional_filter_options, "hflip");
+    }
+
+    #[test]
+    fn window_height_follows_open_sections() {
+        assert_eq!(fitted_height(0.0, 100.0, None), 700.0);
+        assert_eq!(fitted_height(150.4, 100.0, Some(1080.0)), 850.0);
+        assert_eq!(fitted_height(500.0, 100.0, Some(1080.0)), 900.0, "1.8.4's maxsize at 100%");
+        assert_eq!(fitted_height(500.0, 125.0, None), 800.0);
+        assert_eq!(fitted_height(0.0, 200.0, None), 650.0);
+        assert_eq!(fitted_height(500.0, 100.0, Some(768.0)), 688.0, "stays on a small screen");
+
+        // Resizes only when a section is opened or closed
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp::default();
+        let resized = |app: &mut NvencFfxApp, opened: f32| {
+            let mut out = ctx.run_ui(Default::default(), |ui| app.fit_height(ui.ctx(), opened));
+            out.textures_delta.clear();
+            out.viewport_output[&ViewportId::ROOT].commands.iter().find_map(|c| match c {
+                ViewportCommand::InnerSize(size) => Some(size.y),
+                _ => None,
+            })
+        };
+        assert_eq!(resized(&mut app, 0.0), None, "startup keeps its size");
+        app.expand_additional_options = true;
+        assert_eq!(resized(&mut app, 120.0), Some(820.0));
+        assert_eq!(resized(&mut app, 120.0), None);
+        app.expand_additional_options = false;
+        assert_eq!(resized(&mut app, 0.0), Some(700.0), "closing shrinks it back");
     }
 
     #[test]
@@ -2046,6 +2273,42 @@ mod tests {
         app.toggle_conversion(&ctx);
         finish_task(&mut app, &ctx);
         assert_eq!(app.status_message, "Error: ffmpeg.exe not found.");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn right_click_on_convert_pauses_and_resumes() {
+        let ctx = egui::Context::default();
+        let ping = "ping -n 30 127.0.0.1".split(' ').map(str::to_owned).collect();
+        let mut app = NvencFfxApp { custom_command: Some(ping), ..Default::default() };
+        app.toggle_conversion(&ctx);
+        // Wait until ping runs (its first line arrived)
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.ffmpeg_output == "Starting conversion..." && Instant::now() < deadline {
+            app.poll_task(&ctx);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let h = dimensions::BIG_BUTTON_HEIGHT;
+        let convert = egui::pos2(100.0, h + 10.0 + h / 2.0);
+        let paused = |app: &NvencFfxApp| app.task.as_ref().expect("still converting").paused;
+
+        click_in(&mut app, convert, true, NvencFfxApp::bottom_bar);
+        assert!(paused(&app));
+        assert_eq!(app.status_message, "Conversion paused");
+        // A left click on "Resume" resumes instead of cancelling
+        click_in(&mut app, convert, false, NvencFfxApp::bottom_bar);
+        assert!(!paused(&app));
+        assert_eq!(app.status_message, "Conversion in progress...");
+        click_in(&mut app, convert, true, NvencFfxApp::bottom_bar);
+        click_in(&mut app, convert, true, NvencFfxApp::bottom_bar);
+        assert!(!paused(&app), "a second right click resumes");
+
+        click_in(&mut app, convert, false, NvencFfxApp::bottom_bar);
+        finish_task(&mut app, &ctx);
+        assert_eq!(app.status_message, "Conversion cancelled by user");
+        // Right click with nothing running does nothing
+        click_in(&mut app, convert, true, NvencFfxApp::bottom_bar);
+        assert!(app.task.is_none());
     }
 
     #[test]

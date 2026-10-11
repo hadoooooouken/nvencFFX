@@ -56,10 +56,8 @@ nvencffx/
 │   │   ├── mod.rs
 │   │   ├── taskbar.rs        # ITaskbarList3 (green/yellow/red progress overlay)
 │   │   ├── suspend.rs        # NtSuspendProcess / NtResumeProcess (pause/resume conversion)
-│   │   ├── tray.rs           # System tray icon, notification balloons, and context menu
-│   │   ├── hotkeys.rs        # Global hotkeys (Alt+F8 start, Alt+F9 stop recording)
-│   │   ├── process_tree.rs   # Kill ffmpeg.exe child tree via CreateToolhelp32Snapshot
-│   │   └── clipboard.rs      # Copy-to-clipboard (command string, log text)
+│   │   ├── tray.rs           # Tray icon, menu, balloons + global hotkeys (Alt+F8 / Alt+F9)
+│   │   └── process_tree.rs   # Kill ffmpeg.exe child tree via CreateToolhelp32Snapshot
 │   └── recording/            # Screen recording subsystem
 │       ├── mod.rs
 │       ├── capture.rs        # FFmpeg ddagrab screen capture, segmented recording with auto-restart
@@ -86,23 +84,23 @@ rfd = "0.17"
 # Launch external files (Play Input/Output, Open output folder)
 open = "5.4"
 
-# Clipboard (Copy Command, Copy Log)
-arboard = "3.6"
+# Clipboard: reading for the text menu's Paste (eframe already uses it for copying)
+arboard = { version = "3.6", default-features = false }
 
-# Win32 API (ITaskbarList3, NtSuspendProcess, RegisterHotKey, CreateToolhelp32Snapshot)
+# Win32 API (ITaskbarList3, NtSuspendProcess, tray icon + RegisterHotKey, CreateToolhelp32Snapshot)
+# Tray and hotkeys are raw Win32 too (Phase 5): `tray-icon` has no balloons, `global-hotkey` is not needed
 windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_System_Com",
-    "Win32_UI_Shell",
-    "Win32_System_Threading",
+    "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
-
-# System tray icon with notifications
-tray-icon = "0.26"
-
-# Global hotkeys (Alt+F8, Alt+F9)
-global-hotkey = "0.8"
 
 # Audio loopback capture (WASAPI)
 cpal = "0.18"
@@ -170,8 +168,7 @@ Completed:
 - [x] Modal dialogs replacing Tk `messagebox` / `simpledialog` (`ui/dialogs.rs`: info, warning, error, yes/no, text prompt)
 - [x] Self-drawn title bar for secondary windows (`dialogs::title_bar`, undecorated viewport); the main window keeps the native dark title bar for Aero Snap and native resizing
 
-Remaining:
-- [ ] Context menu widget (right-click on Convert = Pause; right-click on log = Copy)
+- [x] Context menu widget (done in Phase 5): Cut / Copy / Paste / Delete / Select All on text fields; right-click on Convert pauses; the log's Copy comes with the log inspector (Phase 8)
 
 ### Phase 2: Complete Main UI Layout ✅ DONE
 
@@ -182,6 +179,7 @@ Every control of the 1.8.4 main window is on screen and wired to the original's 
 - [x] **Trim slider**: handles map to `trim_start`/`trim_end` via the ffprobe duration (1 s minimum gap, end stops 0.1 s before the last frame); reset restores the full range; a new input sets `trim_end` to its duration
 - [x] **Output auto-naming**: `<stem>_<codec>_custom.<ext>` in `last_output_dir` (if it exists) or next to the input, container kept for mp4/mkv/mov/ts/mts/m2ts/webm; a codec switch renames only auto-named outputs
 - [x] **Estimated file size**: `(video + audio kbps) × duration / 8 / 1024` from a background, cached ffprobe run (`core/probe.rs`, `core/estimate.rs`)
+- [x] **Window height follows the sections** (`_update_window_size`): opening or closing a section sets the height to 700 + what the open sections add, capped at 1.8.4's `maxsize` (900 / 800 / 650 px at <125% / ≥125% / ≥200% scaling); only on a toggle, so a height dragged by hand stays until then
 - [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame; the full log inspector stays in Phase 8)
 - [x] **Custom command mode**: Output opens an editable preview window (Copy / Apply / Reset / Close); Apply validates `-i` + output file; right-click on Output copies the command with spaced paths quoted
 - [x] Parity fixes: H.264 hides Lookahead Level (as the original), CUDA Output Format is disabled unless HW Accel = cuda, tune = lossless turns AQ off, `Send to nvencFFX` argument is loaded at startup, ffmpeg / ffprobe auto-detected (exe folder, then `PATH`)
@@ -194,6 +192,8 @@ Remaining (moved to later phases):
 
 Deliberate differences from 1.8.4:
 - Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
+- The main scroll bar is shown only when the content does not fit (CTkScrollableFrame always showed it, even with nothing to scroll); the layout does not move when it appears.
+- The auto height uses the measured height a section adds (the original added `winfo_reqheight() + 10`, 10 px short for sections with `pady=10`) and also stops 80 px short of the monitor height, so the window never extends under the taskbar on small screens.
 - The command preview quotes arguments with spaces and its parser removes double quotes, so `-metadata title="a b"` style arguments round-trip (Python's non-POSIX `shlex` kept the quote characters).
 
 ### Phase 3: Configuration Persistence & Presets ✅ DONE
@@ -221,7 +221,8 @@ Deliberate differences from 1.8.4:
 
 3. ✅ **Process Runner** (`core/process.rs`, `core/progress.rs`):
    - `CREATE_NO_WINDOW` (stable Rust has no `STARTUPINFO` access; console apps need nothing else to stay hidden)
-   - stdout and stderr share one `std::io::pipe` (like `stderr=STDOUT`); a worker thread splits on `` and `
+   - stdout and stderr share one `std::io::pipe` (like `stderr=STDOUT`); a worker thread splits on `
+` and `
 ` and sends lines over `mpsc`, waking the UI with `request_repaint`
    - Several commands run in sequence, each only after the previous one succeeded (preview = copy + encode)
    - Cancel terminates the process; `stop` also waits for it to exit (used on close, so temp files can be deleted)
@@ -244,34 +245,48 @@ Deliberate differences from 1.8.4:
 - The process kill on exit matches our own children by parent PID, not every `ffmpeg.exe` started from the same path (which also hit other programs' instances).
 - The input tooltip is probed on first hover instead of on every input change.
 
-Left for Phase 5: pause / resume (`NtSuspendProcess`, right-click on Convert) and the taskbar progress overlay.
+Pause / resume and the taskbar progress overlay followed in Phase 5.
 
-### Phase 5: Win32 Platform Integration
+### Phase 5: Win32 Platform Integration ✅ DONE
 
-1. **Taskbar Progress Overlay** (`taskbar.rs`):
-   - `CoCreateInstance` → `ITaskbarList3`
-   - `SetProgressValue(hwnd, completed, total)` for 0–100% progress bar on taskbar icon
-   - `SetProgressState`: `TBPF_NORMAL` (green), `TBPF_PAUSED` (yellow), `TBPF_ERROR` (red), `TBPF_NOPROGRESS` (clear)
+All raw `windows-sys` like the rest of `src/win32/`; neither `tray-icon` nor `global-hotkey` is used (`tray-icon` has no balloon notifications, and one hidden window serves both the tray and the hotkeys).
 
-2. **Process Pause / Resume** (`suspend.rs`):
-   - `OpenProcess(PROCESS_SUSPEND_RESUME)` → `NtSuspendProcess` / `NtResumeProcess`
-   - Triggered by right-click context menu on Convert button
-   - Update taskbar state to `TBPF_PAUSED` (yellow) when paused
+1. ✅ **Taskbar Progress Overlay** (`win32/taskbar.rs`, `TaskbarProgress`):
+   - `CoCreateInstance(TaskbarList)` → `ITaskbarList3` through a hand-written vtable (same slots as the original's `_com_vtable_call`), `HrInit`, released on exit
+   - `SetProgressValue(hwnd, n, 100)` in 1% steps; `SetProgressState`: green on start / resume, yellow when paused, red after an error (until the next conversion), cleared on success or cancel
+   - Driven by the conversion only, as in the original (not by Play 10s Preview); unavailable COM (no Explorer) silently disables it
 
-3. **System Tray** (`tray.rs`):
-   - `tray-icon` crate: icon, tooltip "nvencFFX", context menu (Start Recording / Stop Recording / Open / Exit)
-   - Notification balloons for recording start/stop events
-   - Minimize-to-tray behavior
+2. ✅ **Process Pause / Resume** (`win32/suspend.rs`, `Runner::pause` / `resume`):
+   - `NtSuspendProcess` / `NtResumeProcess` from `ntdll`
+   - Right-click on Convert pauses / resumes (`_on_convert_right_click`); while paused the button reads "Resume" (orange) and a left click resumes instead of cancelling; status "Conversion paused" / "Conversion in progress..."
+   - Cancel and exit still terminate a suspended ffmpeg (`TerminateProcess` works on it, so no resume first)
 
-4. **Global Hotkeys** (`hotkeys.rs`):
-   - `RegisterHotKey`: Alt+F8 = Start Recording, Alt+F9 = Stop Recording
-   - Hidden message-only window (`CreateWindowExW`) for WM_HOTKEY dispatch
-   - `UnregisterHotKey` on shutdown
+3. ✅ **System Tray** (`win32/tray.rs`, `TrayIcon`):
+   - Shown from startup until exit: icon from the exe (resource 1, `IDI_APPLICATION` fallback), tooltip `nvencFFX <version>`
+   - Native menu: "Start Recording (Alt + F8)", "Stop Recording (Alt + F9)", separator, "Open nvencFFX", "Exit"; double-click = Open
+   - Open restores and focuses the window (`_restore_app`), Exit closes it like the title bar's X (so `on_exit` runs)
+   - `Tray::balloon` (`show_balloon`, `NIF_INFO`) is ready for the recording notifications
+   - Start / Stop Recording reach the app as commands but do nothing until Phase 7
 
-5. **Clipboard** (`clipboard.rs`):
-   - `arboard` crate or raw Win32 (`OpenClipboard`/`SetClipboardData`)
-   - "Copy Command" button copies the built FFmpeg command line
-   - Log context menu "Copy" copies selected log text
+4. ✅ **Global Hotkeys** (in `win32/tray.rs`):
+   - `RegisterHotKey` Alt+F8 / Alt+F9 on the tray's hidden window, which runs on its own thread with its own message loop; commands reach the UI over `mpsc` + `request_repaint`
+   - Unregistered, and the icon removed, when the app exits (`Tray` drop joins the thread)
+
+5. ✅ **Clipboard & text context menu** (`ui/widgets.rs`, `CTkContextMenu`):
+   - Copy goes through egui (`ctx.copy_text`); eframe always enables egui-winit's `clipboard` feature, i.e. `arboard`. Paste from the menu reads the clipboard with `arboard` directly (same crate, no new code compiled)
+   - Right-click in any enabled entry and in the command preview opens Cut / Copy / Paste / Delete / Select All (`SECONDARY_BG`, radius 10, 120×28 items with green hover); Copy without a selection copies the whole text, Cut / Delete need a selection
+   - egui moves the cursor on any pointer press, so the selection is saved before a right-click reaches the `TextEdit` and restored after it
+   - Ctrl+A / C / V / X on non-Latin keyboard layouts (`_handle_key_press`) need no port: egui-winit falls back to the physical key
+   - The log's "Copy" belongs to the log inspector → Phase 8
+
+Also: the per-frame bookkeeping (`update_state`: ffmpeg output, probes, tray commands, autosave) moved from `App::ui` to `App::logic`. eframe 0.36 does not call `ui` while the window is minimized, only `logic`, so before this the taskbar progress, the completion beep and the tray's Open stalled until the window was restored.
+
+Deliberate differences from 1.8.4:
+- The hotkeys use `MOD_NOREPEAT`, so holding Alt+F8 does not fire repeatedly.
+- The tray window re-adds the icon on Explorer's `TaskbarCreated` broadcast (the original's icon vanished after an Explorer restart), and posts `WM_NULL` after the menu closes (KB135788) so the next right-click opens it reliably.
+- Pause / resume use the process handle `std` already holds instead of reopening the PID.
+- Hotkeys and tray messages go to a separate hidden window instead of a subclassed main window.
+- No minimize-to-tray (the plan's earlier idea): 1.8.4 minimizes to the taskbar and keeps the tray icon visible throughout, as this port does.
 
 ### Phase 6: Batch Converter & Task Queue
 
@@ -329,17 +344,17 @@ Left for Phase 5: pause / resume (`NtSuspendProcess`, right-click on Convert) an
 | Phase | Status | Key Files | LOC |
 |---|---|---|---|
 | Phase 0 — Setup | ✅ Done | `Cargo.toml`, `build.rs`, `main.rs` | ~50 |
-| Phase 1 — Theme & Widgets | 🟢 ~98% (context menu left) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
+| Phase 1 — Theme & Widgets | ✅ Done (context menu added in Phase 5) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
 | Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
 | Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
 | Phase 4 — FFmpeg Core | ✅ Done | `core/command.rs`, `core/probe.rs`, `core/process.rs`, `core/progress.rs`, `win32/process_tree.rs` | ~1,300 |
-| Phase 5 — Win32 Integration | ⬜ Not started | — | — |
+| Phase 5 — Win32 Integration | ✅ Done (recording commands wait for Phase 7) | `win32/taskbar.rs`, `win32/suspend.rs`, `win32/tray.rs`, `ui/widgets.rs` (context menu) | ~800 |
 | Phase 6 — Batch Converter | ⬜ Not started | — | — |
 | Phase 7 — Screen Recording | ⬜ Not started | — | — |
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~5,250 LOC across 19 files (45 tests).
+**Current Rust codebase**: ~6,200 LOC across 22 files (52 tests).
 
 ---
 
@@ -351,4 +366,6 @@ Left for Phase 5: pause / resume (`NtSuspendProcess`, right-click on Convert) an
 4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
 5. ~~**Process tree kill**~~: resolved in Phase 4 (`win32/process_tree.rs`); reuse it for recording stop in Phase 7.
 6. **Screen recording complexity**: The segmented recording system with WASAPI audio muxing is the most complex feature (~650 LOC in Python). Consider deferring to a later release if needed.
-7. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
+7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, and in Phase 7 the recording state) belongs in `update_state`, which runs from `logic`.
+8. **Tray / hotkey commands for recording**: Alt+F8 / Alt+F9 and the tray's Start / Stop Recording are delivered but ignored until Phase 7 wires them to the recorder; the `Tray::balloon` API is unused until then.
+9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.

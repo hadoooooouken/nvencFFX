@@ -1224,6 +1224,7 @@ dependencies = [
 name = "nvencffx"
 version = "2.0.0"
 dependencies = [
+ "arboard",
  "eframe",
  "egui",
  "raw-window-handle",

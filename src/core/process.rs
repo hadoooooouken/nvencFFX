@@ -69,6 +69,19 @@ impl Runner {
         }
     }
 
+    /// Suspends the running command (`_pause_conversion`); `false` if none runs or
+    /// Windows refused. A cancel still terminates a suspended process.
+    #[cfg(windows)]
+    pub fn pause(&self) -> bool {
+        self.shared.child.lock().unwrap().as_ref().is_some_and(crate::win32::suspend::suspend)
+    }
+
+    /// Resumes after [`Self::pause`] (`_resume_conversion`).
+    #[cfg(windows)]
+    pub fn resume(&self) -> bool {
+        self.shared.child.lock().unwrap().as_ref().is_some_and(crate::win32::suspend::resume)
+    }
+
     /// Cancels and waits (up to `timeout`) until the process is gone, so its files
     /// can be deleted.
     pub fn stop(&self, timeout: Duration) {
@@ -226,6 +239,28 @@ mod tests {
         let runner = Runner::start(vec![vec!["Z:\\no\\such\\ffmpeg.exe".into()]], &ctx);
         let (_, outcome) = wait(&runner);
         assert!(matches!(outcome.exit, Exit::SpawnFailed(ref e) if e.kind() == std::io::ErrorKind::NotFound));
+    }
+
+    #[test]
+    fn pause_stops_output_until_resumed_and_cancel_still_works() {
+        let ctx = egui::Context::default();
+        let ping = ["ping", "-n", "30", "127.0.0.1"].map(str::to_owned).to_vec();
+        let runner = Runner::start(vec![ping], &ctx);
+        assert!(matches!(runner.rx.recv_timeout(Duration::from_secs(10)), Ok(Event::Line { .. })));
+        assert!(runner.pause());
+        // Lines already in the pipe may still arrive; after that ping stays silent
+        std::thread::sleep(Duration::from_millis(300));
+        runner.poll();
+        std::thread::sleep(Duration::from_millis(2500));
+        assert!(runner.poll().is_empty(), "no output while suspended");
+        assert!(runner.resume());
+        assert!(matches!(runner.rx.recv_timeout(Duration::from_secs(5)), Ok(Event::Line { .. })));
+
+        assert!(runner.pause());
+        runner.cancel();
+        let (_, outcome) = wait(&runner);
+        assert!(matches!(outcome.exit, Exit::Cancelled), "a suspended process can be cancelled");
+        assert!(!runner.pause(), "nothing left to pause");
     }
 
     #[test]
