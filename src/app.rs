@@ -27,6 +27,8 @@ use crate::ui::{
     },
 };
 
+mod batch;
+
 /// Pixel grid of the original CustomTkinter layout (`nvencFFX.py`, 100% scaling).
 /// X offsets are relative to the content origin, which sits 31px from the window edge.
 mod grid {
@@ -211,6 +213,8 @@ pub struct NvencFfxApp {
     task: Option<Task>,
     /// Temp clips of the last 10 s preview, deleted before the next one and on exit.
     preview_files: Vec<PathBuf>,
+    /// The Batch Converter's files and window; its conversions run as `task`.
+    batch: batch::Batch,
 
     dialog: Option<(ViewportId, Dialog<Action>)>,
     icon: Arc<egui::IconData>,
@@ -259,6 +263,7 @@ impl Default for NvencFfxApp {
 
             task: None,
             preview_files: Vec::new(),
+            batch: batch::Batch::default(),
 
             dialog: None,
             icon: Arc::new(egui::IconData::default()),
@@ -986,12 +991,15 @@ impl NvencFfxApp {
 
     // -- Running ffmpeg ------------------------------------------------------
 
-    /// Convert / Cancel / Resume (`_toggle_conversion`).
+    /// Convert / Batch Convert / Cancel / Resume (`_toggle_conversion`). With files in
+    /// the Batch Converter, Convert runs them.
     fn toggle_conversion(&mut self, ctx: &egui::Context) {
         match &self.task {
             Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => self.resume_conversion(),
+            Some(Task { kind: TaskKind::Convert { .. }, .. }) if self.batch.running() => self.cancel_batch(),
             Some(Task { kind: TaskKind::Convert { .. }, runner, .. }) => runner.cancel(),
             Some(_) => self.message(Kind::Error, "Error", "Please wait until preview creation completes"),
+            None if !self.batch.files.is_empty() => self.start_batch(ctx),
             None => self.start_conversion(ctx),
         }
     }
@@ -1023,7 +1031,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_pause_conversion`
+    /// `_pause_conversion`, `BatchConverterWindow.pause_conversion`
     fn pause_conversion(&mut self) {
         let Some(task) = &mut self.task else { return };
         #[cfg(windows)]
@@ -1031,7 +1039,8 @@ impl NvencFfxApp {
             return;
         }
         task.paused = true;
-        self.status_message = "Conversion paused".to_owned();
+        let text = if self.batch.running() { "Batch conversion paused" } else { "Conversion paused" };
+        self.status_message = text.to_owned();
         self.taskbar(Taskbar::Paused);
     }
 
@@ -1110,7 +1119,7 @@ impl NvencFfxApp {
                 Event::Line { step, text } => self.task_line(step, text, ctx),
                 Event::Finished(outcome) => {
                     if let Some(task) = self.task.take() {
-                        self.task_finished(task.kind, outcome);
+                        self.task_finished(task.kind, outcome, ctx);
                     }
                 }
             }
@@ -1136,13 +1145,17 @@ impl NvencFfxApp {
             let fraction = progress::fraction(time, total);
             self.progress = Some(fraction);
             if matches!(task.kind, TaskKind::Convert { .. }) {
-                self.taskbar(Taskbar::Progress(fraction));
+                self.taskbar(Taskbar::Progress(self.batch.overall_progress(fraction)));
             }
         }
         self.ffmpeg_output = text;
     }
 
-    fn task_finished(&mut self, kind: TaskKind, outcome: process::Outcome) {
+    fn task_finished(&mut self, kind: TaskKind, outcome: process::Outcome, ctx: &egui::Context) {
+        // The batch's progress bar stays up until its last file is done
+        if self.batch.running() {
+            return self.batch_file_finished(outcome.exit, ctx);
+        }
         self.progress = None;
         self.ffmpeg_output.clear();
         match kind {
@@ -1822,6 +1835,7 @@ impl NvencFfxApp {
             Some(0) => self.play(false),
             Some(1) => self.play(true),
             Some(2) => self.toggle_preview(&ctx),
+            Some(3) => self.open_batch_converter(&ctx),
             _ => {}
         }
 
@@ -1830,6 +1844,7 @@ impl NvencFfxApp {
         let (text, kind) = match &self.task {
             Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => ("Resume", ButtonKind::Orange),
             Some(Task { kind: TaskKind::Convert { .. }, .. }) => ("Cancel", ButtonKind::Red),
+            _ if !self.batch.files.is_empty() => ("Batch Convert", ButtonKind::Green),
             _ => ("Convert", ButtonKind::Green),
         };
         let convert = place(ui, r, |ui| bold_button(ui, r.size(), text, kind));
@@ -2020,7 +2035,7 @@ impl eframe::App for NvencFfxApp {
                 });
         });
 
-        file_drag_drop_overlay(&ctx);
+        file_drag_drop_overlay(&ctx, "Drop video file to load into nvencFFX");
         self.dialog_ui(ui, ViewportId::ROOT);
 
         if self.command_window.is_some() {
@@ -2032,6 +2047,7 @@ impl eframe::App for NvencFfxApp {
                 .with_icon(self.icon.clone());
             ctx.show_viewport_immediate(command_viewport(), builder, |ui, _| self.command_window_ui(ui));
         }
+        self.show_batch_window(&ctx);
     }
 }
 

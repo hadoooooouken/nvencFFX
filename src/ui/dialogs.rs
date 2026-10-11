@@ -109,7 +109,8 @@ impl<A> Dialog<A> {
 pub const TITLE_BAR_HEIGHT: f32 = 32.0;
 
 /// Title bar for an undecorated window: drag to move, painted close button, 1px
-/// outline around the window. Returns true when close was clicked.
+/// outline around the window in the main window's border color. Returns true when
+/// close was clicked.
 pub fn title_bar(ui: &mut Ui, title: &str) -> bool {
     let window = ui.max_rect();
     let bar = Rect::from_min_size(window.min, vec2(window.width(), TITLE_BAR_HEIGHT));
@@ -137,8 +138,42 @@ pub fn title_bar(ui: &mut Ui, title: &str) -> bool {
     let x = Stroke::new(1.2_f32, colors::LABEL_TEXT);
     painter.line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], x);
     painter.line_segment([c + vec2(-5.0, 5.0), c + vec2(5.0, -5.0)], x);
-    painter.rect_stroke(window, CornerRadius::ZERO, Stroke::new(1.0_f32, colors::ENTRY_BORDER), egui::StrokeKind::Inside);
+
+    // For the drop shadow of undecorated windows winit moves the client area one
+    // pixel down, so its last pixel row is outside the window: the outline's bottom
+    // edge goes one row higher
+    let px = 1.0 / ui.ctx().pixels_per_point();
+    let outline = window.with_max_y(window.max.y - px);
+    painter.rect_stroke(outline, CornerRadius::ZERO, Stroke::new(px, colors::WINDOW_BORDER), egui::StrokeKind::Inside);
 
     ui.advance_cursor_after_rect(bar);
     close.clicked()
+}
+
+/// Resize borders for an undecorated resizable window (winit gives those none):
+/// dragging an edge or a corner starts the native resize. Call after the window's
+/// contents so the borders are on top.
+pub fn resize_edges(ui: &Ui) {
+    use egui::{CursorIcon, ResizeDirection as D};
+    const EDGE: f32 = 5.0;
+    const CORNER: f32 = 12.0;
+    let w = ui.ctx().content_rect();
+    let (l, r, t, b) = (w.min.x, w.max.x, w.min.y, w.max.y);
+    let rect = |x0: f32, y0: f32, x1: f32, y1: f32| Rect::from_min_max(pos2(x0, y0), pos2(x1, y1));
+    let borders = [
+        (rect(l + CORNER, t, r - CORNER, t + EDGE), D::North, CursorIcon::ResizeVertical),
+        (rect(l + CORNER, b - EDGE, r - CORNER, b), D::South, CursorIcon::ResizeVertical),
+        (rect(l, t + CORNER, l + EDGE, b - CORNER), D::West, CursorIcon::ResizeHorizontal),
+        (rect(r - EDGE, t + CORNER, r, b - CORNER), D::East, CursorIcon::ResizeHorizontal),
+        (rect(l, t, l + CORNER, t + EDGE).union(rect(l, t, l + EDGE, t + CORNER)), D::NorthWest, CursorIcon::ResizeNwSe),
+        (rect(r - CORNER, b - EDGE, r, b).union(rect(r - EDGE, b - CORNER, r, b)), D::SouthEast, CursorIcon::ResizeNwSe),
+        (rect(r - CORNER, t, r, t + EDGE).union(rect(r - EDGE, t, r, t + CORNER)), D::NorthEast, CursorIcon::ResizeNeSw),
+        (rect(l, b - EDGE, l + CORNER, b).union(rect(l, b - CORNER, l + EDGE, b)), D::SouthWest, CursorIcon::ResizeNeSw),
+    ];
+    for (i, (area, direction, cursor)) in borders.into_iter().enumerate() {
+        let response = ui.interact(area, Id::new(("resize_edge", i)), Sense::drag()).on_hover_cursor(cursor);
+        if response.drag_started() {
+            ui.ctx().send_viewport_cmd(ViewportCommand::BeginResize(direction));
+        }
+    }
 }

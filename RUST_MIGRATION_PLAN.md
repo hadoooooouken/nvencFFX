@@ -28,6 +28,7 @@ nvencffx/
 ├── src/
 │   ├── main.rs               # Entry point, winit/eframe setup, windows_subsystem attribute
 │   ├── app.rs                # Main App state (eframe::App implementation)
+│   ├── app/batch.rs          # Batch Converter window + queue (child module of app)
 │   ├── ui/                   # egui interface components
 │   │   ├── mod.rs
 │   │   ├── theme.rs          # Color palette (#4FB62F accent, dark mode, styles)
@@ -38,7 +39,6 @@ nvencffx/
 │   │   ├── audio_section.rs  # Audio codec selection (Copy, AAC, Opus, Custom, Disable)
 │   │   ├── trim_section.rs   # Trimming controls (timeline slider, -ss/-to, streamcopy, precise)
 │   │   ├── presets_section.rs # Preset selector with save/load/delete
-│   │   ├── batch_view.rs     # Batch Converter window/modal
 │   │   └── log_view.rs       # Real-time streaming FFmpeg output log
 │   ├── core/                 # FFmpeg business logic
 │   │   ├── mod.rs
@@ -288,16 +288,37 @@ Deliberate differences from 1.8.4:
 - Hotkeys and tray messages go to a separate hidden window instead of a subclassed main window.
 - No minimize-to-tray (the plan's earlier idea): 1.8.4 minimizes to the taskbar and keeps the tray icon visible throughout, as this port does.
 
-### Phase 6: Batch Converter & Task Queue
+### Phase 6: Batch Converter & Task Queue ✅ DONE
 
-1. Port `BatchConverterWindow` as a separate egui Window/modal:
-   - Queue model: `Vec<BatchTask>` with status (Pending / Converting / Done / Error)
-   - Drag & Drop folder ingestion with recursive video extension filtering (`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.ts`, `.flv`, `.wmv`)
-   - Output folder selection, optional container change (mp4/mkv/avi/mov/webm/ts)
-   - Per-file progress bar + overall progress bar
-   - Sequential execution: pick next Pending task, build command from main app settings, run, update status
-   - Pause/Resume/Abort controls per-item and for entire queue
-   - Persist `batch_output_folder`, `batch_change_container`, `batch_output_container` in settings
+`BatchConverterWindow` ported 1:1 in `app/batch.rs` (a child module of `app`, so it drives the main window's state like the original did through `main_app`). The earlier draft of this section listed recursive folder ingestion, per-file pause and a separate overall progress bar; 1.8.4 has none of them, so they were not added.
+
+1. ✅ **Window** (immediate viewport, self-drawn title bar, 600×400 content, resizable with that as the minimum, opened centered on the main window):
+   - File list: number, name (cut to 40 characters), status (`Ready` / `Converting` / `Done` / `Failed` / `Failed: <reason>` / `Cancelled`), red × per file
+   - `Output:` folder line (batch folder, else the main window's last output folder if it exists, else "Original folder(s)"; cut to 85 characters)
+   - Output Folder ("Select Output Folder"), "Change output container" checkbox enabling the mp4 / mkv / mov menu
+   - Add Files ("Select Video Files", same filters as Browse), Close, Remove All
+   - Drag & drop of files onto the window: video extensions join the list (duplicates ignored), anything else gets the "Unsupported File" warning
+   - Closing it during a batch only hides it; the list stays until the app exits (it is not persisted)
+   - Resize borders (`dialogs::resize_edges`, `ViewportCommand::BeginResize`), since winit gives undecorated windows none; file dialogs are parented to the batch window through its HWND (`win32::foreground_window`)
+
+2. ✅ **Queue run** (`start_batch_conversion`, `_convert_next_file`, `_run_single_conversion`):
+   - With files listed, Convert reads "Batch Convert" and runs them; each file becomes the main window's input, with output `<stem>_<codec>_custom<ext>` in the output folder above (`<ext>` = the chosen container or the input's own), built from the current main-window settings
+   - Files run one after another as the regular conversion task: same progress bar and output line, per file; the taskbar button shows the progress of the whole list (`_get_taskbar_progress`)
+   - A file whose command cannot be built is marked `Failed: <reason>` and the batch moves on; a non-zero exit is `Failed`
+   - End: "Batch conversion completed!", taskbar red if any file failed, else cleared; no completion sound and no message boxes, as in the original
+   - The main window's input / output are restored afterwards (only if they were set, as in the original)
+
+3. ✅ **Pause / Cancel**: right click on Convert pauses the whole batch ("Batch conversion paused", orange "Resume"); Cancel ends it at once ("Batch conversion cancelled", current file `Cancelled`, taskbar cleared)
+
+4. ✅ **Settings**: `batch_output_folder`, `batch_change_container`, `batch_output_container` were already in `Settings` (Phase 3) and are edited by the window and autosaved
+
+Deliberate differences from 1.8.4:
+- An applied custom command gets each file's input (`-i`) and output (last argument) swapped in, like the preview does. 1.8.4 ran the identical command once per file.
+- Removing files during a batch keeps it on track: it goes on with the file after the one converting. In 1.8.4 the index shifted, so the wrong entry got the status and a file could be skipped.
+- A batch cannot start while Play 10s Preview runs, and the preview cannot start during a batch ("Please wait until ..." errors as for a single conversion). 1.8.4 let them run side by side.
+- The Convert button's text follows the state on every frame. 1.8.4 could show "Batch Convert" during a single conversion after files were added, and adding a file reset the single conversion's pause flag.
+- Dropping several unsupported files shows one warning instead of one per file.
+- The next file starts right away instead of after 100 ms, and durations are probed in the background instead of blocking the window before every file.
 
 ### Phase 7: Screen Recording & WASAPI Audio Capture
 
@@ -349,12 +370,12 @@ Deliberate differences from 1.8.4:
 | Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
 | Phase 4 — FFmpeg Core | ✅ Done | `core/command.rs`, `core/probe.rs`, `core/process.rs`, `core/progress.rs`, `win32/process_tree.rs` | ~1,300 |
 | Phase 5 — Win32 Integration | ✅ Done (recording commands wait for Phase 7) | `win32/taskbar.rs`, `win32/suspend.rs`, `win32/tray.rs`, `ui/widgets.rs` (context menu) | ~800 |
-| Phase 6 — Batch Converter | ⬜ Not started | — | — |
+| Phase 6 — Batch Converter | ✅ Done | `app/batch.rs`, `ui/dialogs.rs` (resize edges), `win32/mod.rs` (dialog parent) | ~750 |
 | Phase 7 — Screen Recording | ⬜ Not started | — | — |
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~6,200 LOC across 22 files (52 tests).
+**Current Rust codebase**: ~7,000 LOC across 23 files (57 tests).
 
 ---
 
@@ -369,3 +390,4 @@ Deliberate differences from 1.8.4:
 7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, and in Phase 7 the recording state) belongs in `update_state`, which runs from `logic`.
 8. **Tray / hotkey commands for recording**: Alt+F8 / Alt+F9 and the tray's Start / Stop Recording are delivered but ignored until Phase 7 wires them to the recorder; the `Tray::balloon` API is unused until then.
 9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
+10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.

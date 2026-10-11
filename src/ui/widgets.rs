@@ -136,6 +136,18 @@ pub fn bold_button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Res
     response
 }
 
+/// Button with a painted "×" (the batch list's remove button). Painted rather than
+/// a text glyph, whose side bearings would put it off center.
+pub fn cross_button(ui: &mut Ui, size: Vec2, kind: ButtonKind) -> Response {
+    let (rect, response) = paint_button(ui, size, kind);
+    let painter = ui.painter();
+    let c = pos2(painter.round_to_pixel_center(rect.center().x), painter.round_to_pixel_center(rect.center().y));
+    let (d, stroke) = (3.0, Stroke::new(1.5_f32, kind.text_color()));
+    painter.line_segment([c + vec2(-d, -d), c + vec2(d, d)], stroke);
+    painter.line_segment([c + vec2(-d, d), c + vec2(d, -d)], stroke);
+    response
+}
+
 /// Square grey button with a painted "reset" (counter-clockwise arrow) icon.
 pub fn reset_button(ui: &mut Ui, size: Vec2) -> Response {
     let (rect, response) = paint_button(ui, size, ButtonKind::Grey);
@@ -652,7 +664,7 @@ pub fn is_drag_hovering(ctx: &egui::Context) -> bool {
 }
 
 /// Renders a full-window drag-and-drop overlay when the user hovers files over the window
-pub fn file_drag_drop_overlay(ctx: &egui::Context) {
+pub fn file_drag_drop_overlay(ctx: &egui::Context, title: &str) {
     if !is_drag_hovering(ctx) {
         return;
     }
@@ -676,7 +688,7 @@ pub fn file_drag_drop_overlay(ctx: &egui::Context) {
     painter.text(
         screen_rect.center() - vec2(0.0, 12.0),
         Align2::CENTER_CENTER,
-        "Drop video file to load into nvencFFX",
+        title,
         FontId::proportional(20.0),
         colors::ACCENT_GREEN,
     );

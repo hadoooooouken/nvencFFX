@@ -8,11 +8,17 @@ pub mod tray;
 use std::ffi::c_void;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawWindowHandle,
+    Win32WindowHandle, WindowHandle,
+};
 use windows_sys::Win32::{
     Foundation::HWND,
     System::Diagnostics::Debug::MessageBeep,
-    UI::{Shell::ShellExecuteW, WindowsAndMessaging::{MB_ICONASTERISK, SW_SHOWNORMAL}},
+    UI::{
+        Shell::ShellExecuteW,
+        WindowsAndMessaging::{GetForegroundWindow, MB_ICONASTERISK, SW_SHOWNORMAL},
+    },
 };
 
 #[link(name = "dwmapi")]
@@ -26,6 +32,31 @@ pub fn hwnd(window: &impl HasWindowHandle) -> Option<HWND> {
         RawWindowHandle::Win32(win32) => Some(win32.hwnd.get() as HWND),
         _ => None,
     }
+}
+
+/// A window known only by its handle, e.g. as the parent of a file dialog opened
+/// from a secondary viewport (eframe exposes no handle for those).
+pub struct Window(HWND);
+
+impl HasWindowHandle for Window {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        let hwnd = std::num::NonZeroIsize::new(self.0 as isize).ok_or(HandleError::Unavailable)?;
+        // The handle came from Windows and the dialog using it is modal, so it
+        // outlives the borrow
+        Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::Win32(Win32WindowHandle::new(hwnd))) })
+    }
+}
+
+impl HasDisplayHandle for Window {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        Ok(DisplayHandle::windows())
+    }
+}
+
+/// The window the user is working in, i.e. the one whose button was just clicked.
+pub fn foreground_window() -> Option<Window> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    (!hwnd.is_null()).then_some(Window(hwnd))
 }
 
 /// Dark title bar, like CustomTkinter gives the original.

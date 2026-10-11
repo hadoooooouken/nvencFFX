@@ -34,6 +34,8 @@ pub mod colors {
     pub const SCROLLBAR: Color32 = Color32::from_rgb(0x69, 0x69, 0x69); // gray41
     pub const SCROLLBAR_HOVER: Color32 = Color32::from_rgb(0x87, 0x87, 0x87); // gray53
     pub const TRIM_TRACK: Color32 = Color32::from_rgb(0x55, 0x55, 0x55);
+    /// Outline of self-drawn windows, matching the 1px border Windows 10 gives the main window
+    pub const WINDOW_BORDER: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
 }
 
 /// Sizes of the CustomTkinter widgets the original layout is built from.
