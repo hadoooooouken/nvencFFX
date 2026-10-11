@@ -8,6 +8,13 @@ use eframe::egui;
 
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            // With vsync, every repaint blocks in present() for up to a frame. eframe
+            // repaints on each WM_MOVE, so inside Windows' modal move loop that makes
+            // window dragging stutter. Falls back Immediate -> Mailbox -> Fifo.
+            present_mode: eframe::wgpu::PresentMode::AutoNoVsync,
+            ..Default::default()
+        },
         viewport: egui::ViewportBuilder::default()
             // Same footprint as the CustomTkinter original: fixed width, resizable height
             .with_inner_size([820.0, 700.0])
