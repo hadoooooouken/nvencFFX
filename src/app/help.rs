@@ -295,6 +295,7 @@ mod tests {
         assert!(!job.text.contains('\r'));
         let about = tab_text(Tab::About);
         assert!(about.sections.iter().all(|s| s.format.color == colors::LABEL_TEXT));
+        assert!(about.text.starts_with(&format!("{}\n", crate::WINDOW_TITLE)), "nff-about.txt names this version");
         assert!(tab_text(Tab::License).text.starts_with("MIT License"));
     }
 

@@ -1,0 +1,2 @@
+# Written by the Python version (CRLF); byte-compared by the settings tests
+src/config/testdata/* -text

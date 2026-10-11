@@ -78,8 +78,10 @@ nvencffx/
 ```toml
 [dependencies]
 # GUI framework
-eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts"] }
+eframe = { version = "0.36", default-features = false, features = ["wgpu_no_default_features", "default_fonts"] }
 egui = "0.36"
+# Only the Windows backends (Phase 9): eframe's `wgpu` feature adds GLES, Metal and web
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "wgsl"] }
 
 # Serialization (settings, presets)
 serde = { version = "1.0.229", features = ["derive"] }
@@ -395,15 +397,42 @@ Deliberate differences from 1.8.4:
 - The input file tooltip appears after 0.3 s like the other hints (1.8.4: 0.5 s); egui has one tooltip delay.
 - "Preview unavailable" appears in the box above the slider; 1.8.4 put it in a popup at the screen's top-left corner if the very first frame failed.
 
-### Phase 9: Binary Optimization & Release Packaging
+### Phase 9: Binary Optimization & Release Packaging ✅ DONE
 
-1. Release profile already configured in `Cargo.toml` (opt-level z, LTO, strip, panic=abort)
-2. `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — already in `main.rs`
-3. Embed version metadata, copyright, and `nff.ico` via `winresource` — already in `build.rs`
-4. Post-build: optional UPX compression for ~4–6 MB final binary
-5. Output: **Single executable (~12–15 MB)** with native DX12/Vulkan hardware acceleration
-6. Test: verify nff_settings.json and presets/*.json backward compatibility with Python version files
-7. README "Send to" section: the shortcut in `%APPDATA%\Microsoft\Windows\SendTo` can point straight at `nvencFFX.exe` (the file arrives as the first argument, no console window); `Send to nvencFFX.bat` is no longer needed
+1. ✅ **Release profile** (`Cargo.toml`, since Phase 0): `opt-level = "z"`, LTO, one codegen unit, `panic = "abort"`, stripped
+2. ✅ **No console**: `windows_subsystem = "windows"` in release builds (`main.rs`), also when Send to starts it with a file argument
+3. ✅ **wgpu backends**: eframe's `wgpu` feature compiled in every wgpu backend (DX12, Vulkan, GLES with EGL / ANGLE loading, Metal, WebGPU / WebGL). Now eframe's `wgpu_no_default_features` plus `wgpu` with `dx12`, `vulkan`, `wgsl` only: 8.77 → 8.48 MB. Adapter choice unchanged (egui-wgpu requests `PRIMARY | GL` at high performance, wgpu enumerates Vulkan before DX12); DX12's WARP software adapter stays the last resort. Checked: starts on the default, `WGPU_BACKEND=dx12` and `=vulkan`; `=gl` now exits with 1.
+   Kept: `default_fonts` (about 1 MB). egui's Hack / Ubuntu / Noto Emoji / emoji icon fonts are the glyph fallback behind Roboto and Consolas (symbols, emoji in file names).
+4. ✅ **Version resource and manifest** (`build.rs`, `assets/nvencFFX.manifest`). The earlier note "already in `build.rs`" was wrong: the exe had only the icon.
+   - Version info as the 1.8.4 Nuitka build (`nff-nuitka-build.txt`): ProductName / FileDescription "nvencFFX", CompanyName "Deepseek Enjoyer", LegalCopyright "Copyright (C) 2026 hadouken", OriginalFilename "nvencFFX.exe", InternalName "nvencFFX"; FileVersion / ProductVersion from `package.version`
+   - Manifest: `asInvoker`, Windows 10 / 11 `supportedOS`, PerMonitorV2 DPI awareness (what winit sets at runtime anyway, now from process start), `longPathAware`, Common Controls 6
+   - A resource compile error is now a visible cargo warning (it went to stderr, which cargo hides from build scripts)
+5. ✅ **Packaging** (`build-release.ps1`): `cargo build --release`, then `dist\nvencFFX-<version>\` with `nvencFFX.exe`, `presets\*.json`, `LICENSE.txt`, and `dist\nvencFFX-<version>.zip`. The exe gets its mixed-case name there; the crate stays `nvencffx` (a mixed-case bin name trips rustc's crate-name lint). `-Upx [-UpxPath <upx.exe>]` packs the exe.
+   Measured (RTX 3060, Windows 10):
+
+   | | exe | zip | window shown after |
+   |---|---|---|---|
+   | plain | 8.48 MB | 3.71 MB | ~40 ms |
+   | UPX `--best --lzma` | 2.88 MB | 2.74 MB | ~280 ms |
+
+   UPX stays opt-in: zip compression already gets most of its download saving, the packed exe unpacks itself into memory on every start, and UPX-packed files are a common antivirus false positive.
+   Working set after start: ~70 MB on Vulkan, ~115 MB with the default adapter choice, ~180 MB on DX12, mostly GPU driver DLLs; section 1's 25–45 MB target is not reached.
+6. ✅ **1.8.x settings / preset compatibility**:
+   - `config/testdata/nff_settings-1.8.4.json` was written by Python with the original's `json.dump(indent=4, ensure_ascii=False)` to a UTF-8 text file (non-ASCII paths, emoji, quotes, backslashes, tab, ESC, DEL). Loading and saving it gives the same bytes apart from the version stamp (`.gitattributes` keeps git from converting it).
+   - Every shipped `presets/*.json` (1.7.x / 1.8.x, subsets of the keys) applies every value it holds
+   - Manual: the repo's own 1.8.4 `nff_settings.json` through the packaged exe (start, close) comes back with only `"version"` changed; a file written by the exe reads with Python's `json.load` (46 keys)
+7. ✅ **Texts**: README: release download and folder layout, build from source with cargo, `build-release.ps1` (+ UPX), the Send to shortcut straight to `nvencFFX.exe`, Rust badge instead of Python. `nff-about.txt`: 2.0.0, credits egui / eframe, wgpu, rfd, serde, Roboto instead of CustomTkinter / Pillow / CTkToolTip; a test keeps its first line equal to the window title.
+
+Also: settings and preset files are written with CRLF line ends. 1.8.4 opened them in text mode, which writes CRLF on Windows; the port wrote LF since Phase 3. Python read both, but the files now match byte for byte.
+
+Deliberate differences from 1.8.4:
+- The release folder holds `nvencFFX.exe`, `presets` and `LICENSE.txt` only. 1.8.4's Nuitka folder had 68+ files (Python runtime, DLLs, `nff.ico` and the `nff-*.txt` texts, which are embedded since Phases 0 and 8).
+- Send to points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` (a console that ran `start`) is not needed.
+
+Open before publishing:
+- Third-party notices: `nff-license.txt` and the release folder have nvencFFX's and BtbN's licenses only. The exe embeds Roboto (Apache 2.0), egui's default fonts (Hack, Ubuntu Font Licence, Noto Emoji and emoji-icon-font under OFL) and MIT / Apache-2.0 crates, whose licenses ask for their notices in binary distributions (`cargo about` can generate the crate list).
+- FFmpeg binaries are added to the release folder by hand, as for 1.8.x; the script does not bundle them.
+- `CHANGELOG.md` has no 2.0.0 entry yet.
 
 ---
 
@@ -420,9 +449,9 @@ Deliberate differences from 1.8.4:
 | Phase 6 — Batch Converter | ✅ Done | `app/batch.rs`, `ui/dialogs.rs` (resize edges), `win32/mod.rs` (dialog parent) | ~750 |
 | Phase 7 — Screen Recording | ✅ Done | `recording/mod.rs`, `recording/capture.rs`, `recording/audio.rs`, `app/record.rs`, `win32/mod.rs` (local time, Desktop folder) | ~1,450 |
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
-| Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
+| Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
 
-**Current Rust codebase**: ~10,100 LOC across 34 files (91 tests).
+**Current Rust codebase**: ~10,200 LOC across 34 files (93 tests).
 
 ---
 
@@ -431,11 +460,12 @@ Deliberate differences from 1.8.4:
 1. **egui file dialogs**: egui has no built-in file dialog. The `rfd` crate is **required** for Browse/Save As/Output Folder buttons — this is a hard dependency, not optional.
 2. ~~**Audio options gap**~~: resolved; all 9 audio modes are in the UI and the command builder.
 3. ~~**Custom command mode**~~: resolved; editing / applying (Phase 2) and running the applied command (Phase 4) are done.
-4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
+4. **Settings backward compat**: covered since Phase 9: a Python-written settings file round-trips byte for byte (apart from `version`), every shipped preset applies, and a real 1.8.4 `nff_settings.json` went through the packaged exe unchanged. A future schema change must keep 1.8.x able to read the file (it ignores unknown keys, so adding keys is safe; renaming or retyping one is not).
 5. ~~**Process tree kill**~~: resolved in Phase 4 (`win32/process_tree.rs`). A recording is stopped with `q` (killed after 5 s) by its own worker; on exit it is saved before the process tree kill runs.
 6. **Screen recording, manual checks**: the session (restart limit, stop, join, mux, cleanup) is covered by tests with stand-in commands and with the real ffmpeg (`testsrc`) plus real WASAPI capture, and a full desktop recording (ddagrab + hevc_nvenc + AAC) was checked once through the app layer. Still to try by hand: a restart after a real display mode change (a fullscreen game switching resolution), audio while sound plays, and the minimize / balloons / hotkeys in the running app. A default playback device that changes mid-recording (headphones unplugged) ends the audio there; the WAV stays valid, so the output just has shorter audio.
 7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, the recording's events and its delayed minimize) belongs in `update_state`, which runs from `logic`.
 8. ~~**Tray / hotkey commands for recording**~~: resolved in Phase 7; Alt+F8 / Alt+F9 and the tray menu drive the recorder, and `Tray::balloon` shows its notifications.
 9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.
-11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` still credits CustomTkinter / Pillow / CTkToolTip and says 1.8.4; it is shared with the Python version, so it changes with the release (Phase 9).
+11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` was updated for 2.0.0 in Phase 9 (so this branch's copy no longer fits the Python version).
+12. **Release, open items**: third-party license notices (Roboto, egui's fonts, the crates) are not shipped yet; the GLES backend is gone, so a machine where neither DX12 (incl. WARP) nor Vulkan works can no longer start the app (not seen on Windows 10 / 11); UPX-packed builds may be flagged by antivirus scanners, which is why `-Upx` is opt-in.

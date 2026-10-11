@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version) ![License](https://img.shields.io/gitlab/license/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
+![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version) ![License](https://img.shields.io/gitlab/license/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-egui%20%2B%20wgpu-B7410E?logo=rust&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
@@ -12,7 +12,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ## Features 🎥
 
-* **Intuitive GUI:** Easy-to-use interface built with `customtkinter` for a smooth user experience.
+* **Intuitive GUI:** Easy-to-use interface built with `egui`, GPU-rendered (DirectX 12 / Vulkan) from a single executable.
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
 * **NVIDIA NVENC Support:** Utilizes NVIDIA's NVENC for high-performance, hardware-accelerated video encoding.
 * **Video Trimming:** Easily trim video segments by specifying start and end times (HH:MM:SS format).
@@ -47,65 +47,44 @@ FFmpeg Windows builds links: [Windows builds from gyan.dev](https://www.gyan.dev
 The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) page.
 
 1.  Go to the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) section of this GitLab repository.
-2.  Download the `nvencFFX.exe` file.
-3.  Run the executable.
+2.  Download the release archive and extract it to any folder.
+3.  Run `nvencFFX.exe`. It is a single executable with no installer; `nff_settings.json` is created next to it, and the `presets` folder beside it holds the presets. Put `ffmpeg.exe` and `ffprobe.exe` in the same folder (or on `PATH`) and they are found automatically.
+
+Settings and preset files are shared with nvencFFX 1.8.x, so an existing `nff_settings.json` and `presets` folder can be copied over.
 
 #### 2. Run from Source (For Developers) 🔧
 
-If you want to run the application from its Python source code:
+Requires [Rust](https://rustup.rs/) 1.95 or newer with the MSVC toolchain (Visual Studio Build Tools).
 
 1.  **Clone the repository:**
     ```
     git clone https://gitlab.com/hadoukez/nvencFFX.git
     cd nvencFFX
     ```
-2.  **Install dependencies:**
-    The project uses `customtkinter`, `pillow`, `CTkToolTip`, `pyaudiowpatch`.
-    ```bash
-    pip install customtkinter pillow CTkToolTip pyaudiowpatch
+2.  **Build and run:**
     ```
-3.  **Run the application:**
+    cargo run --release
     ```
-    python "nvencFFX.py"
+3.  **Run the tests:**
+    ```
+    cargo test
     ```
 
-### Building Executable (For Developers) 🔧
+### Building a Release (For Developers) 🔧
 
-You can compile the Python script into a standalone Windows executable (`.exe`) using **Nuitka**.
+```
+powershell -ExecutionPolicy Bypass -File build-release.ps1
+```
 
-1.  **Install Nuitka:**
-    ```
-    pip install nuitka
-    ```
-2.  **Build the executable:**
-    Navigate to the project's root directory in your terminal and run the following command. This command configures Nuitka to create a standalone, single-file executable with disabled console mode, include necessary packages, set application metadata, and specify an icon.
+This builds `target\release\nvencffx.exe` (size-optimised: LTO, `opt-level = "z"`, stripped, about 8.5 MB) and packs `dist\nvencFFX-<version>\` (`nvencFFX.exe`, `presets`, `LICENSE.txt`) plus `dist\nvencFFX-<version>.zip`. The icon, version information, fonts and help texts are embedded in the executable.
 
-    ```
-        python -m nuitka --msvc=latest --lto=yes ^
-        --standalone --windows-console-mode=disable ^
-        --include-package=customtkinter --enable-plugin=tk-inter ^
-        --windows-icon-from-ico="nff.ico" ^
-        --include-data-file=nff.ico=./ ^
-        --include-data-file=nff-help.txt=./nff-help.txt ^
-        --include-data-file=nff-about.txt=./nff-about.txt ^
-        --include-data-file=nff-license.txt=./nff-license.txt ^
-        --include-data-file=LICENSE.txt=./LICENSE.txt ^
-        --include-data-dir=presets=./presets ^
-        --product-name="nvencFFX" ^
-        --product-version="1.8.4" ^
-        --file-version="1.8.4" ^
-        --file-description="nvencFFX" ^
-        --company-name="Deepseek Enjoyer" ^
-        --copyright="Copyright (C) 2026 hadouken" ^
-        --output-dir=build "nvencFFX.py"
-    ```
-    The compiled executable will be found in the `build` directory specified by `--output-dir`.
+Add `-Upx` (and `-UpxPath <path to upx.exe>` if UPX is not on `PATH`) to compress the executable with [UPX](https://upx.github.io/) to about 2.9 MB. The packed executable starts about 0.25 s slower, and some antivirus scanners flag UPX-packed files.
 
 ---
 
 ## Usage 🎥
 
-1.  **Launch the application:** Run the `.exe` file or `nvencFFX.py`.
+1.  **Launch the application:** Run `nvencFFX.exe`.
 2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
 3.  **Specify Output File:** Click "Browse Output" to choose where to save your processed video and what to name it.
 4.  **Configure Options:**
@@ -125,8 +104,10 @@ You can compile the Python script into a standalone Windows executable (`.exe`) 
    ```
    %APPDATA%\Microsoft\Windows\SendTo
    ```
-2. Modify APP_PATH in "Send to nvencFFX.bat" script and create shortcut to it here.
-3. You can rename it and set custom icon.
+2. Create a shortcut to `nvencFFX.exe` in this folder (right-drag `nvencFFX.exe` into it and choose **Create shortcuts here**).
+3. You can rename the shortcut, e.g. to `nvencFFX`; it shows nvencFFX's icon.
+
+The file you right-click is opened as the Input File. The shortcut points straight at the executable: no batch file and no console window are needed (the `Send to nvencFFX.bat` script of 1.8.x is no longer required).
 
 ---
 

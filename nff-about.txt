@@ -1,4 +1,4 @@
-nvencFFX 1.8.4
+nvencFFX 2.0.0
 Video converter and trimming tool powered by NVIDIA NVENC hardware acceleration.
 
 Features:
@@ -23,9 +23,11 @@ System Requirements:
 
 Credits:
 • FFmpeg — Multimedia framework
-• CustomTkinter — Modern UI components
-• PIL (Pillow) — Image processing
-• CTkToolTip — Tooltip widget
+• egui / eframe — User interface
+• wgpu — GPU rendering (DirectX 12 / Vulkan)
+• rfd — Native file dialogs
+• serde / serde_json — Settings and presets
+• Roboto — Interface font
 
 Links:
 • GitLab Repository: https://gitlab.com/hadoukez/nvencffx

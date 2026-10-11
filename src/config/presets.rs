@@ -184,11 +184,36 @@ mod tests {
         let s = Settings { bitrate: "1234".into(), ..Default::default() };
         save(&dir, "test", &s).unwrap();
         let text = std::fs::read_to_string(path(&dir, "test")).unwrap();
-        assert!(text.starts_with("{\n    \"ffmpeg_path\""));
+        assert!(text.starts_with("{\r\n    \"ffmpeg_path\""));
         assert_eq!(list(&dir), ["test"]);
         assert_eq!(load(&dir, "test").unwrap()["bitrate"], "1234");
         delete(&dir, "test").unwrap();
         assert!(list(&dir).is_empty());
         let _ = std::fs::remove_dir(&dir);
+    }
+
+    /// The presets shipped in `presets/`, written by 1.7.x / 1.8.x with subsets of the
+    /// keys: every value they hold reaches the settings (paths only if they exist, the
+    /// version never, empty strings keep the current value).
+    #[test]
+    fn shipped_presets_apply_every_value() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("presets");
+        let names = list(&dir);
+        assert_eq!(names.len(), 20);
+        for name in names {
+            let preset = load(&dir, &name).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let mut s = Settings::default();
+            s.apply_json(&preset);
+            let applied = s.to_json();
+            for (key, value) in &preset {
+                let expected = match value {
+                    _ if matches!(key.as_str(), "version" | "ffmpeg_path" | "batch_output_folder") => continue,
+                    Value::String(v) if v.is_empty() => continue,
+                    Value::Number(n) => Value::String(n.to_string()),
+                    v => v.clone(),
+                };
+                assert_eq!(applied.get(key), Some(&expected), "{name}: {key}");
+            }
+        }
     }
 }

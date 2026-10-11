@@ -195,13 +195,16 @@ impl Settings {
     }
 
     /// Writes `nff_settings.json` / a preset file with 4-space indentation and raw
-    /// UTF-8, like `json.dump(indent=4, ensure_ascii=False)`.
+    /// UTF-8, like `json.dump(indent=4, ensure_ascii=False)`, and CRLF line ends like
+    /// the original's text-mode file on Windows, so both versions write the same bytes.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut out = Vec::new();
         let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
         let mut ser = serde_json::Serializer::with_formatter(&mut out, formatter);
         self.to_json().serialize(&mut ser)?;
-        std::fs::write(path, out)
+        // Line breaks only come from the formatter: JSON strings escape them
+        let text = String::from_utf8(out).expect("serde_json writes UTF-8");
+        std::fs::write(path, text.replace('\n', "\r\n"))
     }
 
     /// Merges a settings / preset object into `self` like `_apply_settings_dict`:
@@ -353,7 +356,7 @@ mod tests {
 
         s.save(&file).unwrap();
         let text = std::fs::read_to_string(&file).unwrap();
-        assert!(text.starts_with("{\n    \"ffmpeg_path\": \"\",\n"));
+        assert!(text.starts_with("{\r\n    \"ffmpeg_path\": \"\",\r\n"));
         let mut back = Settings::default();
         back.load(&file).unwrap();
         assert_eq!(back, s);
@@ -375,5 +378,30 @@ mod tests {
         let mut back = Settings::default();
         back.apply_json(&s.to_json());
         assert_eq!(back, s);
+    }
+
+    /// `testdata/nff_settings-1.8.4.json` was written like the original's `_save_settings`
+    /// (`json.dump(indent=4, ensure_ascii=False)` to a UTF-8 text file, Python 3 on
+    /// Windows): non-ASCII paths, quotes, backslashes, control characters. Loading and
+    /// saving it gives the same bytes apart from the version stamp, so 1.8.4 reads ours.
+    #[test]
+    fn rewrites_a_python_written_file_byte_for_byte() {
+        const PYTHON: &str = include_str!("testdata/nff_settings-1.8.4.json");
+        let file = std::env::temp_dir().join(format!("nvencffx-python-{}.json", std::process::id()));
+        std::fs::write(&file, PYTHON).unwrap();
+        let mut s = Settings::default();
+        s.load(&file).unwrap();
+        assert_eq!(s.last_input_dir, r"D:\Видео\клипы «новые» 日本");
+        assert_eq!(s.last_output_dir, r"E:\Out 🎬");
+        assert_eq!(s.additional_options, "-metadata title=\"a b\" -metadata comment=\"tab\there\u{1b}\u{7f}\"");
+        assert_eq!(s.additional_filter_options, r"drawtext=text='x\:y'");
+        assert!(s.trim_streamcopy);
+        assert_eq!(s.custom_preset_selected, "mine");
+
+        s.save(&file).unwrap();
+        let written = std::fs::read_to_string(&file).unwrap();
+        let _ = std::fs::remove_file(&file);
+        let version = format!(r#""version": "{}""#, env!("CARGO_PKG_VERSION"));
+        assert_eq!(written, PYTHON.replace(r#""version": "1.8.4""#, &version));
     }
 }

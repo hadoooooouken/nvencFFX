@@ -8,8 +8,11 @@ description = "GUI for FFmpeg with NVIDIA NVENC hardware acceleration"
 
 [dependencies]
 arboard = { version = "3.6", default-features = false }
-eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts"] }
+eframe = { version = "0.36", default-features = false, features = ["wgpu_no_default_features", "default_fonts"] }
 egui = "0.36"
+# Only the Windows backends: eframe's `wgpu` feature also compiles in GLES (ANGLE / EGL),
+# Metal and the web backends. DX12 includes the WARP software adapter as the last resort.
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "wgsl"] }
 raw-window-handle = "0.6"
 rfd = "0.17"
 serde = { version = "1.0.229", features = ["derive"] }

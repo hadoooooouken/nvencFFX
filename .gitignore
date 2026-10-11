@@ -4,3 +4,4 @@ __pycache__/
 *.pyi
 *_settings.json
 target/
+dist/
