@@ -195,17 +195,17 @@ Deliberate differences from 1.8.4:
 - Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
 - The command preview quotes arguments with spaces and its parser removes double quotes, so `-metadata title="a b"` style arguments round-trip (Python's non-POSIX `shlex` kept the quote characters).
 
-### Phase 3: Configuration Persistence & Presets
+### Phase 3: Configuration Persistence & Presets ✅ DONE
 
 1. ✅ `config::Settings` holds all 46 keys of `_get_current_settings` (same order); `apply_json` merges like `_apply_settings_dict` (missing / empty keys keep the current value)
 2. ✅ Missing keys in old files are handled by the merge
-3. Load `nff_settings.json` on startup; auto-save on every settings change with debounced writes (~500ms)
+3. ✅ `nff_settings.json` next to the exe is loaded at startup (after ffmpeg auto-detection, so a saved path that still exists wins; a BOM is skipped) and saved 1 s after the last change (the original's `after(1000)` debounce) and on exit; a saved custom preset whose file is gone resets to "none", and the preset indicator shows the restored selection
 4. ✅ (done in Phase 2) Preset loading from `presets/*.json`:
    - Scan preset directory at startup, populate preset list
    - Save/Load/Delete presets
    - Preset files use the same field schema as settings (minus paths)
-5. Persist `last_input_dir` and `last_output_dir` for file dialog defaults
-6. Handle `version` field for future format migrations
+5. ✅ `last_input_dir` / `last_output_dir` persist with the rest and seed Browse / Save As / auto-naming (a folder that no longer exists falls back to the working directory / the input's folder)
+6. ✅ `version`: the stored value is ignored on load and every save writes this build's version, as the original does; the schema is unchanged since 1.x, so a future migration step goes into `Settings::load`
 
 ### Phase 4: FFmpeg Core Engine & Process Runner
 
@@ -334,7 +334,7 @@ Deliberate differences from 1.8.4:
 | Phase 0 — Setup | ✅ Done | `Cargo.toml`, `build.rs`, `main.rs` | ~50 |
 | Phase 1 — Theme & Widgets | 🟢 ~98% (context menu left) | `ui/theme.rs`, `ui/widgets.rs`, `ui/dialogs.rs` | ~950 |
 | Phase 2 — Main UI Layout | ✅ Done (Streams / help windows moved to Phase 8) | `app.rs`, `core/filters.rs`, `core/timecode.rs` | ~1,700 |
-| Phase 3 — Settings & Presets | 🟡 Model + presets done; `nff_settings.json` load/auto-save left | `config/settings.rs`, `config/presets.rs` | ~470 |
+| Phase 3 — Settings & Presets | ✅ Done | `config/settings.rs`, `config/presets.rs` | ~575 |
 | Phase 4 — FFmpeg Core | 🟡 Builder, duration probe, estimate done; runner left | `core/command.rs`, `core/probe.rs`, `core/estimate.rs` | ~600 |
 | Phase 5 — Win32 Integration | ⬜ Not started | — | — |
 | Phase 6 — Batch Converter | ⬜ Not started | — | — |
@@ -342,7 +342,7 @@ Deliberate differences from 1.8.4:
 | Phase 8 — Polish & Help | ⬜ Not started | — | — |
 | Phase 9 — Release | 🟡 Config done | `Cargo.toml`, `build.rs` | — |
 
-**Current Rust codebase**: ~4,000 LOC across 17 files (29 tests).
+**Current Rust codebase**: ~4,200 LOC across 16 files (32 tests).
 
 ---
 

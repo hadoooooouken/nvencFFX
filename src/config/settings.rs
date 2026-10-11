@@ -1,8 +1,17 @@
 //! The persisted settings model: the same keys, value types and key order as
 //! `_get_current_settings` in `nvencFFX.py`, so preset files stay interchangeable.
 
+use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Map, Value};
+
+/// `nff_settings.json` next to the executable, where the original keeps it.
+pub fn settings_file() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("nff_settings.json")))
+        .unwrap_or_else(|| PathBuf::from("nff_settings.json"))
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,6 +100,9 @@ pub struct Settings {
     pub batch_change_container: bool,
     pub batch_output_container: String,
 
+    /// Always this build's version: `apply_json` ignores the stored one, so saving
+    /// stamps the writer's version like the original. The schema is unchanged since
+    /// 1.x; a migration step would go into `load`, keyed on the file's version.
     pub version: String,
 }
 
@@ -166,6 +178,30 @@ impl Settings {
             map.insert("custom_preset_selected".to_owned(), Value::String(String::new()));
         }
         map
+    }
+
+    /// `_load_settings`: merges the file into `self`. A missing file is not an error.
+    pub fn load(&mut self, path: &Path) -> Result<(), String> {
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.to_string()),
+        };
+        // Editors such as Notepad may have saved it with a BOM
+        let text = text.trim_start_matches('\u{feff}');
+        let map: Map<String, Value> = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        self.apply_json(&map);
+        Ok(())
+    }
+
+    /// Writes `nff_settings.json` / a preset file with 4-space indentation and raw
+    /// UTF-8, like `json.dump(indent=4, ensure_ascii=False)`.
+    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        let mut out = Vec::new();
+        let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
+        let mut ser = serde_json::Serializer::with_formatter(&mut out, formatter);
+        self.to_json().serialize(&mut ser)?;
+        std::fs::write(path, out)
     }
 
     /// Merges a settings / preset object into `self` like `_apply_settings_dict`:
@@ -290,6 +326,45 @@ mod tests {
         assert!(!s.encoder_spatial_aq);
         assert_eq!(s.additional_options, "-ac 2");
         assert_eq!(s.additional_filter_options, "", "missing filter field is cleared");
+    }
+
+    #[test]
+    fn settings_file_round_trip() {
+        let file = std::env::temp_dir().join(format!("nvencffx-settings-{}.json", std::process::id()));
+        let mut fresh = Settings::default();
+        fresh.load(&file).expect("a missing file keeps the defaults");
+        assert_eq!(fresh, Settings::default());
+
+        // A 1.8.4 file: older version, keys in any order, some missing
+        std::fs::write(
+            &file,
+            r#"{"version": "1.8.4", "codec": "h264", "last_input_dir": "D:\\clips",
+                "trim_streamcopy": true, "custom_abitrate": "192"}"#,
+        )
+        .unwrap();
+        let mut s = Settings::default();
+        s.load(&file).unwrap();
+        assert_eq!(s.codec, VideoCodec::H264);
+        assert_eq!(s.last_input_dir, r"D:\clips");
+        assert!(s.trim_streamcopy);
+        assert_eq!(s.custom_abitrate, "192");
+        assert_eq!(s.bitrate, "6000", "missing key keeps the default");
+        assert_eq!(s.version, env!("CARGO_PKG_VERSION"), "saving stamps this build's version");
+
+        s.save(&file).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.starts_with("{\n    \"ffmpeg_path\": \"\",\n"));
+        let mut back = Settings::default();
+        back.load(&file).unwrap();
+        assert_eq!(back, s);
+
+        std::fs::write(&file, "\u{feff}{\"bitrate\": \"7000\"}").unwrap();
+        s.load(&file).unwrap();
+        assert_eq!(s.bitrate, "7000", "a BOM is skipped");
+
+        std::fs::write(&file, "not json").unwrap();
+        assert!(Settings::default().load(&file).is_err());
+        let _ = std::fs::remove_file(&file);
     }
 
     #[test]

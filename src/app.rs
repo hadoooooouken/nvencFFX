@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 use eframe::egui::{
     self, Align, Align2, FontId, Layout, Margin, Rect, ScrollArea, TextEdit, Ui, Vec2,
     ViewportBuilder, ViewportCommand, ViewportId, vec2,
 };
 use crate::config::{
     presets,
-    settings::{Settings, VideoCodec},
+    settings::{self, Settings, VideoCodec},
 };
 use crate::core::{
     command, estimate,
@@ -98,6 +99,10 @@ fn command_viewport() -> ViewportId {
     ViewportId::from_hash_of("command_preview")
 }
 
+/// `nff_settings.json` is written once the settings stay unchanged this long
+/// (`_on_setting_changed`), and again on exit.
+const SAVE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// What to do with a dialog's answer.
 enum Action {
     None,
@@ -117,6 +122,11 @@ struct CommandWindow {
 pub struct NvencFfxApp {
     /// Everything a preset / `nff_settings.json` holds.
     pub s: Settings,
+    /// Where `s` is auto-saved; `None` (tests) never writes.
+    settings_file: Option<PathBuf>,
+    /// `s` as of the last change seen, and when it is due to be saved.
+    observed_settings: Settings,
+    save_due: Option<Instant>,
     pub input_file: String,
     pub output_file: String,
 
@@ -158,6 +168,9 @@ impl Default for NvencFfxApp {
     fn default() -> Self {
         Self {
             s: Settings::default(),
+            settings_file: None,
+            observed_settings: Settings::default(),
+            save_due: None,
             input_file: String::new(),
             output_file: String::new(),
 
@@ -296,7 +309,16 @@ impl NvencFfxApp {
         if let Some(ffmpeg) = probe::find_executable("ffmpeg.exe") {
             app.s.ffmpeg_path = ffmpeg.to_string_lossy().into_owned();
         }
+        // A saved FFmpeg path wins over the detected one if it still exists
+        let file = settings::settings_file();
+        if let Err(e) = app.s.load(&file) {
+            eprintln!("Error loading settings: {e}");
+        }
+        app.settings_file = Some(file);
         app.ffprobe = probe::ffprobe_for(&app.s.ffmpeg_path);
+        app.fix_codec_dependent();
+        app.restore_preset_selection();
+        app.observed_settings = app.s.clone();
         // "Send to nvencFFX" passes the file as the first argument
         if let Some(arg) = std::env::args_os().nth(1) {
             app.select_input(PathBuf::from(arg), true);
@@ -378,11 +400,10 @@ impl NvencFfxApp {
     }
 
     fn browse_input(&mut self, parent: &eframe::Frame) {
-        let dir = if self.s.last_input_dir.is_empty() {
-            std::env::current_dir().unwrap_or_default()
-        } else {
-            PathBuf::from(&self.s.last_input_dir)
-        };
+        // The saved folder may be gone since the last session
+        let dir = Some(PathBuf::from(&self.s.last_input_dir))
+            .filter(|d| !d.as_os_str().is_empty() && d.is_dir())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let file = rfd::FileDialog::new()
             .set_title("Select Video File")
             .set_directory(dir)
@@ -571,6 +592,26 @@ impl NvencFfxApp {
             "Default settings applied".to_owned()
         } else {
             format!("{} preset applied", presets::builtin_name(value))
+        };
+        self.set_preset_indicator(text);
+    }
+
+    /// After loading `nff_settings.json`: drops a custom preset whose file is gone and
+    /// shows the selection like `_update_preset_indicator`.
+    fn restore_preset_selection(&mut self) {
+        let name = self.s.custom_preset_selected.clone();
+        if self.s.selected_preset == "custom"
+            && !name.is_empty()
+            && !presets::path(&self.presets_dir, &name).exists()
+        {
+            self.s.selected_preset = "none".to_owned();
+            self.s.custom_preset_selected.clear();
+        }
+        let text = match self.s.selected_preset.as_str() {
+            "" | "none" => return,
+            "custom" if name.is_empty() => "Custom preset (unnamed)".to_owned(),
+            "custom" => format!("Loaded preset: {name}"),
+            value => format!("{} preset applied", presets::builtin_name(value)),
         };
         self.set_preset_indicator(text);
     }
@@ -1419,10 +1460,42 @@ impl NvencFfxApp {
         if self.s.encoder_hwaccel != "cuda" {
             self.s.cuda_output_format = false;
         }
+        self.autosave(ctx);
+    }
+
+    /// Restarts the save delay on every settings change and saves once it runs out.
+    fn autosave(&mut self, ctx: &egui::Context) {
+        if self.settings_file.is_none() {
+            return;
+        }
+        let now = Instant::now();
+        if self.s != self.observed_settings {
+            self.observed_settings = self.s.clone();
+            self.save_due = Some(now + SAVE_DELAY);
+        }
+        match self.save_due {
+            Some(due) if now >= due => self.save_settings(),
+            Some(due) => ctx.request_repaint_after(due - now),
+            None => {}
+        }
+    }
+
+    /// `_save_settings`
+    fn save_settings(&mut self) {
+        self.save_due = None;
+        if let Some(file) = &self.settings_file
+            && let Err(e) = self.s.save(file)
+        {
+            eprintln!("Error saving settings: {e}");
+        }
     }
 }
 
 impl eframe::App for NvencFfxApp {
+    fn on_exit(&mut self) {
+        self.save_settings();
+    }
+
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.handle_drag_and_drop(&ctx);
@@ -1622,5 +1695,44 @@ mod tests {
         assert!(out.ends_with("clip_av1_custom.mkv"));
         assert_eq!(renamed_output(r"C:\v\mine.mkv", r"C:\v\clip.mkv", VideoCodec::Av1), None);
         assert_eq!(renamed_output(r"C:\v\a_hevc_custom.mp4", "", VideoCodec::Av1), None);
+    }
+
+    #[test]
+    fn settings_are_saved_after_the_delay() {
+        let file = std::env::temp_dir().join(format!("nvencffx-autosave-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&file);
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp { settings_file: Some(file.clone()), ..Default::default() };
+
+        app.s.bitrate = "9000".into();
+        app.autosave(&ctx);
+        assert!(app.save_due.is_some() && !file.exists(), "a change waits for the delay");
+        app.s.bitrate = "9500".into();
+        app.save_due = Some(Instant::now());
+        app.autosave(&ctx);
+        assert!(app.save_due.is_some_and(|due| due > Instant::now()), "a new change restarts it");
+
+        app.save_due = Some(Instant::now());
+        app.autosave(&ctx);
+        assert!(app.save_due.is_none());
+        let mut saved = Settings::default();
+        saved.load(&file).unwrap();
+        assert_eq!(saved.bitrate, "9500");
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn startup_drops_a_missing_custom_preset() {
+        let mut app = NvencFfxApp { presets_dir: std::env::temp_dir().join("nvencffx-no-presets"), ..Default::default() };
+        app.s.selected_preset = "custom".into();
+        app.s.custom_preset_selected = "gone".into();
+        app.restore_preset_selection();
+        assert_eq!(app.s.selected_preset, "none");
+        assert!(app.s.custom_preset_selected.is_empty());
+        assert_eq!(app.preset_indicator, "No preset selected");
+
+        app.s.selected_preset = "hdq".into();
+        app.restore_preset_selection();
+        assert_eq!(app.preset_indicator, "HD Quality preset applied");
     }
 }

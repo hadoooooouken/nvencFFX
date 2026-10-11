@@ -47,14 +47,8 @@ pub fn load(dir: &Path, name: &str) -> Result<Map<String, Value>, String> {
     serde_json::from_str(&text).map_err(|e| format!("Failed to load preset: {e}"))
 }
 
-/// Writes `settings` with 4-space indentation and raw UTF-8, like `json.dump(indent=4)`.
 pub fn save(dir: &Path, name: &str, settings: &Settings) -> Result<(), String> {
-    let mut out = Vec::new();
-    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
-    let mut ser = serde_json::Serializer::with_formatter(&mut out, formatter);
-    serde::Serialize::serialize(&settings.to_json(), &mut ser)
-        .map_err(|e| format!("Failed to save preset: {e}"))?;
-    std::fs::write(path(dir, name), out).map_err(|e| format!("Failed to save preset: {e}"))
+    settings.save(&path(dir, name)).map_err(|e| format!("Failed to save preset: {e}"))
 }
 
 pub fn delete(dir: &Path, name: &str) -> Result<(), String> {
