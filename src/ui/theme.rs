@@ -1,4 +1,5 @@
-use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, Rounding, Stroke, TextStyle};
+use std::sync::Arc;
+use eframe::egui::{self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Stroke, TextStyle};
 
 /// nvencFFX palette: the app's own colors from `nvencFFX.py` plus the CustomTkinter
 /// dark-theme defaults the original inherits (labels, borders, scrollbar).
@@ -37,7 +38,7 @@ pub mod colors {
 
 /// Sizes of the CustomTkinter widgets the original layout is built from.
 pub mod dimensions {
-    pub const CORNER_RADIUS: f32 = 6.0;
+    pub const CORNER_RADIUS: u8 = 6;
     pub const WIDGET_HEIGHT: f32 = 28.0; // CTkButton / CTkEntry / CTkOptionMenu
     pub const BUTTON_WIDTH: f32 = 140.0; // CTkButton / CTkOptionMenu default width
     pub const BIG_BUTTON_HEIGHT: f32 = 40.0; // bottom bar
@@ -52,34 +53,19 @@ pub mod dimensions {
     pub const FONT_SIZE: f32 = 13.0; // CTkFont default on Windows
 }
 
-/// Font family for the medium (semi-bold) Roboto face.
-pub fn medium_family() -> FontFamily {
-    FontFamily::Name("medium".into())
-}
-
 /// Installs Roboto (the font CustomTkinter ships and uses on Windows) as the
 /// primary proportional font. egui's bundled fonts stay as glyph fallbacks.
 fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     fonts.font_data.insert(
         "roboto".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/Roboto-Regular.ttf")),
+        Arc::new(FontData::from_static(include_bytes!("../../assets/fonts/Roboto-Regular.ttf"))),
     );
-    fonts.font_data.insert(
-        "roboto-medium".to_owned(),
-        FontData::from_static(include_bytes!("../../assets/fonts/Roboto-Medium.ttf")),
-    );
-
-    let fallbacks = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     fonts
         .families
         .entry(FontFamily::Proportional)
         .or_default()
         .insert(0, "roboto".to_owned());
-
-    let mut medium = vec!["roboto-medium".to_owned()];
-    medium.extend(fallbacks);
-    fonts.families.insert(medium_family(), medium);
 
     ctx.set_fonts(fonts);
 }
@@ -91,8 +77,15 @@ fn visuals() -> egui::Visuals {
     visuals.panel_fill = colors::PRIMARY_BG;
     visuals.window_fill = colors::SECONDARY_BG;
     visuals.window_stroke = Stroke::new(1.0_f32, colors::ENTRY_BORDER);
-    visuals.window_rounding = Rounding::same(dimensions::CORNER_RADIUS);
-    visuals.menu_rounding = Rounding::same(dimensions::CORNER_RADIUS);
+    visuals.window_corner_radius = CornerRadius::same(dimensions::CORNER_RADIUS);
+    visuals.menu_corner_radius = CornerRadius::same(dimensions::CORNER_RADIUS);
+    // Hinting snaps stems to the pixel grid; subpixel binning trades that crispness for
+    // smoother kerning (egui documents it as "more blurry"), so keep it off for 13px UI text.
+    visuals.text_options.font_hinting = true;
+    visuals.text_options.subpixel_binning = false;
+    // The dark-mode default (2c - c^2) thickens glyphs; Tk/GDI text is thinner, and the
+    // black labels on the green/grey buttons turned bold with it. Use raw coverage.
+    visuals.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Off;
     // Also the scrollbar track: keep it invisible like CTkScrollableFrame's
     visuals.extreme_bg_color = colors::PRIMARY_BG;
     visuals.faint_bg_color = colors::SECONDARY_BG;
@@ -104,7 +97,7 @@ fn visuals() -> egui::Visuals {
 
     // egui's built-in widgets are only used for the scrollbar handle; the CTk look
     // of every other control is drawn by `widgets.rs`.
-    let pill = Rounding::same(4.0);
+    let pill = CornerRadius::same(4);
     for (w, fill) in [
         (&mut visuals.widgets.inactive, colors::SCROLLBAR),
         (&mut visuals.widgets.hovered, colors::SCROLLBAR_HOVER),
@@ -114,7 +107,7 @@ fn visuals() -> egui::Visuals {
         w.weak_bg_fill = fill;
         w.bg_stroke = Stroke::NONE;
         w.fg_stroke = Stroke::new(1.0_f32, colors::LABEL_TEXT);
-        w.rounding = pill;
+        w.corner_radius = pill;
         w.expansion = 0.0;
     }
     visuals.widgets.noninteractive.bg_fill = colors::SECONDARY_BG;
@@ -148,7 +141,7 @@ pub fn apply_theme(ctx: &egui::Context) {
 
             style.spacing.item_spacing = egui::vec2(8.0, 6.0);
             style.spacing.button_padding = egui::vec2(10.0, 4.0);
-            style.spacing.menu_margin = egui::Margin::same(3.0);
+            style.spacing.menu_margin = egui::Margin::same(3);
             style.spacing.interact_size.y = dimensions::WIDGET_HEIGHT;
 
             // CTkScrollableFrame: 8px grey pill, 4px from the window edge, always shown

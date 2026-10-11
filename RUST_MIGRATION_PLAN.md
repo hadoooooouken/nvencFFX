@@ -24,7 +24,7 @@ This document outlines the step-by-step roadmap for migrating **nvencFFX** from 
 ```text
 nvencffx/
 ├── Cargo.toml
-├── build.rs                  # Embed nff.ico and Windows manifest via winres
+├── build.rs                  # Embed nff.ico and Windows manifest via winresource
 ├── src/
 │   ├── main.rs               # Entry point, winit/eframe setup, windows_subsystem attribute
 │   ├── app.rs                # Main App state (eframe::App implementation)
@@ -73,24 +73,24 @@ nvencffx/
 ```toml
 [dependencies]
 # GUI framework
-eframe = { version = "0.29", default-features = false, features = ["wgpu", "default_fonts"] }
-egui = "0.29"
+eframe = { version = "0.36", default-features = false, features = ["wgpu", "default_fonts"] }
+egui = "0.36"
 
 # Serialization (settings, presets)
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 # File dialogs (Browse, Save As, Output Folder)
-rfd = "0.15"
+rfd = "0.17"
 
 # Launch external files (Play Input/Output, Open output folder)
-open = "5"
+open = "5.4"
 
 # Clipboard (Copy Command, Copy Log)
-arboard = "3"
+arboard = "3.6"
 
 # Win32 API (ITaskbarList3, NtSuspendProcess, RegisterHotKey, CreateToolhelp32Snapshot)
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_System_Com",
     "Win32_UI_Shell",
     "Win32_System_Threading",
@@ -99,16 +99,16 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 # System tray icon with notifications
-tray-icon = "0.19"
+tray-icon = "0.26"
 
 # Global hotkeys (Alt+F8, Alt+F9)
-global-hotkey = "0.6"
+global-hotkey = "0.8"
 
 # Audio loopback capture (WASAPI)
-cpal = "0.15"
+cpal = "0.18"
 
 [build-dependencies]
-winres = "0.1"
+winresource = "0.1.31"  # maintained fork of the abandoned `winres`
 
 [profile.release]
 opt-level = "z"       # Optimize for size
@@ -150,15 +150,15 @@ All fields from the current Python settings must be mapped 1:1 to a Rust `AppSet
 
 - [x] Rust toolchain installed (rustc 1.99.0, cargo 1.99.0)
 - [x] Cargo project initialized (`Cargo.toml`, `build.rs`)
-- [x] Core dependencies added: `eframe 0.29`, `egui 0.29`, `serde`, `serde_json`, `winres`
+- [x] Core dependencies added: `eframe 0.36`, `egui 0.36`, `serde`, `serde_json`, `winresource` (upgraded from 0.29 / `winres` on 2026-10-11)
 - [x] Minimal window running with `wgpu` backend
-- [x] Window icon embedded via `winres` (`nff.ico`)
+- [x] Window icon embedded via `winresource` (`nff.ico`)
 - [x] Release profile configured (opt-level z, LTO, strip)
 
 ### Phase 1: Design System & UI Theme ✅ DONE (visual parity with 1.8.4)
 
 Completed:
-- [x] Roboto Regular/Medium embedded (`assets/fonts/`, Apache 2.0, the same font CustomTkinter ships), 13px body like `CTkFont`
+- [x] Roboto Regular embedded (only face used; Convert and the drop overlay use it at 14/20px) (`assets/fonts/`, Apache 2.0, the same font CustomTkinter ships), 13px body like `CTkFont`
 - [x] Palette = `nvencFFX.py` colors + CTk dark-theme defaults (`#DCE4EE` labels, `#565B5E` entry border, `#949A9F` checkbox/radio border, `gray41` scrollbar)
 - [x] Both egui theme slots styled, so the OS light/dark setting cannot swap the look
 - [x] Window 820×700, fixed width and resizable height, as in the original
@@ -306,7 +306,7 @@ All controls of the 1.8.4 main window are now on screen with their original opti
 
 1. Release profile already configured in `Cargo.toml` (opt-level z, LTO, strip, panic=abort)
 2. `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — already in `main.rs`
-3. Embed version metadata, copyright, and `nff.ico` via `winres` — already in `build.rs`
+3. Embed version metadata, copyright, and `nff.ico` via `winresource` — already in `build.rs`
 4. Post-build: optional UPX compression for ~4–6 MB final binary
 5. Output: **Single executable (~12–15 MB)** with native DX12/Vulkan hardware acceleration
 6. Test: verify nff_settings.json and presets/*.json backward compatibility with Python version files
@@ -340,4 +340,4 @@ All controls of the 1.8.4 main window are now on screen with their original opti
 4. **Settings backward compat**: The Rust version must read and write `nff_settings.json` that the Python version can also read. Test with real user settings files.
 5. **Process tree kill**: Simply calling `process.kill()` on Windows may leave orphan ffmpeg.exe processes. Must implement toolhelp32 snapshot-based child process enumeration (same as Python's `PROCESSENTRY32W` approach).
 6. **Screen recording complexity**: The segmented recording system with WASAPI audio muxing is the most complex feature (~650 LOC in Python). Consider deferring to a later release if needed.
-7. **eframe 0.29 + edition 2024**: Rust edition 2024 (stabilized in rustc 1.85). Ensure CI/CD targets rustc ≥ 1.85.
+7. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.

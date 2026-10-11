@@ -3,11 +3,12 @@
 
 use std::path::PathBuf;
 use eframe::egui::{
-    self, Align, Align2, Color32, FontId, Galley, Layout, PopupCloseBehavior, Pos2, Rect,
-    Response, RichText, Rounding, Sense, Shape, Stroke, TextEdit, Ui, UiBuilder, Vec2, pos2, vec2,
+    self, Align, Align2, Color32, CornerRadius, FontId, Galley, Layout, Popup, PopupCloseBehavior,
+    Pos2, Rect, Response, RichText, Sense, Shape, Stroke, StrokeKind, TextEdit, Ui, UiBuilder, Vec2,
+    pos2, vec2,
 };
 use std::sync::Arc;
-use super::theme::{colors, dimensions, medium_family};
+use super::theme::{colors, dimensions};
 
 // ---------------------------------------------------------------------------
 // Layout helpers
@@ -44,7 +45,7 @@ pub fn place<R>(ui: &mut Ui, rect: Rect, add: impl FnOnce(&mut Ui) -> R) -> R {
 pub fn section_frame(ui: &mut Ui, x: f32, width: f32, height: f32) -> Rect {
     let frame = cell(row(ui, height), x, width);
     ui.painter()
-        .rect_filled(frame, Rounding::same(dimensions::CORNER_RADIUS), colors::SECONDARY_BG);
+        .rect_filled(frame, CornerRadius::same(dimensions::CORNER_RADIUS), colors::SECONDARY_BG);
     frame
 }
 
@@ -102,7 +103,7 @@ fn paint_button(ui: &mut Ui, size: Vec2, kind: ButtonKind) -> (Rect, Response) {
     if ui.is_rect_visible(rect) {
         ui.painter().rect_filled(
             rect,
-            Rounding::same(dimensions::CORNER_RADIUS),
+            CornerRadius::same(dimensions::CORNER_RADIUS),
             kind.fill(response.hovered()),
         );
     }
@@ -119,17 +120,8 @@ pub fn button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response
 /// CTkButton with `font=("", 14, "bold")` (the Convert button).
 pub fn bold_button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response {
     let (rect, response) = paint_button(ui, size, kind);
-    let font = FontId::new(14.0, medium_family());
-    // Tk synthesizes bold for Roboto by smearing the glyphs; do the same.
-    for dx in [0.0, 0.6] {
-        ui.painter().text(
-            rect.center() + vec2(dx, 0.0),
-            Align2::CENTER_CENTER,
-            text,
-            font.clone(),
-            colors::TEXT_COLOR_B,
-        );
-    }
+    let font = FontId::proportional(14.0);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, font, colors::TEXT_COLOR_B);
     response
 }
 
@@ -179,16 +171,17 @@ pub fn entry(
     let border = dimensions::ENTRY_BORDER;
     let fill = if style.disabled { colors::ACCENT_GREY } else { colors::SECONDARY_BG };
     ui.painter().rect(
-        rect.shrink(border / 2.0),
-        Rounding::same(dimensions::CORNER_RADIUS - border / 2.0),
+        rect,
+        CornerRadius::same(dimensions::CORNER_RADIUS),
         fill,
         Stroke::new(border, colors::ENTRY_BORDER),
+        StrokeKind::Inside,
     );
 
     let text_rect = rect.shrink2(vec2(8.0, border + 1.0));
     let mut edit = TextEdit::singleline(value)
         .id_salt(id_salt)
-        .frame(false)
+        .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(body_font())
         .vertical_align(Align::Center)
@@ -241,17 +234,17 @@ pub fn checkbox(ui: &mut Ui, value: &mut bool, text: &str) -> Response {
     }
 
     let painter = ui.painter();
-    let rounding = Rounding::same(dimensions::CORNER_RADIUS);
+    let rounding = CornerRadius::same(dimensions::CORNER_RADIUS);
     if response.hovered() {
         painter.rect_filled(box_rect, rounding, colors::HOVER_GREEN);
     } else if *value {
         painter.rect_filled(box_rect, rounding, colors::ACCENT_GREEN);
     } else {
-        let b = dimensions::CHECKBOX_BORDER;
         painter.rect_stroke(
-            box_rect.shrink(b / 2.0),
-            Rounding::same(dimensions::CORNER_RADIUS - b / 2.0),
-            Stroke::new(b, colors::CONTROL_BORDER),
+            box_rect,
+            rounding,
+            Stroke::new(dimensions::CHECKBOX_BORDER, colors::CONTROL_BORDER),
+            StrokeKind::Inside,
         );
     }
     if *value {
@@ -306,7 +299,6 @@ pub fn option_menu(
     let size = vec2(width, dimensions::WIDGET_HEIGHT);
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, mut response) = ui.allocate_exact_size(size, sense);
-    let popup_id = ui.make_persistent_id(("option_menu", id_salt));
 
     let r = dimensions::CORNER_RADIUS;
     let hovered = enabled && response.hovered();
@@ -318,11 +310,11 @@ pub fn option_menu(
     };
 
     let painter = ui.painter();
-    painter.rect_filled(rect, Rounding::same(r), field);
+    painter.rect_filled(rect, CornerRadius::same(r), field);
     let arrow_rect = Rect::from_min_max(pos2(rect.max.x - rect.height(), rect.min.y), rect.max);
     painter.rect_filled(
         arrow_rect,
-        Rounding { nw: 0.0, sw: 0.0, ne: r, se: r },
+        CornerRadius { nw: 0, sw: 0, ne: r, se: r },
         arrow_bg,
     );
     let c = arrow_rect.center();
@@ -338,12 +330,12 @@ pub fn option_menu(
         text_color,
     );
 
-    if response.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup_id));
-    }
-
     let mut picked = None;
-    egui::popup_below_widget(ui, popup_id, &response, PopupCloseBehavior::CloseOnClick, |ui| {
+    Popup::menu(&response)
+        .id(ui.make_persistent_id(("option_menu", id_salt)))
+        .width(width)
+        .close_behavior(PopupCloseBehavior::CloseOnClick)
+        .show(|ui| {
         ui.spacing_mut().item_spacing = Vec2::ZERO;
         egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
             for &v in values {
@@ -351,7 +343,7 @@ pub fn option_menu(
                     ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::click());
                 if item_resp.hovered() {
                     ui.painter()
-                        .rect_filled(item, Rounding::same(4.0), colors::ACCENT_GREEN);
+                        .rect_filled(item, CornerRadius::same(4), colors::ACCENT_GREEN);
                 }
                 ui.painter().text(
                     pos2(item.min.x + 8.0, item.center().y),
@@ -365,14 +357,13 @@ pub fn option_menu(
                 }
             }
         });
-    });
+        });
 
-    if let Some(v) = picked {
-        if value != v {
-            *value = v.to_owned();
-            response.mark_changed();
-        }
-        ui.memory_mut(|m| m.close_popup());
+    if let Some(v) = picked
+        && value != v
+    {
+        *value = v.to_owned();
+        response.mark_changed();
     }
     response
 }
@@ -400,7 +391,7 @@ pub fn text_checkbox(ui: &mut Ui, is_expanded: &mut bool, title: &str) -> Respon
     );
     let fill = if response_hovered { colors::HOVER_GREEN } else { colors::ACCENT_GREEN };
     let painter = ui.painter();
-    painter.rect_filled(badge_rect, Rounding::same(dimensions::CORNER_RADIUS), fill);
+    painter.rect_filled(badge_rect, CornerRadius::same(dimensions::CORNER_RADIUS), fill);
 
     let c = badge_rect.center();
     let (hw, hh) = (3.5, 3.0);
@@ -463,7 +454,7 @@ pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> R
     if sx < ex {
         painter.rect_filled(
             Rect::from_min_max(pos2(sx, y - 3.0), pos2(ex, y + 3.0)),
-            Rounding::ZERO,
+            CornerRadius::ZERO,
             colors::ACCENT_GREEN,
         );
     }
@@ -480,7 +471,12 @@ pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> R
 /// Checks native egui drag-and-drop events and extracts dropped file paths
 pub fn handle_dropped_files(ctx: &egui::Context) -> Option<Vec<PathBuf>> {
     let paths: Vec<PathBuf> = ctx.input(|i| {
-        i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect()
+        i.raw
+            .dropped_files
+            .iter()
+            .map(|f| f.path().to_path_buf())
+            .filter(|p| !p.as_os_str().is_empty())
+            .collect()
     });
     (!paths.is_empty()).then_some(paths)
 }
@@ -496,26 +492,27 @@ pub fn file_drag_drop_overlay(ctx: &egui::Context) {
         return;
     }
 
-    let screen_rect = ctx.screen_rect();
+    let screen_rect = ctx.content_rect();
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("drag_drop_overlay"),
     ));
     painter.rect_filled(
         screen_rect,
-        Rounding::ZERO,
+        CornerRadius::ZERO,
         Color32::from_rgba_unmultiplied(14, 17, 19, 210),
     );
     painter.rect_stroke(
         screen_rect.shrink(20.0),
-        Rounding::same(8.0),
+        CornerRadius::same(8),
         Stroke::new(2.5_f32, colors::ACCENT_GREEN),
+        StrokeKind::Middle,
     );
     painter.text(
         screen_rect.center() - vec2(0.0, 12.0),
         Align2::CENTER_CENTER,
         "Drop video file to load into nvencFFX",
-        FontId::new(20.0, medium_family()),
+        FontId::proportional(20.0),
         colors::ACCENT_GREEN,
     );
     painter.text(
@@ -541,13 +538,13 @@ mod tests {
     #[test]
     fn test_text_checkbox_toggle() {
         let ctx = egui::Context::default();
-        let _ = ctx.run(Default::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                let mut expanded = false;
-                let _resp = text_checkbox(ui, &mut expanded, "Test Section");
-                assert!(!expanded);
-            });
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            let mut expanded = false;
+            let _resp = text_checkbox(ui, &mut expanded, "Test Section");
+            assert!(!expanded);
         });
+        // No renderer here to upload the font atlas to
+        output.textures_delta.clear();
     }
 
     #[test]

@@ -22,11 +22,11 @@ mod grid {
     /// Center of grid columns 0..=2, where the status line is centered.
     pub const STATUS_CENTER_X: f32 = 366.0;
 
-    // Window chrome
-    pub const OUTER_PAD: f32 = 10.0; // CTkScrollableFrame padx/pady
-    pub const CONTENT_PAD: f32 = 21.0; // scrollable frame inset + main_frame padx
-    pub const BOTTOM_PAD_X: f32 = 15.0;
-    pub const BOTTOM_PAD_Y: f32 = 20.0;
+    // Window chrome (egui margins are whole pixels)
+    pub const OUTER_PAD: i8 = 10; // CTkScrollableFrame padx/pady
+    pub const CONTENT_PAD: i8 = 21; // scrollable frame inset + main_frame padx
+    pub const BOTTOM_PAD_X: i8 = 15;
+    pub const BOTTOM_PAD_Y: i8 = 20;
 }
 
 const THREADS: &[&str] = &[
@@ -262,6 +262,11 @@ fn place_label(ui: &mut Ui, rect: Rect, text: &str) {
 impl NvencFfxApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         apply_theme(&cc.egui_ctx);
+        // egui would re-theme the visible window via winit, which Windows 10 renders as
+        // dark caption text on the light title bar. Set it once, before showing, instead.
+        cc.egui_ctx.options_mut(|o| o.sync_window_theme = false);
+        #[cfg(windows)]
+        crate::win32::use_dark_title_bar(cc);
         Self {
             custom_presets: scan_presets(),
             ..Self::default()
@@ -774,37 +779,38 @@ impl NvencFfxApp {
 }
 
 impl eframe::App for NvencFfxApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.handle_drag_and_drop(ctx);
+    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        self.handle_drag_and_drop(&ctx);
 
-        egui::TopBottomPanel::bottom("action_bar")
+        egui::Panel::bottom("action_bar")
             .show_separator_line(false)
-            .frame(egui::Frame::none().fill(colors::PRIMARY_BG).inner_margin(Margin {
+            .frame(egui::Frame::new().fill(colors::PRIMARY_BG).inner_margin(Margin {
                 left: grid::BOTTOM_PAD_X,
                 right: grid::BOTTOM_PAD_X,
-                top: 0.0,
+                top: 0,
                 bottom: grid::BOTTOM_PAD_Y,
             }))
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
                 self.bottom_bar(ui);
             });
 
-        let panel_frame = egui::Frame::none()
+        let panel_frame = egui::Frame::new()
             .fill(colors::PRIMARY_BG)
             .inner_margin(Margin::same(grid::OUTER_PAD));
 
-        egui::CentralPanel::default().frame(panel_frame).show(ctx, |ui| {
+        egui::CentralPanel::default_margins().frame(panel_frame).show(ui, |ui| {
             ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .inner_margin(Margin {
                             left: grid::CONTENT_PAD,
-                            right: 0.0,
+                            right: 0,
                             top: grid::CONTENT_PAD,
-                            bottom: 15.0,
+                            bottom: 15,
                         })
                         .show(ui, |ui| {
                             ui.spacing_mut().item_spacing = Vec2::ZERO;
@@ -832,6 +838,6 @@ impl eframe::App for NvencFfxApp {
                 });
         });
 
-        file_drag_drop_overlay(ctx);
+        file_drag_drop_overlay(&ctx);
     }
 }
