@@ -4,7 +4,11 @@
 
 .DESCRIPTION
     cargo build --release, then dist\nvencFFX-<version>\ with nvencFFX.exe, the
-    presets folder and LICENSE.txt, zipped as dist\nvencFFX-<version>.zip.
+    presets folder, LICENSE.txt and THIRD-PARTY-NOTICES.txt, zipped as
+    dist\nvencFFX-<version>.zip.
+    THIRD-PARTY-NOTICES.txt lists the fonts and crates inside the exe with their
+    licenses; cargo-about generates it from about.toml and about.hbs
+    (cargo install --locked cargo-about --features cli).
     The help texts, fonts and icon are inside the exe; nff_settings.json is created
     next to it on the first run. ffmpeg.exe / ffprobe.exe placed next to nvencFFX.exe
     are found automatically.
@@ -43,6 +47,10 @@ $out = Join-Path 'dist' $name
 $exe = Join-Path $out 'nvencFFX.exe'
 $zip = Join-Path 'dist' "$name.zip"
 
+if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
+    throw 'cargo-about not found: cargo install --locked cargo-about --features cli'
+}
+
 Invoke-Native cargo @('build', '--release')
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
@@ -51,6 +59,9 @@ New-Item -ItemType Directory -Force (Join-Path $out 'presets') | Out-Null
 Copy-Item 'target\release\nvencffx.exe' $exe
 Copy-Item 'presets\*.json' (Join-Path $out 'presets')
 Copy-Item 'LICENSE' (Join-Path $out 'LICENSE.txt')
+# --fail: a crate whose license cannot be determined stops the build
+Invoke-Native cargo @('about', 'generate', '--locked', '--fail', 'about.hbs',
+    '-o', (Join-Path $out 'THIRD-PARTY-NOTICES.txt'))
 
 if ($Upx) {
     Invoke-Native $UpxPath @('--best', '--lzma', '-q', $exe)

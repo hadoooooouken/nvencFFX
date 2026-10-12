@@ -1,5 +1,42 @@
 # nvencFFX - Changelog
 
+## [2.0.0] - Unreleased
+- **Rewritten in Rust**:
+    - nvencFFX has been rewritten from Python (CustomTkinter) in Rust (egui / wgpu). The interface, settings, presets and FFmpeg command lines stay the same;
+    - The release is a single `nvencFFX.exe` (about 8.5 MB) instead of a folder with 68+ files. Help texts, fonts and the icon are embedded; the release folder holds `nvencFFX.exe`, `presets`, `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt`;
+    - The window opens almost instantly and is drawn on the GPU (Vulkan or DirectX 12, with the Windows software renderer as a fallback);
+    - `nff_settings.json` and presets from 1.7.x / 1.8.x load unchanged, and files saved by 2.0.0 can still be read by 1.8.x;
+    - The "Send to" shortcut points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` is no longer needed.
+- **Conversion**:
+    - Progress of a trimmed conversion is measured against the trimmed range, so it now reaches 100%;
+    - **Play 10s Preview** no longer freezes the window while the clip is cut;
+    - On exit, only FFmpeg processes started by nvencFFX are closed (1.8.4 also closed other programs' `ffmpeg.exe` started from the same path);
+    - The command preview quotes arguments with spaces, so options like `-metadata title="a b"` survive editing and applying the command;
+    - `tune = lossless` from a preset or saved settings now always turns Spatial / Temporal AQ off (HEVC / AV1 presets could keep AQ on);
+    - Loading a preset keeps its profile (e.g. `main10`) instead of resetting it to `main`.
+- **Interface**:
+    - Input / Output / FFmpeg Path fields start right after their labels and are wider; the Presets section uses its full width; the right-hand buttons line up with the right edge;
+    - The main scroll bar appears only when the content does not fit, and the window never opens taller than the screen above the taskbar;
+    - Help and `?` windows open centered on the main window, come to the front when clicked again, and the `?` windows scroll horizontally for long lines;
+    - The input file tooltip loads on first hover instead of on every input change;
+    - The frame preview above the trim slider no longer freezes the window, keeps the video's aspect ratio, stays inside the main window at any display scaling, and shows "Preview unavailable" in place instead of in a popup;
+    - Clicking the trim slider (not a handle) moves the nearer handle, and the frame preview follows it.
+- **Batch Converter**:
+    - An applied custom command now gets each file's input and output, instead of running the identical command for every file;
+    - Removing files during a batch no longer marks the wrong file or skips one;
+    - A batch and **Play 10s Preview** can no longer run at the same time;
+    - The Convert button text always matches what is running;
+    - Dropping several unsupported files shows one warning instead of one per file;
+    - The next file starts immediately; durations are read in the background.
+- **Screen Recording**:
+    - **Alt+F8** / tray Start is ignored while a recording runs (1.8.4 started a second session and orphaned the first); **Alt+F9** / tray Stop without a recording does nothing;
+    - Closing nvencFFX during a recording now saves it first (1.8.4 lost the recording);
+    - Silent stretches are recorded as silence, so the audio stays in sync with the video;
+    - An invalid custom audio bitrate is reported before recording starts instead of failing the save afterwards;
+    - The default output goes to the actual Desktop folder, also when it was moved (e.g. into OneDrive);
+    - The window title no longer stays at "Screen is recording now" when the FFmpeg path is empty;
+    - Holding a hotkey no longer repeats it; the tray icon comes back after Explorer restarts, and its menu opens reliably on every right-click.
+
 ## [1.8.4] - 2026-08-07
 - Added Windows taskbar progress indicator for conversions;
 - Added pause/resume support for FFmpeg encoding tasks. Right-click the Cancel button to pause or resume the current conversion;

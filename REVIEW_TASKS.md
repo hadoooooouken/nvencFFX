@@ -120,14 +120,16 @@
 
 ## Открыто по самому плану
 
-### [ ] 14. Third-party notices
+### [x] 14. Third-party notices
 
 - Exe содержит Roboto, шрифты egui и крейты под MIT и Apache-2.0, их лицензии в релиз не попадают.
 - Сделать: сгенерировать список, например через `cargo about`, и класть его в `dist` из `build-release.ps1`.
+- Готово: `build-release.ps1` вызывает `cargo about generate --locked --fail about.hbs` и кладёт `THIRD-PARTY-NOTICES.txt` (~155 КБ) в `dist\nvencFFX-<version>\` и zip; без `cargo-about` скрипт останавливается и пишет команду установки. `about.toml`: только цель Windows, без build / dev зависимостей, MIT в приоритете; `epaint_default_fonts` уточнён по контрольным суммам, т.к. MIT и Bitstream Vera шрифта Hack лежат в одном файле. Roboto 2.137 (Apache 2.0) вписан в `about.hbs`. В `Cargo.toml` добавлены `license = "MIT"` и `publish = false`, сам nvencffx в список не попадает. Описано в Фазе 9 плана; вкладка License в Help по-прежнему показывает только `nff-license.txt` (риск 12).
 
-### [ ] 15. Запись 2.0.0 в CHANGELOG.md
+### [x] 15. Запись 2.0.0 в CHANGELOG.md
 
 - CHANGELOG начинается с 1.8.4.
+- Готово: запись `[2.0.0] - Unreleased` в стиле прежних, разделы Rewritten in Rust / Conversion / Interface / Batch Converter / Screen Recording. Собрана из «Deliberate differences from 1.8.4» всех фаз, только то, что видно пользователю (внутренние вещи вроде отдельного окна для хоткеев не вошли). Дату поставить при релизе, напоминание в «Open before publishing» Фазы 9.
 
 ### [ ] 16. Ручные проверки из рисков 6, 10, 11
 

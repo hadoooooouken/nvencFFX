@@ -25,6 +25,8 @@ This document outlines the step-by-step roadmap for migrating **nvencFFX** from 
 nvencffx/
 ├── Cargo.toml
 ├── build.rs                  # Embed nff.ico, the manifest and version info via winresource
+├── build-release.ps1         # dist\nvencFFX-<version>\ + .zip
+├── about.toml, about.hbs     # cargo-about config + template for THIRD-PARTY-NOTICES.txt
 ├── assets/
 │   ├── nvencFFX.manifest     # DPI awareness, common controls v6
 │   └── fonts/Roboto-Regular.ttf  # Embedded UI font (theme.rs), as CustomTkinter on Windows
@@ -419,12 +421,16 @@ Deliberate differences from 1.8.4:
    - Version info as the 1.8.4 Nuitka build (`nff-nuitka-build.txt`): ProductName / FileDescription "nvencFFX", CompanyName "Deepseek Enjoyer", LegalCopyright "Copyright (C) 2026 hadouken", OriginalFilename "nvencFFX.exe", InternalName "nvencFFX"; FileVersion / ProductVersion from `package.version`
    - Manifest: `asInvoker`, Windows 10 / 11 `supportedOS`, PerMonitorV2 DPI awareness (what winit sets at runtime anyway, now from process start), `longPathAware`, Common Controls 6
    - A resource compile error is now a visible cargo warning (it went to stderr, which cargo hides from build scripts)
-5. ✅ **Packaging** (`build-release.ps1`): `cargo build --release`, then `dist\nvencFFX-<version>\` with `nvencFFX.exe`, `presets\*.json`, `LICENSE.txt`, and `dist\nvencFFX-<version>.zip`. The exe gets its mixed-case name there; the crate stays `nvencffx` (a mixed-case bin name trips rustc's crate-name lint). `-Upx [-UpxPath <upx.exe>]` packs the exe.
+5. ✅ **Packaging** (`build-release.ps1`): `cargo build --release`, then `dist\nvencFFX-<version>\` with `nvencFFX.exe`, `presets\*.json`, `LICENSE.txt`, `THIRD-PARTY-NOTICES.txt`, and `dist\nvencFFX-<version>.zip`. The exe gets its mixed-case name there; the crate stays `nvencffx` (a mixed-case bin name trips rustc's crate-name lint). `-Upx [-UpxPath <upx.exe>]` packs the exe.
+   Third-party notices: `cargo about generate --locked --fail about.hbs` writes `THIRD-PARTY-NOTICES.txt` (~155 KB, plain text) into the release folder; the script stops before building if `cargo-about` is missing (`cargo install --locked cargo-about --features cli`; 0.9.2 builds no binary without the `cli` feature). It lists Roboto 2.137 (Apache 2.0, written into `about.hbs` by hand), egui's default fonts, every crate in the Windows dependency graph minus build / dev dependencies, then each distinct license text with the crates using it.
+   - `about.toml`: MIT first for dual-licensed crates; `epaint_default_fonts` is clarified with checksums, because `Hack-Regular.txt` holds Hack's MIT license and the Bitstream Vera license in one file the scanner does not recognise. A checksum mismatch after an egui update stops the build.
+   - `Cargo.toml` has `license = "MIT"` and `publish = false`, so nvencFFX itself is left out (its license is `LICENSE.txt`)
+   - Same output with `--frozen`: no network needed
    Measured (RTX 3060, Windows 10):
 
    | | exe | zip | window shown after |
    |---|---|---|---|
-   | plain | 8.48 MB | 3.71 MB | ~40 ms |
+   | plain | 8.48 MB | 3.73 MB | ~40 ms |
    | UPX `--best --lzma` | 2.88 MB | 2.74 MB | ~280 ms |
 
    UPX stays opt-in: zip compression already gets most of its download saving, the packed exe unpacks itself into memory on every start, and UPX-packed files are a common antivirus false positive.
@@ -438,13 +444,12 @@ Deliberate differences from 1.8.4:
 Also: settings and preset files are written with CRLF line ends. 1.8.4 opened them in text mode, which writes CRLF on Windows; the port wrote LF since Phase 3. Python read both, but the files now match byte for byte.
 
 Deliberate differences from 1.8.4:
-- The release folder holds `nvencFFX.exe`, `presets` and `LICENSE.txt` only. 1.8.4's Nuitka folder had 68+ files (Python runtime, DLLs, `nff.ico` and the `nff-*.txt` texts, which are embedded since Phases 0 and 8).
+- The release folder holds `nvencFFX.exe`, `presets`, `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt` only. 1.8.4's Nuitka folder had 68+ files (Python runtime, DLLs, `nff.ico` and the `nff-*.txt` texts, which are embedded since Phases 0 and 8).
 - Send to points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` (a console that ran `start`) is not needed.
 
 Open before publishing:
-- Third-party notices: `nff-license.txt` and the release folder have nvencFFX's and BtbN's licenses only. The exe embeds Roboto (Apache 2.0), egui's default fonts (Hack, Ubuntu Font Licence, Noto Emoji and emoji-icon-font under OFL) and MIT / Apache-2.0 crates, whose licenses ask for their notices in binary distributions (`cargo about` can generate the crate list).
 - FFmpeg binaries are added to the release folder by hand, as for 1.8.x; the script does not bundle them.
-- `CHANGELOG.md` has no 2.0.0 entry yet.
+- `CHANGELOG.md`: the 2.0.0 entry (the user-visible deliberate differences of all phases) is dated "Unreleased"; set the release date.
 
 ---
 
@@ -461,7 +466,7 @@ Open before publishing:
 | Phase 6 — Batch Converter | ✅ Done | `app/batch.rs`, `ui/dialogs.rs` (resize edges), `win32/mod.rs` (dialog parent) | ~750 |
 | Phase 7 — Screen Recording | ✅ Done | `recording/mod.rs`, `recording/capture.rs`, `recording/audio.rs`, `app/record.rs`, `win32/mod.rs` (local time, Desktop folder) | ~1,450 |
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
-| Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
+| Phase 9 — Release | ✅ Done | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `about.toml`, `about.hbs`, `config/testdata/` | ~150 |
 
 **Current Rust codebase**: ~10,380 LOC across 34 files (98 tests).
 
@@ -480,5 +485,5 @@ Open before publishing:
 9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu, rasterized on the CPU, so the wgpu backend does not affect it; see Phase 1 for the Mono hinting); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.
 11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` was updated for 2.0.0 in Phase 9 (so this branch's copy no longer fits the Python version).
-12. **Release, open items**: third-party license notices (Roboto, egui's fonts, the crates) are not shipped yet; the GLES backend is gone, so a machine where neither DX12 (incl. WARP) nor Vulkan works can no longer start the app (not seen on Windows 10 / 11); UPX-packed builds may be flagged by antivirus scanners, which is why `-Upx` is opt-in.
+12. **Release, open items**: `THIRD-PARTY-NOTICES.txt` ships in the release folder, but the Help window's License tab (`nff-license.txt`) still shows only nvencFFX's and BtbN's licenses; the GLES backend is gone, so a machine where neither DX12 (incl. WARP) nor Vulkan works can no longer start the app (not seen on Windows 10 / 11); UPX-packed builds may be flagged by antivirus scanners, which is why `-Upx` is opt-in.
 13. **Startup height at higher scaling, manual check**: the window opens at 1.8.4's height for the display scaling (Phase 2), checked live only at 100%. Still to look at: 125% / 150% (650 px, max 800) and 200% (600 px, max 650), e.g. that at 150% on a 1080p screen the window stays above the taskbar.

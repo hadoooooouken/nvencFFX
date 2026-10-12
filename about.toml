@@ -1,0 +1,57 @@
+# cargo-about config for THIRD-PARTY-NOTICES.txt (build-release.ps1, template about.hbs).
+# Install: cargo install --locked cargo-about --features cli
+
+# Priority order: a crate under "MIT OR Apache-2.0" is listed with MIT
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Zlib",
+    "ISC",
+    "BSL-1.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "Unicode-3.0",
+    "Unlicense",
+    "0BSD",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "Bitstream-Vera",
+]
+targets = ["x86_64-pc-windows-msvc"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# nvencffx itself (publish = false): its own LICENSE ships as LICENSE.txt
+private = { ignore = true }
+
+# egui's default fonts. Hack-Regular.txt holds Hack's MIT license and the Bitstream Vera
+# license in one file, which the license scanner does not recognise. A checksum mismatch
+# after an egui update means a font license changed: check the files and update these.
+[epaint_default_fonts.clarify]
+license = "(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0 AND Bitstream-Vera"
+
+[[epaint_default_fonts.clarify.files]]
+path = "fonts/Hack-Regular.txt"
+license = "MIT"
+end = "OTHER DEALINGS IN THE SOFTWARE."
+checksum = "0a3a32afbdf4e819812135f5fa523498f3f8abdd5a262fc07bee14dd44b58a24"
+
+[[epaint_default_fonts.clarify.files]]
+path = "fonts/Hack-Regular.txt"
+license = "Bitstream-Vera"
+start = "BITSTREAM VERA LICENSE"
+checksum = "c3f7268ffd19b6fedc97d1cfb21b11ca81acd238bff23a7923c2ebb5eb131170"
+
+[[epaint_default_fonts.clarify.files]]
+path = "fonts/emoji-icon-font-mit-license.txt"
+license = "MIT"
+checksum = "b9d2c1d909aa149996fd4c91dcb92b2362a04431640c1d200959da94caf8cde1"
+
+[[epaint_default_fonts.clarify.files]]
+path = "fonts/OFL.txt"
+license = "OFL-1.1"
+checksum = "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+
+[[epaint_default_fonts.clarify.files]]
+path = "fonts/UFL.txt"
+license = "Ubuntu-font-1.0"
+checksum = "2f0015108d68627bd788d313f529c21ff4da2c2c42a5e1f3883acc83480f9002"
