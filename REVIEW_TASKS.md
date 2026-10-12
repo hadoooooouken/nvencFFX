@@ -55,11 +55,12 @@
 - Сделать: вызвать `tune_changed` после `apply_json` в `load_custom_preset` и после загрузки настроек в `NvencFfxApp::new`.
 - Готово: `tune_changed` вызывается в `NvencFfxApp::new`, `load_custom_preset` и в `set_codec` при переходе на H.264 (как `_update_codec_settings`). В 1.8.4 для HEVC и AV1 AQ из пресета оставался включённым: `_apply_settings_dict` пишет флаги AQ после tune. Rust выключает AQ для всех кодеков, это записано в «Deliberate differences» Фазы 2. Тест `lossless_turns_aq_off_after_codec_switch_and_preset_load`.
 
-### [ ] 6. VMAF подаёт звук без найденного балла
+### [x] 6. VMAF подаёт звук без найденного балла
 
 - Где: `src/app/vmaf.rs:117`. Звук идёт при любом `score.is_some()`, даже если строка не разобралась как число.
 - 1.8.4, `nvencFFX.py:3478`: звук только после успешного `float(vmaf_score)`.
 - Сделать: звук только когда `result_status` вернул балл.
+- Готово: `result_status` возвращает `Ok` только для разобранного балла, звук только при `Ok`. Тест `status_texts` проверяет `Ok` / `Err`.
 
 ### [ ] 7. Неизвестное audio_option превращается в аргументы
 

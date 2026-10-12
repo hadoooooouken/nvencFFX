@@ -36,12 +36,13 @@ fn prepare(ffmpeg: &str, ffprobe: Option<&Path>, input: &str, output: &str, scal
     Ok(vmaf::command(ffmpeg, input, output, input_size, output_size, scale_flags, threads))
 }
 
-/// The status line for a finished run (`_execute_vmaf`).
-fn result_status(label: &str, score: Option<&str>) -> String {
+/// The status line for a finished run (`_execute_vmaf`): `Ok` only when the
+/// score parsed, which is when 1.8.4 beeps.
+fn result_status(label: &str, score: Option<&str>) -> Result<String, String> {
     match score.map(str::parse::<f64>) {
-        Some(Ok(score)) => format!("{label}: {score:.2}"),
-        Some(Err(_)) => "Error parsing VMAF score".to_owned(),
-        None => "VMAF score not found in output".to_owned(),
+        Some(Ok(score)) => Ok(format!("{label}: {score:.2}")),
+        Some(Err(_)) => Err("Error parsing VMAF score".to_owned()),
+        None => Err("VMAF score not found in output".to_owned()),
     }
 }
 
@@ -111,11 +112,13 @@ impl NvencFfxApp {
                                 Exit::Cancelled => {}
                                 Exit::SpawnFailed(e) => self.status_message = format!("Error executing VMAF: {e}"),
                                 Exit::Success | Exit::Failed(_) => {
-                                    self.status_message = result_status(label, score.as_deref());
+                                    let status = result_status(label, score.as_deref());
                                     #[cfg(windows)]
-                                    if score.is_some() {
+                                    if status.is_ok() {
                                         crate::win32::beep();
                                     }
+                                    let (Ok(status) | Err(status)) = status;
+                                    self.status_message = status;
                                 }
                             }
                             self.ffmpeg_output.clear();
@@ -135,10 +138,13 @@ mod tests {
 
     #[test]
     fn status_texts() {
-        assert_eq!(result_status("VMAF score", Some("95.126")), "VMAF score: 95.13");
-        assert_eq!(result_status("VMAF score (with scaling)", Some("80")), "VMAF score (with scaling): 80.00");
-        assert_eq!(result_status("VMAF score", Some("1.2.3")), "Error parsing VMAF score");
-        assert_eq!(result_status("VMAF score", None), "VMAF score not found in output");
+        assert_eq!(result_status("VMAF score", Some("95.126")), Ok("VMAF score: 95.13".to_owned()));
+        assert_eq!(
+            result_status("VMAF score (with scaling)", Some("80")),
+            Ok("VMAF score (with scaling): 80.00".to_owned())
+        );
+        assert_eq!(result_status("VMAF score", Some("1.2.3")), Err("Error parsing VMAF score".to_owned()));
+        assert_eq!(result_status("VMAF score", None), Err("VMAF score not found in output".to_owned()));
         assert_eq!(prepare("ffmpeg", None, "a", "b", "bicubic"), Err("Could not determine video resolution".to_owned()));
     }
 
