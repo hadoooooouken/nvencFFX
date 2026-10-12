@@ -32,6 +32,7 @@
     - Dropping several unsupported files shows one warning instead of one per file;
     - The next file starts immediately; durations are read in the background;
     - With `-map 0:<type>:N` options (as written by the Streams window), the files' streams are compared with the main window's input before the batch starts. Files whose stream layout differs (other track count, language or order) are listed with a choice to continue, since those options would pick other streams or fail there.
+    - With no input file in the main window, the **Streams** button opens the first file of the batch list instead of asking for an input file.
 - **Screen Recording**:
     - **Alt+F8** / tray Start is ignored while a recording runs (1.8.4 started a second session and orphaned the first); **Alt+F9** / tray Stop without a recording does nothing;
     - Closing nvencFFX during a recording now saves it first (1.8.4 lost the recording);

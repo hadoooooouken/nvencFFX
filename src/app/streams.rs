@@ -60,35 +60,40 @@ impl StreamsWindow {
 }
 
 impl NvencFfxApp {
-    /// The Streams button.
+    /// The Streams button. Without an input file the batch list's first file is
+    /// shown, the reference the batch compares the other files' streams with.
     pub(super) fn open_streams(&mut self, ctx: &egui::Context) {
         if self.streams.is_some() {
             ctx.send_viewport_cmd_to(viewport(), ViewportCommand::Focus);
             return;
         }
-        if self.input_file.is_empty() {
+        let input = match self.batch.files.first() {
+            Some(file) if self.input_file.is_empty() => file.path.clone(),
+            _ => self.input_file.clone(),
+        };
+        if input.is_empty() {
             return self.message(Kind::Warning, "Warning", "Please select an input file first.");
         }
-        if !Path::new(&self.input_file).exists() {
+        if !Path::new(&input).exists() {
             return self.message(Kind::Warning, "Error", "Input file does not exist.");
         }
         let Some(ffprobe) = self.ffprobe.clone() else {
             return self.message(Kind::Error, "Error", "ffprobe.exe not found.");
         };
         let (tx, rx) = channel();
-        let (input, repaint) = (self.input_file.clone(), ctx.clone());
+        let (path, repaint) = (input.clone(), ctx.clone());
         std::thread::spawn(move || {
-            let result = match probe::overview(&ffprobe, &input, None) {
+            let result = match probe::overview(&ffprobe, &path, None) {
                 Ok(text) => Ok(streams::parse(&text.unwrap_or_default())),
                 Err(e) => Err(e.to_string()),
             };
             let _ = tx.send(result);
             repaint.request_repaint();
         });
-        let name = Path::new(&self.input_file).file_name().unwrap_or_default().to_string_lossy();
+        let name = Path::new(&input).file_name().unwrap_or_default().to_string_lossy().into_owned();
         self.streams = Some(StreamsWindow {
             title: format!("Stream Selection - {name}"),
-            input: self.input_file.clone(),
+            input,
             load: Load::Pending(rx),
             checked: Vec::new(),
             position: ctx.input(|i| i.viewport().outer_rect).map(|r| r.center() - WINDOW_SIZE / 2.0),
@@ -365,5 +370,16 @@ mod tests {
         let (_, dialog) = app.dialog.take().unwrap();
         assert_eq!((dialog.title.as_str(), dialog.message.as_str()), ("Error", "Input file does not exist."));
         assert!(app.streams.is_none());
+    }
+
+    #[test]
+    fn without_an_input_the_first_batch_file_is_used() {
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp { ffprobe: Some("ffprobe.exe".into()), ..Default::default() };
+        let file = std::env::current_exe().unwrap().to_string_lossy().into_owned();
+        app.batch.files.push(super::super::batch::BatchFile { path: file.clone(), status: super::super::batch::Status::Ready });
+        app.open_streams(&ctx);
+        assert!(app.dialog.is_none());
+        assert_eq!(app.streams.as_ref().unwrap().input, file);
     }
 }
