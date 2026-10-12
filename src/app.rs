@@ -1223,10 +1223,9 @@ impl NvencFfxApp {
                 self.status_message = "Error: ffmpeg.exe not found.".to_owned();
                 self.message(Kind::Error, "Error", "ffmpeg.exe not found. Ensure it's in the program folder or system PATH.");
             }
-            Exit::SpawnFailed(e) => {
+            Exit::SpawnFailed(_) => {
                 self.status_message = "An unexpected error occurred during conversion".to_owned();
-                let text = format!("An unexpected error occurred during conversion:\n{e}");
-                self.message(Kind::Error, "Unexpected Error", text);
+                self.message(Kind::Error, "Unexpected Error", "An unexpected error occurred during conversion");
             }
         }
         if failed {

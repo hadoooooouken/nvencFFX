@@ -41,11 +41,12 @@
 - Сделать: позиция через `ViewportBuilder::with_position` по размеру монитора или первым кадром через `ViewportCommand::OuterPosition`. Или описать отличие в плане.
 - Готово: `win32::center_window` (SetWindowPos в физических пикселях, как у CTk) из `NvencFfxApp::new`, пока окно скрыто. Проверено: x 870, y 50 на экране 2560.
 
-### [ ] 4. «Unexpected Error» показывает текст исключения
+### [x] 4. «Unexpected Error» показывает текст исключения
 
 - Где: `src/app.rs:1220`.
 - 1.8.4, `nvencFFX.py:5953`: только фраза «An unexpected error occurred during conversion».
 - Сделать: убрать `:\n{e}` или записать как намеренное отличие Фазы 4.
+- Готово: `:\n{e}` убран, текст как в 1.8.4.
 
 ### [ ] 5. tune = lossless из пресета или настроек не выключает AQ
 
