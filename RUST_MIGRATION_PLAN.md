@@ -196,7 +196,7 @@ Every control of the 1.8.4 main window is on screen and wired to the original's 
 - [x] **Window height follows the sections** (`_update_window_size`): opening or closing a section sets the height to 700 + what the open sections add, capped at 1.8.4's `maxsize` (900 / 800 / 650 px at <125% / ≥125% / ≥200% scaling); only on a toggle, so a height dragged by hand stays until then
 - [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame)
 - [x] **Custom command mode**: Output opens an editable preview window (Copy / Apply / Reset / Close); Apply validates `-i` + output file; right-click on Output copies the command with spaced paths quoted
-- [x] Parity fixes: H.264 hides Lookahead Level (as the original), CUDA Output Format is disabled unless HW Accel = cuda, tune = lossless turns AQ off, `Send to nvencFFX` argument is loaded at startup, ffmpeg / ffprobe auto-detected (exe folder, then `PATH`)
+- [x] Parity fixes: H.264 hides Lookahead Level (as the original), CUDA Output Format is disabled unless HW Accel = cuda, tune = lossless turns AQ off (from the menu, a built-in or custom preset, `nff_settings.json` at startup, and a switch to H.264), `Send to nvencFFX` argument is loaded at startup, ffmpeg / ffprobe auto-detected (exe folder, then `PATH`)
 
 Remaining (moved to later phases):
 - [x] **Streams** button (stream map window) and the `?` / Help buttons (Phase 8)
@@ -205,6 +205,7 @@ Remaining (moved to later phases):
 - [x] Batch / Screen Record actions (Phases 6, 7)
 
 Deliberate differences from 1.8.4:
+- A custom preset or `nff_settings.json` with tune = lossless always turns Spatial / Temporal AQ off. In 1.8.4 only H.264 did that reliably (through `_update_codec_settings`): for HEVC / AV1 `_apply_settings_dict` wrote the saved AQ flags after the tune, so a preset kept AQ on under the "AQ not supported" note, and at startup the `tune` trace was not set up yet.
 - Loading a preset no longer forces the profile back to `main` (the original's `_update_codec_settings` overwrote e.g. `main10` from a preset); invalid values for the current codec are still reset.
 - The main scroll bar is shown only when the content does not fit (CTkScrollableFrame always showed it, even with nothing to scroll); the layout does not move when it appears.
 - The auto height uses the measured height a section adds (the original added `winfo_reqheight() + 10`, 10 px short for sections with `pady=10`) and also stops 80 px short of the monitor height, so the window never extends under the taskbar on small screens.
@@ -455,7 +456,7 @@ Open before publishing:
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
 | Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
 
-**Current Rust codebase**: ~10,300 LOC across 34 files (95 tests).
+**Current Rust codebase**: ~10,350 LOC across 34 files (96 tests).
 
 ---
 

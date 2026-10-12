@@ -444,6 +444,7 @@ impl NvencFfxApp {
         app.settings_file = Some(file);
         app.ffprobe = probe::ffprobe_for(&app.s.ffmpeg_path);
         app.fix_codec_dependent();
+        app.tune_changed();
         app.restore_preset_selection();
         app.observed_settings = app.s.clone();
         // "Send to nvencFFX" passes the file as the first argument
@@ -628,6 +629,9 @@ impl NvencFfxApp {
             VideoCodec::Av1 => self.s.encoder_profile.clear(),
         }
         self.fix_codec_dependent();
+        if codec == VideoCodec::H264 {
+            self.tune_changed();
+        }
         if let Some(out) = renamed_output(&self.output_file, &self.input_file, codec) {
             self.output_file = out;
         }
@@ -752,6 +756,7 @@ impl NvencFfxApp {
                     self.ffprobe = probe::ffprobe_for(&self.s.ffmpeg_path);
                 }
                 self.fix_codec_dependent();
+                self.tune_changed();
                 self.s.custom_preset_selected = name.to_owned();
                 self.s.selected_preset = "custom".to_owned();
                 self.set_preset_indicator(format!("Loaded preset: {name}"));
@@ -2286,6 +2291,37 @@ mod tests {
         assert_eq!(app.s.encoder_profile, "auto");
         assert_eq!(app.s.encoder_rc, "vbr", "rate control has no auto");
         assert!(!app.s.encoder_spatial_aq);
+    }
+
+    #[test]
+    fn lossless_turns_aq_off_after_codec_switch_and_preset_load() {
+        let lossless_with_aq = |app: &mut NvencFfxApp| {
+            app.s.encoder_tune = "lossless".into();
+            app.s.encoder_spatial_aq = true;
+            app.s.encoder_temporal_aq = true;
+            app.status_message.clear();
+        };
+        let mut app = NvencFfxApp::default();
+        app.s.codec = VideoCodec::Av1;
+        lossless_with_aq(&mut app);
+        app.set_codec(VideoCodec::Hevc);
+        assert!(app.s.encoder_spatial_aq, "only the H.264 switch rechecks the tune");
+        app.set_codec(VideoCodec::H264);
+        assert!(!app.s.encoder_spatial_aq && !app.s.encoder_temporal_aq);
+        assert_eq!(app.status_message, "Note: AQ not supported for lossless encoding");
+
+        let dir = std::env::temp_dir().join(format!("nvencffx-lossless-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        app.presets_dir = dir.clone();
+        app.set_codec(VideoCodec::Hevc);
+        lossless_with_aq(&mut app);
+        presets::save(&dir, "lossless", &app.s).unwrap();
+        app.s.encoder_tune = "hq".into();
+        app.load_custom_preset("lossless");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(app.s.encoder_tune, "lossless");
+        assert!(!app.s.encoder_spatial_aq && !app.s.encoder_temporal_aq);
+        assert_eq!(app.status_message, "Note: AQ not supported for lossless encoding");
     }
 
     #[test]

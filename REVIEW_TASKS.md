@@ -48,11 +48,12 @@
 - Сделать: убрать `:\n{e}` или записать как намеренное отличие Фазы 4.
 - Готово: `:\n{e}` убран, текст как в 1.8.4.
 
-### [ ] 5. tune = lossless из пресета или настроек не выключает AQ
+### [x] 5. tune = lossless из пресета или настроек не выключает AQ
 
 - 1.8.4, `nvencFFX.py:1686`: `_on_tune_changed` висит на любой записи в `tune`. Пресет и `nff_settings.json` с lossless выключают Spatial и Temporal AQ и пишут «Note: AQ not supported for lossless encoding».
 - Rust вызывает `tune_changed` (`src/app.rs:660`) только из меню и встроенных пресетов. `load_custom_preset` (`src/app.rs:738`) и загрузка при старте этого не делают.
 - Сделать: вызвать `tune_changed` после `apply_json` в `load_custom_preset` и после загрузки настроек в `NvencFfxApp::new`.
+- Готово: `tune_changed` вызывается в `NvencFfxApp::new`, `load_custom_preset` и в `set_codec` при переходе на H.264 (как `_update_codec_settings`). В 1.8.4 для HEVC и AV1 AQ из пресета оставался включённым: `_apply_settings_dict` пишет флаги AQ после tune. Rust выключает AQ для всех кодеков, это записано в «Deliberate differences» Фазы 2. Тест `lossless_turns_aq_off_after_codec_switch_and_preset_load`.
 
 ### [ ] 6. VMAF подаёт звук без найденного балла
 
