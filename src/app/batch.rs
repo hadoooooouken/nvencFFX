@@ -7,7 +7,7 @@ use eframe::egui::{
     Layout, ViewportBuilder, ViewportId, pos2, vec2,
 };
 use crate::config::settings::VideoCodec;
-use crate::core::{command, process::{Exit, Runner}};
+use crate::core::{command, probe::Probed, process::{Exit, Runner}, streams};
 use crate::ui::{
     dialogs::{self, Kind},
     theme::{colors, dimensions},
@@ -78,6 +78,8 @@ pub(super) struct Batch {
     /// Where the window opens: centered on the main window.
     position: Option<Pos2>,
     run: Option<Run>,
+    /// Convert was clicked and the batch starts once the files' streams are probed.
+    checking: bool,
 }
 
 impl Batch {
@@ -227,8 +229,91 @@ impl NvencFfxApp {
         self.batch.position = ctx.input(|i| i.viewport().outer_rect).map(|r| r.center() - WINDOW_SIZE / 2.0);
     }
 
-    /// `start_batch_conversion`
+    /// Convert with files in the list. Options such as `-map 0:a:1` pick streams by
+    /// their position, so with them the files' streams are compared with the main
+    /// window's input (or the first file) before the batch starts.
     pub(super) fn start_batch(&mut self, ctx: &egui::Context) {
+        self.batch.checking = false;
+        if self.batch.files.is_empty() || self.batch.running() {
+            return;
+        }
+        if self.maps_streams_by_position() {
+            match self.layout_differences(ctx) {
+                None => {
+                    self.batch.checking = true;
+                    self.status_message = "Checking streams...".to_owned();
+                    return;
+                }
+                Some(Some(text)) => {
+                    self.status_message.clear();
+                    return self.message_with(Kind::Question, "Stream Layout", text, Action::StartBatch);
+                }
+                Some(None) => {}
+            }
+        }
+        self.run_batch(ctx);
+    }
+
+    /// Probes the listed files in the background.
+    pub(super) fn probe_batch_files(&mut self, ctx: &egui::Context) {
+        for file in &self.batch.files {
+            self.input_streams.get(self.ffprobe.as_deref(), &file.path, ctx);
+        }
+        if self.batch.checking && !self.batch.running() {
+            self.start_batch(ctx);
+        }
+    }
+
+    fn maps_streams_by_position(&self) -> bool {
+        match &self.custom_command {
+            Some(custom) => streams::has_positional_map(custom.iter().map(String::as_str)),
+            // The options are left out in precise-trim mode while their section is collapsed
+            None => {
+                (self.s.trim_streamcopy || !self.s.precise_trim || self.expand_additional_options)
+                    && streams::has_positional_map(self.s.additional_options.split_whitespace())
+            }
+        }
+    }
+
+    /// `None` while a probe is running, else the warning about files whose streams
+    /// differ from the reference (if any do). Files that cannot be probed are skipped.
+    fn layout_differences(&mut self, ctx: &egui::Context) -> Option<Option<String>> {
+        let ffprobe = self.ffprobe.clone();
+        let candidates = std::iter::once(&self.input_file).chain(self.batch.files.iter().map(|f| &f.path));
+        let mut known = Vec::new();
+        for file in candidates {
+            match self.input_streams.get(ffprobe.as_deref(), file, ctx) {
+                Some(Probed::Pending) => return None,
+                Some(Probed::Known(streams)) => known.push((file.clone(), streams)),
+                Some(Probed::Failed) | None => {}
+            }
+        }
+        let Some(((reference, expected), files)) = known.split_first() else { return Some(None) };
+        let name = |path: &str| Path::new(path).file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let mut lines: Vec<String> = files
+            .iter()
+            .filter(|(file, _)| file != reference)
+            .filter_map(|(file, found)| streams::layout_difference(expected, found).map(|d| format!("{}: {d}", name(file))))
+            .collect();
+        if lines.is_empty() {
+            return Some(None);
+        }
+        const MAX_LINES: usize = 10;
+        if lines.len() > MAX_LINES {
+            let more = lines.len() - MAX_LINES;
+            lines.truncate(MAX_LINES);
+            lines.push(format!("...and {more} more"));
+        }
+        Some(Some(format!(
+            "The -map options select streams by their position, but these files have \
+             a different stream layout than {}:\n\n{}\n\nContinue anyway?",
+            name(reference),
+            lines.join("\n")
+        )))
+    }
+
+    /// Starts the batch with its first file.
+    pub(super) fn run_batch(&mut self, ctx: &egui::Context) {
         if self.batch.files.is_empty() || self.batch.running() {
             return;
         }
@@ -265,6 +350,7 @@ impl NvencFfxApp {
             );
             self.input_file.clone_from(&input);
             self.output_file = output.to_string_lossy().into_owned();
+            self.resolve_input_streams();
             // An applied custom command gets this file's input and output
             match command::preview(self.custom_command.as_deref(), &self.s, &self.job()) {
                 Ok(args) => {
@@ -650,6 +736,55 @@ mod tests {
         assert_eq!(statuses(&app), ["Cancelled", "Ready"]);
         assert_eq!(app.status_message, "Batch conversion cancelled");
         assert!(app.dialog.is_none());
+    }
+
+    #[test]
+    fn positional_maps_wait_for_probes_and_warn_about_other_layouts() {
+        use crate::core::{probe::Probed, streams::parse};
+        use std::sync::Arc;
+        let layout = |audio: [&str; 2]| {
+            let lines = format!(
+                "Stream #0:0: Video: h264, yuv420p, 1920x1080\nStream #0:1({}): Audio: ac3\nStream #0:2({}): Audio: ac3",
+                audio[0], audio[1]
+            );
+            Probed::Known(Arc::new(parse(&lines)))
+        };
+        let ctx = egui::Context::default();
+        let mut app = NvencFfxApp { input_file: r"C:\v\ref.mkv".into(), ..Default::default() };
+        app.s.additional_options = "-ignore_unknown -map 0:v:0 -map 0:a:1".into();
+        app.input_streams.set(r"C:\v\ref.mkv", layout(["rus", "eng"]));
+        app.input_streams.set(r"C:\v\same.mkv", layout(["rus", "eng"]));
+        app.input_streams.set(r"C:\v\swapped.mkv", layout(["eng", "rus"]));
+        app.input_streams.set(r"C:\v\later.mkv", Probed::Pending);
+        app.input_streams.set(r"C:\v\broken.mkv", Probed::Failed);
+        for file in ["same", "swapped", "later", "broken"] {
+            app.batch.add(format!(r"C:\v\{file}.mkv"));
+        }
+
+        app.toggle_conversion(&ctx);
+        assert!(!app.batch.running() && app.batch.checking);
+        assert_eq!(app.status_message, "Checking streams...");
+        app.input_streams.set(r"C:\v\later.mkv", layout(["eng", "rus"]));
+        app.probe_batch_files(&ctx);
+        assert!(!app.batch.running() && !app.batch.checking);
+        let (_, dialog) = app.dialog.take().unwrap();
+        assert_eq!(dialog.title, "Stream Layout");
+        assert_eq!(
+            dialog.message,
+            "The -map options select streams by their position, but these files have a different stream \
+             layout than ref.mkv:\n\nswapped.mkv: audio: eng, rus instead of rus, eng\n\
+             later.mkv: audio: eng, rus instead of rus, eng\n\nContinue anyway?"
+        );
+
+        // Yes starts it (each file then fails without an FFmpeg path)
+        app.on_dialog(Action::StartBatch, crate::ui::dialogs::Outcome::Accepted(String::new()), &ctx);
+        assert_eq!(statuses(&app), ["Failed: FFmpeg path is not specified"; 4]);
+
+        // Maps of whole stream types do not depend on the layout
+        app.s.additional_options = "-map 0:v -map 0:a".into();
+        app.input_streams.set(r"C:\v\later.mkv", Probed::Pending);
+        app.toggle_conversion(&ctx);
+        assert!(!app.batch.checking && app.dialog.is_none());
     }
 
     #[test]

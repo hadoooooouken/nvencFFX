@@ -12,7 +12,7 @@ use crate::config::{
 use crate::core::{
     command, estimate,
     filters::{self, QUICK_BUTTONS, Quick},
-    probe::{self, Duration, DurationCache, InfoCache},
+    probe::{self, Duration, DurationCache, InfoCache, StreamCache},
     process::{self, Event, Exit, Runner},
     progress, timecode,
 };
@@ -124,6 +124,8 @@ enum Action {
     DeletePreset(String),
     /// Warning before falling back to Save As
     ThenSavePresetAs,
+    /// Stream layout warning of the Batch Converter
+    StartBatch,
 }
 
 /// The editable command preview (Output button).
@@ -214,6 +216,8 @@ pub struct NvencFfxApp {
     // ffprobe
     ffprobe: Option<PathBuf>,
     durations: DurationCache,
+    /// Input streams, for the stream mapping of the command
+    input_streams: StreamCache,
     /// Input tooltip texts
     media_info: InfoCache,
     /// Input whose `trim_end` should be set to its duration once probed.
@@ -281,6 +285,7 @@ impl Default for NvencFfxApp {
 
             ffprobe: None,
             durations: DurationCache::default(),
+            input_streams: StreamCache::default(),
             media_info: InfoCache::default(),
             trim_end_follows: None,
 
@@ -458,7 +463,11 @@ impl NvencFfxApp {
     }
 
     fn message(&mut self, kind: Kind, title: &str, message: impl Into<String>) {
-        self.show_dialog_in(ViewportId::ROOT, kind, title, message, Action::None);
+        self.message_with(kind, title, message, Action::None);
+    }
+
+    fn message_with(&mut self, kind: Kind, title: &str, message: impl Into<String>, action: Action) {
+        self.show_dialog_in(ViewportId::ROOT, kind, title, message, action);
     }
 
     /// Draws the pending dialog if it belongs to `viewport` and handles its answer.
@@ -470,11 +479,11 @@ impl NvencFfxApp {
         if let Some(outcome) = dialog.show(ui)
             && let Some((_, dialog)) = self.dialog.take()
         {
-            self.on_dialog(dialog.action, outcome);
+            self.on_dialog(dialog.action, outcome, ui.ctx());
         }
     }
 
-    fn on_dialog(&mut self, action: Action, outcome: Outcome) {
+    fn on_dialog(&mut self, action: Action, outcome: Outcome, ctx: &egui::Context) {
         match (action, outcome) {
             (Action::SavePresetAs, Outcome::Accepted(name)) => {
                 let name = name.trim().to_owned();
@@ -492,6 +501,7 @@ impl NvencFfxApp {
             (Action::OverwritePreset(name), Outcome::Accepted(_)) => self.finish_save_as(name),
             (Action::DeletePreset(name), Outcome::Accepted(_)) => self.finish_delete(name),
             (Action::ThenSavePresetAs, _) => self.save_preset_as(),
+            (Action::StartBatch, Outcome::Accepted(_)) => self.run_batch(ctx),
             _ => {}
         }
     }
@@ -880,7 +890,14 @@ impl NvencFfxApp {
             input: &self.input_file,
             output: &self.output_file,
             additional_enabled: self.expand_additional_options,
+            streams: self.input_streams.value(&self.input_file).map(|s| &**s),
         }
+    }
+
+    /// Probes the input's streams now if the background probe has not finished, so
+    /// the command is built for them.
+    fn resolve_input_streams(&mut self) {
+        self.input_streams.resolve(self.ffprobe.as_deref(), &self.input_file);
     }
 
     fn preview_command(&self) -> Result<Vec<String>, String> {
@@ -896,6 +913,7 @@ impl NvencFfxApp {
             self.message(Kind::Error, "Error", "Please select an input file first.");
             return;
         }
+        self.resolve_input_streams();
         match self.preview_command() {
             Ok(cmd) => self.command_window = Some(CommandWindow { text: command::join(&cmd) }),
             Err(e) => self.message(Kind::Error, "Error", format!("Could not generate command: {e}")),
@@ -907,10 +925,13 @@ impl NvencFfxApp {
     fn copy_command(&mut self, ctx: &egui::Context) {
         let args = match &self.command_window {
             Some(w) => command::split(w.text.trim()),
-            None => match self.preview_command() {
-                Ok(cmd) => cmd,
-                Err(_) => return,
-            },
+            None => {
+                self.resolve_input_streams();
+                match self.preview_command() {
+                    Ok(cmd) => cmd,
+                    Err(_) => return,
+                }
+            }
         };
         ctx.copy_text(command::join(&args));
         self.ffmpeg_output = "Command copied to clipboard!".to_owned();
@@ -1046,10 +1067,13 @@ impl NvencFfxApp {
     fn start_conversion(&mut self, ctx: &egui::Context) {
         let args = match &self.custom_command {
             Some(custom) => custom.clone(),
-            None => match command::build(&self.s, &self.job()) {
-                Ok(args) => args,
-                Err(e) => return self.message(Kind::Error, "Error", e),
-            },
+            None => {
+                self.resolve_input_streams();
+                match command::build(&self.s, &self.job()) {
+                    Ok(args) => args,
+                    Err(e) => return self.message(Kind::Error, "Error", e),
+                }
+            }
         };
         let input = args.iter().position(|a| a == "-i").and_then(|i| args.get(i + 1)).cloned().unwrap_or_default();
         self.progress = Some(0.0);
@@ -1135,6 +1159,7 @@ impl NvencFfxApp {
             return self.message(Kind::Error, "Error", "Could not get video duration");
         };
         self.cleanup_preview_files();
+        self.resolve_input_streams();
         let temp = std::env::temp_dir();
         let clip = match command::preview_clip(self.custom_command.as_deref(), &self.s, &self.job(), duration, &temp) {
             Ok(clip) => clip,
@@ -1968,8 +1993,11 @@ impl NvencFfxApp {
         self.minimize_when_due(ctx);
         self.poll_tray(ctx);
         self.durations.poll();
-        // Probe the current input (size estimate, trim slider)
+        self.input_streams.poll();
+        // Probe the current input (size estimate, trim slider, stream mapping)
         self.durations.get(self.ffprobe.as_deref(), &self.input_file, ctx);
+        self.input_streams.get(self.ffprobe.as_deref(), &self.input_file, ctx);
+        self.probe_batch_files(ctx);
         if let Some(file) = &self.trim_end_follows {
             match self.durations.get(self.ffprobe.as_deref(), file, ctx) {
                 Some(Duration::Pending) => {}

@@ -13,7 +13,8 @@
     - On exit, only FFmpeg processes started by nvencFFX are closed (1.8.4 also closed other programs' `ffmpeg.exe` started from the same path);
     - The command preview quotes arguments with spaces, so options like `-metadata title="a b"` survive editing and applying the command;
     - `tune = lossless` from a preset or saved settings now always turns Spatial / Temporal AQ off (HEVC / AV1 presets could keep AQ on);
-    - Loading a preset keeps its profile (e.g. `main10`) instead of resetting it to `main`.
+    - Loading a preset keeps its profile (e.g. `main10`) instead of resetting it to `main`;
+    - Stream mapping follows the input's streams (read with ffprobe): a file with one video and one audio stream and no subtitles gets a plain command without `-map` / `-c:v copy` / `-c:s mov_text`, and the other options are only added when the file needs them. Picture-based subtitles (PGS, VobSub, DVB) are left out of MP4 / MOV outputs instead of failing the conversion, the encoder targets the main video stream even when cover art comes first, and MKV outputs copy subtitles instead of converting them to ASS and leave cover art out (MKV would store it as extra one-frame video tracks). Without ffprobe the full mapping is used as before.
 - **Interface**:
     - Input / Output / FFmpeg Path fields start right after their labels and are wider; the Presets section uses its full width; the right-hand buttons line up with the right edge;
     - The main scroll bar appears only when the content does not fit, and the window never opens taller than the screen above the taskbar;
@@ -27,7 +28,8 @@
     - A batch and **Play 10s Preview** can no longer run at the same time;
     - The Convert button text always matches what is running;
     - Dropping several unsupported files shows one warning instead of one per file;
-    - The next file starts immediately; durations are read in the background.
+    - The next file starts immediately; durations are read in the background;
+    - With `-map 0:<type>:N` options (as written by the Streams window), the files' streams are compared with the main window's input before the batch starts. Files whose stream layout differs (other track count, language or order) are listed with a choice to continue, since those options would pick other streams or fail there.
 - **Screen Recording**:
     - **Alt+F8** / tray Start is ignored while a recording runs (1.8.4 started a second session and orphaned the first); **Alt+F9** / tray Stop without a recording does nothing;
     - Closing nvencFFX during a recording now saves it first (1.8.4 lost the recording);

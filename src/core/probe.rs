@@ -5,7 +5,9 @@ use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use crate::core::streams::Streams;
 
 /// Next to our executable first, then on `PATH`.
 pub fn find_executable(name: &str) -> Option<PathBuf> {
@@ -200,33 +202,58 @@ impl InfoCache {
     }
 }
 
+/// The input's streams as listed by [`overview`]; `None` if ffprobe failed or
+/// listed no video, audio or subtitle stream.
+pub fn streams(ffprobe: &Path, file: &str) -> Option<Streams> {
+    let text = overview(ffprobe, file, Some(std::time::Duration::from_secs(10))).ok()??;
+    Some(crate::core::streams::parse(&text)).filter(|s| !s.is_empty())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Duration {
+pub enum Probed<T> {
     Pending,
-    Known(f64),
+    Known(T),
     Failed,
 }
 
-/// Per-file duration cache filled by background ffprobe runs.
-pub struct DurationCache {
-    entries: HashMap<String, Duration>,
-    tx: Sender<(String, Option<f64>)>,
-    rx: Receiver<(String, Option<f64>)>,
+pub type Duration = Probed<f64>;
+
+/// Per-file results filled by background ffprobe runs.
+pub struct ProbeCache<T> {
+    entries: HashMap<String, Probed<T>>,
+    tx: Sender<(String, Option<T>)>,
+    rx: Receiver<(String, Option<T>)>,
+    probe: fn(&Path, &str) -> Option<T>,
 }
+
+/// Durations in seconds.
+pub type DurationCache = ProbeCache<f64>;
+/// Stream lists, for the stream mapping of the command.
+pub type StreamCache = ProbeCache<Arc<Streams>>;
 
 impl Default for DurationCache {
     fn default() -> Self {
-        let (tx, rx) = channel();
-        Self { entries: HashMap::new(), tx, rx }
+        Self::new(duration)
     }
 }
 
-impl DurationCache {
+impl Default for StreamCache {
+    fn default() -> Self {
+        Self::new(|ffprobe, file| streams(ffprobe, file).map(Arc::new))
+    }
+}
+
+impl<T: Clone + Send + 'static> ProbeCache<T> {
+    fn new(probe: fn(&Path, &str) -> Option<T>) -> Self {
+        let (tx, rx) = channel();
+        Self { entries: HashMap::new(), tx, rx, probe }
+    }
+
     /// Collects finished probes; returns the files that just resolved.
     pub fn poll(&mut self) -> Vec<String> {
         let mut done = Vec::new();
-        while let Ok((file, d)) = self.rx.try_recv() {
-            self.entries.insert(file.clone(), d.map_or(Duration::Failed, Duration::Known));
+        while let Ok((file, result)) = self.rx.try_recv() {
+            self.entries.insert(file.clone(), result.map_or(Probed::Failed, Probed::Known));
             done.push(file);
         }
         done
@@ -234,35 +261,61 @@ impl DurationCache {
 
     /// The cached state of `file`, starting a probe when there is none yet.
     /// Returns `None` when no probe can run (no ffprobe, or the file is missing).
-    pub fn get(&mut self, ffprobe: Option<&Path>, file: &str, ctx: &egui::Context) -> Option<Duration> {
-        if let Some(d) = self.entries.get(file) {
-            return Some(*d);
+    pub fn get(&mut self, ffprobe: Option<&Path>, file: &str, ctx: &egui::Context) -> Option<Probed<T>> {
+        if let Some(state) = self.entries.get(file) {
+            return Some(state.clone());
         }
         let ffprobe = ffprobe?.to_path_buf();
         if file.is_empty() || !Path::new(file).is_file() {
             return None;
         }
-        self.entries.insert(file.to_owned(), Duration::Pending);
-        let (tx, file, ctx) = (self.tx.clone(), file.to_owned(), ctx.clone());
+        self.entries.insert(file.to_owned(), Probed::Pending);
+        let (tx, probe, file, ctx) = (self.tx.clone(), self.probe, file.to_owned(), ctx.clone());
         std::thread::spawn(move || {
-            let d = duration(&ffprobe, &file);
-            let _ = tx.send((file, d));
+            let result = probe(&ffprobe, &file);
+            let _ = tx.send((file, result));
             ctx.request_repaint();
         });
-        Some(Duration::Pending)
+        Some(Probed::Pending)
+    }
+
+    /// The result for `file`, probed on the calling thread when it is neither
+    /// known nor failed yet.
+    pub fn resolve(&mut self, ffprobe: Option<&Path>, file: &str) -> Option<&T> {
+        if !matches!(self.entries.get(file), Some(Probed::Known(_) | Probed::Failed))
+            && let Some(ffprobe) = ffprobe
+            && !file.is_empty()
+            && Path::new(file).is_file()
+        {
+            let result = (self.probe)(ffprobe, file);
+            self.entries.insert(file.to_owned(), result.map_or(Probed::Failed, Probed::Known));
+        }
+        self.value(file)
     }
 
     /// The cached state of `file` without starting a probe.
-    pub fn state(&self, file: &str) -> Option<Duration> {
-        self.entries.get(file).copied()
+    pub fn state(&self, file: &str) -> Option<Probed<T>> {
+        self.entries.get(file).cloned()
     }
 
-    /// The known duration of `file`, if already probed.
-    pub fn known(&self, file: &str) -> Option<f64> {
+    #[cfg(test)]
+    pub fn set(&mut self, file: &str, state: Probed<T>) {
+        self.entries.insert(file.to_owned(), state);
+    }
+
+    /// The result for `file`, if already probed.
+    pub fn value(&self, file: &str) -> Option<&T> {
         match self.entries.get(file) {
-            Some(Duration::Known(d)) if *d > 0.0 => Some(*d),
+            Some(Probed::Known(value)) => Some(value),
             _ => None,
         }
+    }
+}
+
+impl DurationCache {
+    /// The known duration of `file`, if already probed.
+    pub fn known(&self, file: &str) -> Option<f64> {
+        self.value(file).copied().filter(|d| *d > 0.0)
     }
 }
 

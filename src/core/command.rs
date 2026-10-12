@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use crate::config::settings::{Settings, VideoCodec};
+use crate::core::streams::{Stream, Streams};
 
 /// Inputs to the builder besides the persisted settings.
 pub struct Job<'a> {
@@ -12,6 +13,8 @@ pub struct Job<'a> {
     /// The "Additional Options (Trimming)" section is expanded. In precise-trim mode
     /// its FF options only apply while it is.
     pub additional_enabled: bool,
+    /// The input's streams from ffprobe; `None` maps every stream by type.
+    pub streams: Option<&'a Streams>,
 }
 
 /// Splits `-ss X` / `-to X` out of the additional options (fast seek before `-i`).
@@ -45,22 +48,86 @@ fn is_mkv(output: &str) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("mkv"))
 }
 
-/// Stream mapping + forced `mov_text` subtitles for non-MKV outputs.
-fn append_mapping(cmd: &mut Vec<String>, output: &str, other: &[String]) {
+fn has_sub_codec(args: &[String]) -> bool {
+    args.iter().any(|a| a == "-c:s" || a == "-scodec")
+}
+
+/// Stream mapping + `mov_text` subtitles for non-MKV outputs. Returns the output
+/// video stream to encode while the other video streams are copied, or `None`
+/// when the input has a single video stream.
+///
+/// Without the input's `streams` every stream of each type is mapped. With them a
+/// file with at most one video and one audio stream and no subtitles gets no
+/// mapping at all (ffmpeg's default selection takes both), picture-based
+/// subtitles are left out of non-MKV outputs and cover art out of MKV outputs
+/// (where it would become extra video tracks).
+fn append_mapping(cmd: &mut Vec<String>, output: &str, other: &[String], streams: Option<&Streams>) -> Option<usize> {
     let mkv = is_mkv(output);
-    if !other.iter().any(|a| a == "-map") {
+    let user_maps = other.iter().any(|a| a == "-map");
+    let Some(streams) = streams else {
+        if !user_maps {
+            if mkv {
+                extend(cmd, &["-map", "0", "-ignore_unknown"]);
+            } else {
+                extend(cmd, &[
+                    "-map", "0:v?", "-map", "0:a?", "-map", "0:s?",
+                    "-map_metadata", "0", "-map_chapters", "0", "-ignore_unknown",
+                ]);
+            }
+        }
+        if !mkv && !has_sub_codec(other) && !has_sub_codec(cmd) {
+            extend(cmd, &["-c:s", "mov_text"]);
+        }
+        return Some(0);
+    };
+
+    let sub_codec = has_sub_codec(other);
+    let subtitles: Vec<&Stream> =
+        streams.subtitle.iter().filter(|s| mkv || sub_codec || user_maps || !s.is_bitmap_subtitle()).collect();
+    let drop_pictures = mkv && !user_maps && !streams.pictures.is_empty();
+    let videos = streams.video.len() + if drop_pictures { 0 } else { streams.pictures.len() };
+    if !user_maps && (videos > 1 || streams.audio.len() > 1 || !subtitles.is_empty() || drop_pictures) {
         if mkv {
-            extend(cmd, &["-map", "0", "-ignore_unknown"]);
+            extend(cmd, &["-map", "0"]);
+            if drop_pictures {
+                for picture in &streams.pictures {
+                    extend(cmd, &["-map", &format!("-{}", picture.map_code)]);
+                }
+            }
+            extend(cmd, &["-ignore_unknown"]);
         } else {
-            extend(cmd, &[
-                "-map", "0:v?", "-map", "0:a?", "-map", "0:s?",
-                "-map_metadata", "0", "-map_chapters", "0", "-ignore_unknown",
-            ]);
+            if videos > 0 {
+                extend(cmd, &["-map", "0:v"]);
+            }
+            if !streams.audio.is_empty() {
+                extend(cmd, &["-map", "0:a"]);
+            }
+            if subtitles.len() == streams.subtitle.len() {
+                if !subtitles.is_empty() {
+                    extend(cmd, &["-map", "0:s"]);
+                }
+            } else {
+                for s in &subtitles {
+                    extend(cmd, &["-map", &s.map_code]);
+                }
+            }
         }
     }
-    let has_sub_codec = |args: &[String]| args.iter().any(|a| a == "-c:s" || a == "-scodec");
-    if !mkv && !has_sub_codec(other) && !has_sub_codec(cmd) {
-        extend(cmd, &["-c:s", "mov_text"]);
+    // MKV keeps subtitles as they are, unless one of them cannot be stored in it
+    // (ffmpeg then converts them to its default, ASS)
+    if !sub_codec && !subtitles.is_empty() {
+        if !mkv {
+            extend(cmd, &["-c:s", "mov_text"]);
+        } else if !streams.subtitle.iter().any(|s| matches!(s.codec(), "mov_text" | "dvb_teletext")) {
+            extend(cmd, &["-c:s", "copy"]);
+        }
+    }
+    // Every video stream keeps its input order in the output, unless the user maps
+    // streams themselves or cover art before the main video is left out
+    match (videos > 1, user_maps || drop_pictures) {
+        (false, _) => None,
+        (true, true) => Some(0),
+        (true, false) => Some(streams.video.first().map_or(0, Stream::type_index)),
     }
 }
 
@@ -107,7 +174,7 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         let (trim, other) = if s.precise_trim { (Vec::new(), words(add_opts)) } else { split_trim(add_opts) };
         cmd.extend(trim);
         extend(&mut cmd, &["-y", "-i", input]);
-        append_mapping(&mut cmd, output, &other);
+        append_mapping(&mut cmd, output, &other, job.streams);
         cmd.extend(other);
         extend(&mut cmd, &["-c:v", "copy"]);
         append_audio(&mut cmd, s)?;
@@ -134,7 +201,7 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         extend(&mut cmd, &["-threads", &s.encoder_threads]);
     }
     extend(&mut cmd, &["-y", "-i", input]);
-    append_mapping(&mut cmd, output, &other);
+    let encoded_video = append_mapping(&mut cmd, output, &other, job.streams);
 
     let quality = s.quality_level.trim();
     let bitrate = s.bitrate.trim();
@@ -198,7 +265,10 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
     }
 
     let codec = s.codec;
-    extend(&mut cmd, &["-c:v", "copy", "-c:v:0", codec.encoder()]);
+    match encoded_video {
+        Some(n) => extend(&mut cmd, &["-c:v", "copy", &format!("-c:v:{n}"), codec.encoder()]),
+        None => extend(&mut cmd, &["-c:v", codec.encoder()]),
+    }
     let mut opt = |flag: &str, value: &str| {
         if value != "auto" {
             extend(&mut cmd, &[flag, value]);
@@ -243,19 +313,21 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
     append_audio(&mut cmd, s)?;
     cmd.push(output.to_owned());
 
-    // Aim encoder options at the first video stream only, so copied streams such
-    // as cover art are left alone.
-    const V0_WITH_V: &[&str] = &[
+    // With several video streams, aim encoder options at the encoded one only, so
+    // copied streams such as cover art are left alone.
+    const VIDEO_OPTIONS: &[&str] = &[
         "-preset:v", "-tune:v", "-profile:v", "-level:v", "-tier:v", "-coder:v",
         "-multipass:v", "-lookahead_level:v", "-split_encode_mode:v", "-spatial-aq:v",
         "-temporal-aq:v", "-strict_gop:v", "-no-scenecut:v", "-weighted_pred:v",
         "-rc:v", "-qp:v", "-b:v", "-maxrate:v", "-bufsize:v",
     ];
+    let stream = encoded_video.map_or(String::new(), |n| format!(":{n}"));
     for arg in &mut cmd {
-        if V0_WITH_V.contains(&arg.as_str()) {
-            arg.push_str(":0");
+        if VIDEO_OPTIONS.contains(&arg.as_str()) {
+            arg.push_str(&stream);
         } else if arg == "-bf" {
-            arg.push_str(":v:0");
+            arg.push_str(":v");
+            arg.push_str(&stream);
         }
     }
     Ok(cmd)
@@ -314,8 +386,9 @@ pub fn preview_clip(
 
     let clip_job = Job { input: &clip_str, output: &encoded_str, ..*job };
     let mut encode = without_trim(preview(custom, s, &clip_job)?);
-    // Keep every stream of the clip unless the user maps streams themselves
-    if !s.additional_options.contains("-map")
+    // A custom command keeps every stream of the clip unless it maps streams itself
+    if custom.is_some()
+        && !s.additional_options.contains("-map")
         && let Some(i) = encode.iter().position(|a| a == "-i")
         && encode.get(i + 2).is_some_and(|a| a != "-map")
     {
@@ -430,7 +503,7 @@ mod tests {
     use super::*;
 
     fn job<'a>(output: &'a str) -> Job<'a> {
-        Job { ffmpeg: "ffmpeg.exe", input: "C:\\in put.mp4", output, additional_enabled: false }
+        Job { ffmpeg: "ffmpeg.exe", input: "C:\\in put.mp4", output, additional_enabled: false, streams: None }
     }
 
     #[test]
@@ -444,6 +517,87 @@ mod tests {
              -profile:v:0 main -tier:v:0 1 -multipass:v:0 qres -split_encode_mode:v:0 forced \
              -spatial-aq:v:0 1 -temporal-aq:v:0 1 -rc:v:0 constqp -qp:v:0 30 -c:a copy out.mp4"
         );
+    }
+
+    fn probed(lines: &[&str]) -> Streams {
+        crate::core::streams::parse(&lines.join("\n"))
+    }
+
+    const VIDEO: &str = "Stream #0:0: Video: h264 (High), yuv420p, 1920x1080, 25 fps";
+    const AUDIO: &str = "Stream #0:1(eng): Audio: aac (LC), 48000 Hz, stereo, fltp";
+
+    #[test]
+    fn a_simple_input_gets_no_stream_mapping() {
+        let streams = probed(&[VIDEO, AUDIO]);
+        for output in ["out.mp4", "out.mkv"] {
+            let job = Job { streams: Some(&streams), ..job(output) };
+            assert_eq!(
+                build(&Settings::default(), &job).unwrap().join(" "),
+                format!(
+                    "ffmpeg.exe -hide_banner -hwaccel:v cuda -threads 4 -y -i C:\\in put.mp4 \
+                     -c:v hevc_nvenc -preset:v p7 -tune:v hq -profile:v main -tier:v 1 -multipass:v qres \
+                     -split_encode_mode:v forced -spatial-aq:v 1 -temporal-aq:v 1 -rc:v constqp -qp:v 30 \
+                     -c:a copy {output}"
+                )
+            );
+        }
+        let s = Settings { codec: VideoCodec::H264, encoder_weighted_pred: true, ..Default::default() };
+        let cmd = build(&s, &Job { streams: Some(&streams), ..job("o.mp4") }).unwrap().join(" ");
+        assert!(cmd.contains("-weighted_pred:v 1 -bf:v 0"), "{cmd}");
+
+        let s = Settings { trim_streamcopy: true, ..Default::default() };
+        let cmd = build(&s, &Job { streams: Some(&probed(&[VIDEO])), ..job("o.mp4") }).unwrap().join(" ");
+        assert_eq!(cmd, "ffmpeg.exe -hide_banner -y -i C:\\in put.mp4 -c:v copy -c:a copy o.mp4");
+    }
+
+    #[test]
+    fn mapping_follows_the_probed_streams() {
+        let streams = probed(&[
+            "Stream #0:0: Video: mjpeg (Baseline), yuvj420p, 600x600 (attached pic)",
+            "Stream #0:1: Video: h264 (High), yuv420p, 1920x1080, 25 fps",
+            "Stream #0:2(eng): Audio: aac (LC), 48000 Hz, stereo",
+            "Stream #0:3(jpn): Audio: opus, 48000 Hz, 5.1",
+            "Stream #0:4(eng): Subtitle: subrip (srt)",
+            "Stream #0:5(eng): Subtitle: hdmv_pgs_subtitle (pgssub), 1920x1080",
+        ]);
+        let cmd = build(&Settings::default(), &Job { streams: Some(&streams), ..job("o.mp4") }).unwrap().join(" ");
+        assert!(
+            cmd.contains("-i C:\\in put.mp4 -map 0:v -map 0:a -map 0:s:0 -c:s mov_text -c:v copy -c:v:1 hevc_nvenc -preset:v:1 p7"),
+            "the cover art is copied and the picture subtitle left out: {cmd}"
+        );
+        assert!(cmd.ends_with("-rc:v:1 constqp -qp:v:1 30 -c:a copy o.mp4"), "{cmd}");
+
+        let cmd = build(&Settings::default(), &Job { streams: Some(&streams), ..job("o.mkv") }).unwrap().join(" ");
+        assert!(
+            cmd.contains("-i C:\\in put.mp4 -map 0 -map -0:v:0 -ignore_unknown -c:s copy -c:v hevc_nvenc -preset:v p7"),
+            "MKV leaves the cover art out: {cmd}"
+        );
+        assert!(!cmd.contains("mov_text"));
+        let covers_last = probed(&[
+            VIDEO,
+            AUDIO,
+            "Stream #0:2: Video: mjpeg (Baseline), yuvj420p, 500x750 (attached pic)",
+            "Stream #0:3: Video: mjpeg (Baseline), yuvj420p, 600x263 (attached pic)",
+        ]);
+        let cmd = build(&Settings::default(), &Job { streams: Some(&covers_last), ..job("o.mkv") }).unwrap().join(" ");
+        assert!(cmd.contains("-y -i C:\\in put.mp4 -map 0 -map -0:v:1 -map -0:v:2 -ignore_unknown -c:v hevc_nvenc"), "{cmd}");
+        let cmd = build(&Settings::default(), &Job { streams: Some(&covers_last), ..job("o.mp4") }).unwrap().join(" ");
+        assert!(cmd.contains("-map 0:v -map 0:a -c:v copy -c:v:0 hevc_nvenc"), "MP4 keeps them: {cmd}");
+        // MKV cannot store mov_text: ffmpeg's conversion to ASS stays
+        let mp4_subs = probed(&[VIDEO, AUDIO, "Stream #0:2(eng): Subtitle: mov_text (tx3g / 0x67337874)"]);
+        let cmd = build(&Settings::default(), &Job { streams: Some(&mp4_subs), ..job("o.mkv") }).unwrap().join(" ");
+        assert!(cmd.contains("-map 0 -ignore_unknown -c:v hevc_nvenc"), "{cmd}");
+
+        // User maps replace the mapping; the first output video stream is encoded
+        let s = Settings { additional_options: "-map 0:v:1 -map 0:a:1".into(), ..Default::default() };
+        let cmd = build(&s, &Job { streams: Some(&streams), ..job("o.mp4") }).unwrap().join(" ");
+        assert!(cmd.contains("-y -i C:\\in put.mp4 -c:s mov_text -c:v copy -c:v:0 hevc_nvenc"), "{cmd}");
+        assert!(cmd.contains("-map 0:v:1 -map 0:a:1 -c:a copy o.mp4"), "{cmd}");
+
+        // Two audio streams alone need the mapping too; text subtitles are all mapped
+        let streams = probed(&[VIDEO, AUDIO, "Stream #0:2: Audio: ac3, 48000 Hz, 5.1", "Stream #0:3: Subtitle: ass"]);
+        let cmd = build(&Settings::default(), &Job { streams: Some(&streams), ..job("o.mp4") }).unwrap().join(" ");
+        assert!(cmd.contains("-map 0:v -map 0:a -map 0:s -c:s mov_text -c:v hevc_nvenc -preset:v p7"), "{cmd}");
     }
 
     #[test]

@@ -11,6 +11,71 @@ pub struct Stream {
     pub map_code: String,
 }
 
+impl Stream {
+    /// The codec name: the first word of the description.
+    pub fn codec(&self) -> &str {
+        let desc = self.text.split_once(": ").map_or("", |(_, desc)| desc);
+        desc.split([' ', ',']).next().unwrap_or_default()
+    }
+
+    /// `N` of the `0:<type>:N` map code.
+    pub fn type_index(&self) -> usize {
+        self.map_code.rsplit(':').next().and_then(|n| n.parse().ok()).unwrap_or(0)
+    }
+
+    /// A picture-based subtitle, which cannot be converted to a text format such
+    /// as `mov_text`.
+    pub fn is_bitmap_subtitle(&self) -> bool {
+        matches!(self.codec(), "hdmv_pgs_subtitle" | "dvd_subtitle" | "dvb_subtitle" | "dvb_teletext" | "xsub")
+    }
+
+    /// The `(eng)` of `Stream #1(eng): ...`.
+    pub fn language(&self) -> Option<&str> {
+        let head = self.text.split_once(": ")?.0;
+        let open = head.rfind('(')?;
+        head[open + 1..].strip_suffix(')').filter(|l| !l.is_empty())
+    }
+
+    /// The language, or the codec for a stream without one.
+    fn label(&self) -> &str {
+        self.language().unwrap_or_else(|| self.codec())
+    }
+}
+
+/// Whether `args` hold a `-map 0:<type>:N` option, which selects a stream by its
+/// position among the streams of its type.
+pub fn has_positional_map<'a>(args: impl IntoIterator<Item = &'a str>) -> bool {
+    let mut previous = "";
+    args.into_iter().any(|arg| {
+        let positional = previous == "-map" && {
+            let parts: Vec<&str> = arg.trim_start_matches('-').trim_end_matches('?').split(':').collect();
+            parts.len() >= 3 && matches!(parts[1], "v" | "V" | "a" | "s") && parts[2].parse::<usize>().is_ok()
+        };
+        previous = arg;
+        positional
+    })
+}
+
+/// How the streams of `other` differ from `reference` in what `-map 0:<type>:N`
+/// options select: the number of streams of each type and their languages (codecs
+/// for streams without one) in order. `None` when they match.
+pub fn layout_difference(reference: &Streams, other: &Streams) -> Option<String> {
+    let names = ["video", "audio", "subtitle", "picture"];
+    let differences: Vec<String> = names
+        .iter()
+        .zip(reference.sections().iter().zip(other.sections()))
+        .filter_map(|(name, ((_, expected), (_, found)))| {
+            let labels = |list: &[Stream]| match list {
+                [] => "none".to_owned(),
+                _ => list.iter().map(Stream::label).collect::<Vec<_>>().join(", "),
+            };
+            let (expected, found) = (labels(expected), labels(found));
+            (expected != found).then(|| format!("{name}: {found} instead of {expected}"))
+        })
+        .collect();
+    (!differences.is_empty()).then(|| differences.join("; "))
+}
+
 /// The streams by section; video streams that are cover art go to `pictures`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Streams {
@@ -168,9 +233,44 @@ mod tests {
         );
         assert_eq!(entries(&streams.subtitle), [(3, "Stream #3(eng): ass (ssa)".into(), "0:s:0".into())]);
         assert_eq!(streams.pictures[0].map_code, "0:v:1", "cover art counts as a video stream");
+        assert_eq!(streams.pictures[0].type_index(), 1);
+        assert_eq!((streams.video[0].codec(), streams.audio[1].codec()), ("hevc", "aac"));
+        assert!(!streams.subtitle[0].is_bitmap_subtitle());
+        let pgs = parse("  Stream #0:2(eng): Subtitle: hdmv_pgs_subtitle (pgssub), 1920x1080");
+        assert!(pgs.subtitle[0].is_bitmap_subtitle());
         let order: Vec<usize> = streams.all().map(|s| s.index).collect();
         assert_eq!(order, [0, 1, 2, 3, 4]);
         assert!(parse("No such file").is_empty());
+    }
+
+    #[test]
+    fn layouts_are_compared_by_count_and_language() {
+        let reference = parse(OUTPUT);
+        assert_eq!(reference.audio[1].language(), Some("eng"));
+        assert_eq!(reference.pictures[0].language(), None);
+        assert_eq!(layout_difference(&reference, &parse(OUTPUT)), None);
+
+        let swapped = OUTPUT.replace("#0:1[0x1](jpn)", "#0:1[0x1](eng)").replace("#0:2(eng): AUDIO", "#0:2(jpn): AUDIO");
+        assert_eq!(layout_difference(&reference, &parse(&swapped)).unwrap(), "audio: eng, jpn instead of jpn, eng");
+
+        let fewer = OUTPUT.replace("Stream #0:3(eng): Subtitle: ass (ssa)", "").replace("(attached pic)", "");
+        assert_eq!(
+            layout_difference(&reference, &parse(&fewer)).unwrap(),
+            "video: eng, mjpeg instead of eng; subtitle: none instead of eng; picture: none instead of mjpeg"
+        );
+        let codec = OUTPUT.replace("mjpeg (Baseline)", "png");
+        assert_eq!(layout_difference(&reference, &parse(&codec)).unwrap(), "picture: png instead of mjpeg");
+    }
+
+    #[test]
+    fn positional_maps_are_detected() {
+        let positional = |text: &str| has_positional_map(text.split_whitespace());
+        assert!(positional("-ac 2 -ignore_unknown -map 0:v:0 -map 0:a:1"));
+        assert!(positional("-map 0:s:2?"));
+        assert!(positional("-map -0:a:0"));
+        assert!(!positional("-map 0 -map 0:a -map 0:s?"));
+        assert!(!positional("-map 0:a:m:language:eng"));
+        assert!(!positional("-map_metadata 0:s:0 -ac 2"));
     }
 
     #[test]
