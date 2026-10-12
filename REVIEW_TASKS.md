@@ -88,29 +88,33 @@
 - Сделать: привести дерево к фактическому `src/`.
 - Готово: дерево переписано по `src/`: убраны несуществующие `ui/*_section.rs`, `ui/main_view.rs`, `config/defaults.rs`; добавлены `ui/dialogs.rs`, `core/filters.rs`, `core/timecode.rs`, `config/testdata/`, `assets/`; у `app.rs` и `win32/mod.rs` описано фактическое содержимое. В строке `settings.rs` сразу 46 ключей (строка 134 остаётся задачей 11).
 
-### [ ] 10. Раздел 3 «Complete Dependency List» не совпадает с Cargo.toml
+### [x] 10. Раздел 3 «Complete Dependency List» не совпадает с Cargo.toml
 
 - `RUST_MIGRATION_PLAN.md:94`: зависимости `open = "5.4"` нет, файлы открываются через `ShellExecuteW`.
 - Нет `raw-window-handle = "0.6"` и фичи `preserve_order` у `serde_json`.
 - `windows-sys` в Cargo.toml стоит под `[target.'cfg(windows)'.dependencies]`.
 - Сделать: переписать блок по текущему Cargo.toml.
+- Готово: блок переписан по Cargo.toml в том же порядке: убран `open`, добавлены `raw-window-handle = "0.6"` (HWND окон eframe и родитель файловых диалогов из вторичных viewport), `serde_json` с `preserve_order`, `windows-sys` перенесён под `[target.'cfg(windows)'.dependencies]`, добавлена фича `Win32_UI_HiDpi` (её тоже не было). В заметке под блоком сказано, что он зеркалит Cargo.toml.
 
-### [ ] 11. «47 полей» вместо 46
+### [x] 11. «47 полей» вместо 46
 
 - `RUST_MIGRATION_PLAN.md:59` и `:134`.
 - Таблица раздела 4, Фаза 3 и тест `json_keys_follow_the_original_order` говорят 46.
 - Сделать: исправить на 46.
+- Готово: заголовок раздела 4 исправлен на «46 fields» (в таблице 46 полей, 3+4+2+7+5+5+6+1+4+3+2+3+1). Строка про `settings.rs` в разделе 2 уже говорила 46. Других «47» про ключи настроек в плане, CLAUDE.md и коде нет.
 
-### [ ] 12. Раздел 1 упоминает крейт tray-icon
+### [x] 12. Раздел 1 упоминает крейт tray-icon
 
 - `RUST_MIGRATION_PLAN.md:18`. Фаза 5 от него отказалась, всё на `windows-sys`.
 - Сделать: оставить только `windows-sys`.
+- Готово: ячейка теперь «Typed Rust bindings (`windows-sys`)». «Type-safe crates» убрано: `windows-sys` даёт сырые `unsafe` FFI-привязки, они типизированы, но не безопасны. Упоминания `tray-icon` в строках 104 и 276 оставлены, там объяснено, почему он не используется.
 
-### [ ] 13. Незакоммиченная иконка в заголовке вторичных окон
+### [x] 13. Незакоммиченная иконка в заголовке вторичных окон
 
 - `src/ui/dialogs.rs`: `title_bar` рисует иконку 16×16 из `window_icon()` перед заголовком.
 - В плане не описана, текущий release exe уже собран с ней.
 - Сделать: дописать в Фазу 1 рядом с пунктом про self-drawn title bar, затем закоммитить.
+- Готово: код уже закоммичен в `fe167b6` («cargo clippy», вместе с этим файлом). В Фазу 1 под пунктом про self-drawn title bar добавлен пункт про иконку: 16×16 перед заголовком, из 32×32 записи `nff.ico` через `window_icon()`, одна текстура на все viewport (`dialogs::title_bar_icon`).
 
 ---
 

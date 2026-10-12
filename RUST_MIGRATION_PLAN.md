@@ -15,7 +15,7 @@ This document outlines the step-by-step roadmap for migrating **nvencFFX** from 
 | **Startup Time** | 1.5–2.5 seconds | **< 50 ms (near-instant)** |
 | **RAM Footprint** | ~80–200 MB | **~25–45 MB** |
 | **UI Rendering** | Software / Tkinter Canvas | **Hardware-accelerated GPU** (DirectX 12 / Vulkan via `wgpu`) |
-| **Win32 Integration** | Fragile `ctypes` bindings (~700 LOC) | Type-safe Rust crates (`windows-sys`, `tray-icon`) |
+| **Win32 Integration** | Fragile `ctypes` bindings (~700 LOC) | Typed Rust bindings (`windows-sys`) |
 
 ---
 
@@ -80,29 +80,30 @@ nvencffx/
 
 ```toml
 [dependencies]
+# Clipboard: reading for the text menu's Paste (eframe already uses it for copying)
+arboard = { version = "3.6", default-features = false }
 # GUI framework
 eframe = { version = "0.36", default-features = false, features = ["wgpu_no_default_features", "default_fonts"] }
 egui = "0.36"
-# Only the Windows backends (Phase 9): eframe's `wgpu` feature adds GLES, Metal and web
+# Only the Windows backends (Phase 9): eframe's `wgpu` feature adds GLES, Metal and web.
+# DX12 includes the WARP software adapter as the last resort.
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "vulkan", "wgsl"] }
-
-# Serialization (settings, presets)
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
-
+# HWND of eframe windows (dark title bar, taskbar progress) and a handle wrapper used as
+# the parent of file dialogs opened from secondary viewports
+raw-window-handle = "0.6"
 # File dialogs (Browse, Save As, Output Folder)
 rfd = "0.17"
+# Serialization (settings, presets). `preserve_order` keeps the original's key order
+# in the JSON files, so they stay the same as the ones 1.8.4 writes.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 
-# Launch external files (Play Input/Output, Open output folder)
-open = "5.4"
-
-# Clipboard: reading for the text menu's Paste (eframe already uses it for copying)
-arboard = { version = "3.6", default-features = false }
-
-# Win32 API (ITaskbarList3, NtSuspendProcess, tray icon + RegisterHotKey, CreateToolhelp32Snapshot,
-# WASAPI loopback). Tray and hotkeys are raw Win32 too (Phase 5): `tray-icon` has no balloons,
-# `global-hotkey` is not needed. WASAPI is raw COM too (Phase 7): `cpal` would pull in the
-# `windows` crate for one capture stream.
+# Win32 API (ShellExecuteW for Play Input/Output and Open folder, ITaskbarList3,
+# NtSuspendProcess, tray icon + RegisterHotKey, CreateToolhelp32Snapshot, GetDpiForWindow,
+# WASAPI loopback). No `open` crate: ShellExecuteW does the same. Tray and hotkeys are raw
+# Win32 too (Phase 5): `tray-icon` has no balloons, `global-hotkey` is not needed. WASAPI
+# is raw COM too (Phase 7): `cpal` would pull in the `windows` crate for one capture stream.
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -114,6 +115,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Performance",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
@@ -130,11 +132,11 @@ panic = "abort"       # Remove stack unwinding tables
 strip = true          # Strip all debug symbols
 ```
 
-> **Note**: Before adding each dependency, verify the latest version on crates.io. The versions above are approximate baselines.
+> **Note**: This block mirrors `Cargo.toml` (same order); update both together. Before adding a dependency, check its latest version on crates.io.
 
 ---
 
-## 4. Settings Schema (nff_settings.json — 47 fields)
+## 4. Settings Schema (nff_settings.json — 46 fields)
 
 All fields from the current Python settings must be mapped 1:1 to a Rust `AppSettings` struct. Missing any field means broken backward compatibility.
 
@@ -182,6 +184,7 @@ Completed:
 - [x] `rfd` file dialogs on Browse / Save As / FFmpeg (parented to the main window); right-click opens the containing folder
 - [x] Modal dialogs replacing Tk `messagebox` / `simpledialog` (`ui/dialogs.rs`: info, warning, error, yes/no, text prompt)
 - [x] Self-drawn title bar for secondary windows (`dialogs::title_bar`, undecorated viewport); the main window keeps the native dark title bar for Aero Snap and native resizing
+- [x] App icon in that title bar: 16×16 before the title, scaled from the 32×32 `nff.ico` entry of `window_icon()` (the same image as the main window's native title bar), uploaded once as a texture and shared by all viewports (`dialogs::title_bar_icon`)
 
 - [x] Context menu widget (done in Phase 5): Cut / Copy / Paste / Delete / Select All on text fields; right-click on Convert pauses
 
