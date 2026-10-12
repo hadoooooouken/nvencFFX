@@ -12,7 +12,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ## Features 🎥
 
-* **Intuitive GUI:** Easy-to-use interface built with `egui`, GPU-rendered (DirectX 12 / Vulkan) from a single executable.
+* **Intuitive GUI:** Easy-to-use, responsive interface in a single portable executable - no Python or installer required.
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
 * **NVIDIA NVENC Support:** Utilizes NVIDIA's NVENC for high-performance, hardware-accelerated video encoding.
 * **Video Trimming:** Easily trim video segments by specifying start and end times (HH:MM:SS format).
@@ -21,7 +21,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 * **Additional Options:** Flexibility to add custom FFmpeg commands for advanced users.
 * **Drag-and-Drop Support:** Conveniently add input files by dragging them into the application window.
 
-![nff-mainwindow_start](screenshots/nff-mainwindow_settings.png)
+![nff-mainwindow_settings](screenshots/nff-mainwindow_settings.png)
 
 ![nff-ffprobe_tooltip](screenshots/nff-ffprobe_tooltip.png)
 
