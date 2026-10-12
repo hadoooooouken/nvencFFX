@@ -1,4 +1,4 @@
-//! Frame previews above the trim slider (`_show_thumbnail_preview`).
+//! Frame previews above the trim slider.
 
 use std::path::Path;
 use std::time::Duration;
@@ -17,8 +17,7 @@ pub struct Frame {
 }
 
 /// The attempts in order: CUDA decode with an 8-bit download, then 10-bit, then
-/// the CPU. ffmpeg converts the frame to raw RGBA, so no image decoder is needed
-/// (the original piped an MJPEG to Pillow).
+/// the CPU. ffmpeg converts the frame to raw RGBA, so no image decoder is needed.
 pub fn commands(ffmpeg: &str, input: &str, seconds: f64) -> [Vec<String>; 3] {
     let at = format!("{seconds:.3}");
     let cuda = |format: &str| {

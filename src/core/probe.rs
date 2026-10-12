@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-/// `_find_executable`: next to our executable first, then on `PATH`.
+/// Next to our executable first, then on `PATH`.
 pub fn find_executable(name: &str) -> Option<PathBuf> {
     let beside_exe = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join(name)));
     let on_path = std::env::var_os("PATH")
@@ -26,7 +26,7 @@ pub fn ffprobe_for(ffmpeg: &str) -> Option<PathBuf> {
     }
 }
 
-/// A console-less child process, like the original's `CREATE_NO_WINDOW` calls.
+/// A console-less child process (`CREATE_NO_WINDOW`).
 pub fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     #[allow(unused_mut)]
     let mut cmd = Command::new(program);
@@ -70,7 +70,7 @@ fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<Ve
     })
 }
 
-/// `_get_video_resolution`: width and height of the first video stream.
+/// Width and height of the first video stream.
 pub fn resolution(ffprobe: &Path, file: &str) -> Option<(u32, u32)> {
     let mut cmd = hidden_command(ffprobe);
     cmd.args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0"])
@@ -101,7 +101,7 @@ pub fn duration(ffprobe: &Path, file: &str) -> Option<f64> {
     String::from_utf8_lossy(&out.stdout).trim().parse().ok().filter(|d: &f64| d.is_finite())
 }
 
-/// `ffprobe -hide_banner <file>` for the input tooltip (`_update_tooltip_async`).
+/// `ffprobe -hide_banner <file>` for the input tooltip.
 pub fn media_info(ffprobe: &Path, file: &str) -> String {
     match overview(ffprobe, file, Some(std::time::Duration::from_secs(10))) {
         Ok(Some(text)) => compact_info(&text),
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn resolution_is_read_from_csv() {
         assert_eq!(parse_resolution("1920,1080\r\n"), Some((1920, 1080)));
-        assert_eq!(parse_resolution("1920,1080,"), None, "as the original's two-value split");
+        assert_eq!(parse_resolution("1920,1080,"), None, "exactly two values");
         assert_eq!(parse_resolution(""), None);
     }
 

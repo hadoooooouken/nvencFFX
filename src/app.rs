@@ -34,12 +34,11 @@ mod streams;
 mod thumbnail;
 mod vmaf;
 
-/// Pixel grid of the original CustomTkinter layout (`nvencFFX.py`, 100% scaling).
+/// Pixel grid of the main window layout (100% scaling).
 /// X offsets are relative to the content origin, which sits 31px from the window edge.
 mod grid {
     pub const LABEL_X: f32 = 10.0;
-    /// Fields of the top rows; 1.8.4 has them at 226 (CTk grid column width),
-    /// 120 clears the longest label ("Video Bitrate (k):", 96px).
+    /// Fields of the top rows; 120 clears the longest label ("Video Bitrate (k):", 96px).
     pub const ENTRY_X: f32 = 120.0;
     /// Buttons end at 748, as far from the right window edge (820) as the labels are from the left.
     pub const BUTTON_X: f32 = 608.0;
@@ -54,7 +53,7 @@ mod grid {
     pub const STATUS_CENTER_X: f32 = 366.0;
 
     // Window chrome (egui margins are whole pixels)
-    pub const OUTER_PAD: i8 = 10; // CTkScrollableFrame padx/pady
+    pub const OUTER_PAD: i8 = 10; // scrollable frame padx/pady
     pub const CONTENT_PAD: i8 = 21; // scrollable frame inset + main_frame padx
     pub const BOTTOM_PAD_X: i8 = 15;
     pub const BOTTOM_PAD_Y: i8 = 20;
@@ -112,8 +111,8 @@ fn command_viewport() -> ViewportId {
     ViewportId::from_hash_of("command_preview")
 }
 
-/// `nff_settings.json` is written once the settings stay unchanged this long
-/// (`_on_setting_changed`), and again on exit.
+/// `nff_settings.json` is written once the settings stay unchanged this long, and
+/// again on exit.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// What to do with a dialog's answer.
@@ -158,12 +157,12 @@ enum Taskbar {
     Clear,
 }
 
-/// `_update_window_size`: the window height with every section closed.
+/// The window height with every section closed.
 const BASE_HEIGHT: f32 = 700.0;
 /// Room left on the monitor for the title bar and the taskbar.
 const SCREEN_MARGIN: f32 = 80.0;
 
-/// Window height limits of `__init__` for the display scaling (`scaling` in %):
+/// Window height limits for the display scaling (`scaling` in %):
 /// `(geometry, minsize, maxsize)`.
 pub fn height_limits(scaling: f32) -> (f32, f32, f32) {
     if scaling >= 200.0 {
@@ -175,9 +174,8 @@ pub fn height_limits(scaling: f32) -> (f32, f32, f32) {
     }
 }
 
-/// `_update_window_size`: [`BASE_HEIGHT`] plus the height the open sections add,
-/// capped at the original's `maxsize` for the display scaling (`scaling` in %) and
-/// at the monitor height.
+/// [`BASE_HEIGHT`] plus the height the open sections add, capped at `maxsize` for the
+/// display scaling (`scaling` in %) and at the monitor height.
 fn fitted_height(sections: f32, scaling: f32, monitor_height: Option<f32>) -> f32 {
     let (_, _, max) = height_limits(scaling);
     let max = monitor_height.map_or(max, |m| max.min(m - SCREEN_MARGIN));
@@ -198,7 +196,7 @@ pub struct NvencFfxApp {
     pub input_file: String,
     pub output_file: String,
 
-    // Collapsible sections (TextCheckbox)
+    // Collapsible sections
     pub expand_encoder_settings: bool,
     pub expand_fps_scale_settings: bool,
     pub expand_audio_settings: bool,
@@ -356,8 +354,7 @@ fn default_output(input: &Path, codec: VideoCodec, last_output_dir: &str) -> Pat
     dir.join(format!("{stem}_{}_custom{}", codec.suffix(), output_extension(input)))
 }
 
-/// `_update_output_filename`: an auto-named output follows a codec change. Outputs
-/// that do not carry the `_<codec>_custom.` marker were chosen by hand and are kept.
+/// An auto-named output follows a codec change. Outputs that do not carry the `_<codec>_custom.` marker were chosen by hand and are kept.
 fn renamed_output(output: &str, input: &str, codec: VideoCodec) -> Option<String> {
     if input.is_empty() {
         return None;
@@ -377,13 +374,13 @@ fn renamed_output(output: &str, input: &str, codec: VideoCodec) -> Option<String
 }
 
 /// "FFmpeg exited with error code N" with the last output line; Windows codes are
-/// shown unsigned, as Python reported them.
+/// shown unsigned.
 fn exit_message(code: Option<i32>, last_line: &str) -> String {
     let code = code.map_or_else(|| "unknown".to_owned(), |c| (c as u32).to_string());
     format!("FFmpeg exited with error code {code}.\nLast output: {last_line}")
 }
 
-/// `_explore_path`: selects a file in Explorer, or opens a folder.
+/// Selects a file in Explorer, or opens a folder.
 fn explore(path: &str) {
     let path = path.trim_matches(|c| matches!(c, '"' | '\'' | ' '));
     if path.is_empty() {
@@ -597,7 +594,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// FFmpeg Path typed in by hand (`_on_ffmpeg_path_focus_out`).
+    /// FFmpeg Path typed in by hand.
     fn ffmpeg_path_edited(&mut self) {
         let path = Path::new(&self.s.ffmpeg_path);
         if !path.is_file() {
@@ -668,7 +665,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_on_tune_changed`
     fn tune_changed(&mut self) {
         if self.s.encoder_tune == "lossless" {
             self.s.encoder_spatial_aq = false;
@@ -714,7 +710,7 @@ impl NvencFfxApp {
         self.preset_indicator_active = true;
     }
 
-    /// Built-in preset radios and the Default button (`_apply_preset`).
+    /// Built-in preset radios and the Default button.
     fn apply_builtin_preset(&mut self, value: &str) {
         presets::apply_builtin(&mut self.s, value);
         self.reset_trim();
@@ -728,7 +724,7 @@ impl NvencFfxApp {
     }
 
     /// After loading `nff_settings.json`: drops a custom preset whose file is gone and
-    /// shows the selection like `_update_preset_indicator`.
+    /// shows the selection in the preset indicator.
     fn restore_preset_selection(&mut self) {
         let name = self.s.custom_preset_selected.clone();
         if self.s.selected_preset == "custom"
@@ -1033,8 +1029,8 @@ impl NvencFfxApp {
 
     // -- Running ffmpeg ------------------------------------------------------
 
-    /// Convert / Batch Convert / Cancel / Resume (`_toggle_conversion`). With files in
-    /// the Batch Converter, Convert runs them.
+    /// Convert / Batch Convert / Cancel / Resume. With files in the Batch Converter,
+    /// Convert runs them.
     fn toggle_conversion(&mut self, ctx: &egui::Context) {
         match &self.task {
             Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => self.resume_conversion(),
@@ -1046,7 +1042,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_start_conversion`: an applied custom command runs as it is.
+    /// An applied custom command runs as it is.
     fn start_conversion(&mut self, ctx: &egui::Context) {
         let args = match &self.custom_command {
             Some(custom) => custom.clone(),
@@ -1064,7 +1060,7 @@ impl NvencFfxApp {
         self.task = Some(Task { kind: TaskKind::Convert { input, args }, runner, paused: false });
     }
 
-    /// Right click on Convert (`_on_convert_right_click`, `_toggle_pause`).
+    /// Right click on Convert.
     fn toggle_pause(&mut self) {
         match &self.task {
             Some(Task { kind: TaskKind::Convert { .. }, paused: true, .. }) => self.resume_conversion(),
@@ -1073,7 +1069,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_pause_conversion`, `BatchConverterWindow.pause_conversion`
     fn pause_conversion(&mut self) {
         let Some(task) = &mut self.task else { return };
         #[cfg(windows)]
@@ -1086,7 +1081,6 @@ impl NvencFfxApp {
         self.taskbar(Taskbar::Paused);
     }
 
-    /// `_resume_conversion`
     fn resume_conversion(&mut self) {
         let Some(task) = &mut self.task else { return };
         #[cfg(windows)]
@@ -1118,7 +1112,7 @@ impl NvencFfxApp {
         let _ = update;
     }
 
-    /// Play 10s Preview / Cancel Preview (`_create_10s_preview`).
+    /// Play 10s Preview / Cancel Preview.
     fn toggle_preview(&mut self, ctx: &egui::Context) {
         match &self.task {
             Some(Task { kind: TaskKind::Preview { .. }, runner, .. }) => return runner.cancel(),
@@ -1134,7 +1128,7 @@ impl NvencFfxApp {
         let duration = match self.durations.state(&self.input_file) {
             Some(Duration::Known(d)) => Some(d),
             Some(Duration::Failed) => None,
-            // Still probing: ask directly, as the original did
+            // Still probing: ask directly
             _ => self.ffprobe.as_deref().and_then(|p| probe::duration(p, &self.input_file)),
         };
         let Some(duration) = duration.filter(|d| *d > 0.0) else {
@@ -1168,7 +1162,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// Shows an output line and the progress from its `time=` (`_update_progress`).
+    /// Shows an output line and the progress from its `time=`.
     fn task_line(&mut self, step: usize, text: String, ctx: &egui::Context) {
         let Some(task) = &self.task else { return };
         let total = match &task.kind {
@@ -1247,7 +1241,7 @@ impl NvencFfxApp {
                 }
                 "Preview created successfully!".to_owned()
             }
-            // The stream copy: the original showed this error and left the status alone
+            // The stream copy: show the error and leave the status alone
             (0, failure) => {
                 let reason = match failure {
                     Exit::Failed(code) => exit_message(code, &outcome.last_line),
@@ -1262,7 +1256,7 @@ impl NvencFfxApp {
         };
     }
 
-    /// Play Input File / Play Output File (`_play_input_file`, `_play_output_file`).
+    /// Play Input File / Play Output File.
     fn play(&mut self, output: bool) {
         let (path, unset, missing) = if output {
             (&self.output_file, "Output file is not specified", "Output file does not exist")
@@ -1287,7 +1281,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_cleanup_preview_files`
     fn cleanup_preview_files(&mut self) {
         for file in self.preview_files.drain(..) {
             if file.exists()
@@ -1435,7 +1428,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// TextCheckbox header row; returns the row rect.
+    /// Section header row; returns the row rect.
     fn section_header(ui: &mut Ui, expanded: &mut bool, title: &str) -> Rect {
         let r = row(ui, grid::ROW_H);
         place(ui, cell(r, grid::LABEL_X, 300.0), |ui| text_checkbox(ui, expanded, title));
@@ -1942,8 +1935,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_update_window_size`: after a section is opened or closed, the window grows
-    /// (or shrinks back) so the open sections fit. `opened` is the height they add.
+    /// After a section is opened or closed, the window grows (or shrinks back) so the open sections fit. `opened` is the height they add.
     fn fit_height(&mut self, ctx: &egui::Context, opened: f32) {
         let open = [
             self.expand_encoder_settings,
@@ -1953,7 +1945,7 @@ impl NvencFfxApp {
             self.expand_presets,
         ];
         let previous = self.fitted_sections.replace(open);
-        // Only on a toggle, as in the original: the startup size and a height the
+        // Only on a toggle: the startup size and a height the
         // user dragged stay until then
         if previous.is_none_or(|p| p == open) {
             return;
@@ -1988,7 +1980,6 @@ impl NvencFfxApp {
                 _ => self.trim_end_follows = None,
             }
         }
-        // `_update_cuda_output_format_state`
         if self.s.encoder_hwaccel != "cuda" {
             self.s.cuda_output_format = false;
         }
@@ -2003,7 +1994,6 @@ impl NvencFfxApp {
             let commands = self.tray.as_ref().map(|t| t.poll()).unwrap_or_default();
             for command in commands {
                 match command {
-                    // `_restore_app`
                     Command::Open => {
                         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
                         ctx.send_viewport_cmd(ViewportCommand::Focus);
@@ -2036,7 +2026,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_save_settings`
     fn save_settings(&mut self) {
         self.save_due = None;
         if let Some(file) = &self.settings_file
@@ -2088,7 +2077,7 @@ impl eframe::App for NvencFfxApp {
         egui::CentralPanel::default_margins().frame(panel_frame).show(ui, |ui| {
             ScrollArea::vertical()
                 .auto_shrink([false, false])
-                // Hidden while everything fits (CTkScrollableFrame always showed it)
+                // Hidden while everything fits
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(ui, |ui| {
                     egui::Frame::new()
@@ -2255,7 +2244,7 @@ mod tests {
     fn window_height_follows_open_sections() {
         assert_eq!(fitted_height(0.0, 100.0, None), 700.0);
         assert_eq!(fitted_height(150.4, 100.0, Some(1080.0)), 850.0);
-        assert_eq!(fitted_height(500.0, 100.0, Some(1080.0)), 900.0, "1.8.4's maxsize at 100%");
+        assert_eq!(fitted_height(500.0, 100.0, Some(1080.0)), 900.0, "maxsize at 100%");
         assert_eq!(fitted_height(500.0, 125.0, None), 800.0);
         assert_eq!(fitted_height(0.0, 200.0, None), 650.0);
         assert_eq!(fitted_height(500.0, 100.0, Some(768.0)), 688.0, "stays on a small screen");
@@ -2340,7 +2329,7 @@ mod tests {
     }
 
     #[test]
-    fn output_names_follow_the_original() {
+    fn output_names() {
         let input = Path::new(r"C:\v\clip.MKV");
         assert_eq!(default_output(input, VideoCodec::H264, ""), Path::new(r"C:\v\clip_h264_custom.MKV"));
         assert_eq!(

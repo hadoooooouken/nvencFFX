@@ -1,5 +1,5 @@
-//! Runs ffmpeg off the UI thread (`_run_ffmpeg`): output lines stream back over a
-//! channel, and a cancel terminates the running process.
+//! Runs ffmpeg off the UI thread: output lines stream back over a channel, and a
+//! cancel terminates the running process.
 
 use std::io::Read;
 use std::process::{Child, Stdio};
@@ -69,14 +69,13 @@ impl Runner {
         }
     }
 
-    /// Suspends the running command (`_pause_conversion`); `false` if none runs or
-    /// Windows refused. A cancel still terminates a suspended process.
+    /// Suspends the running command; `false` if none runs or Windows refused. A cancel still terminates a suspended process.
     #[cfg(windows)]
     pub fn pause(&self) -> bool {
         self.shared.child.lock().unwrap().as_ref().is_some_and(crate::win32::suspend::suspend)
     }
 
-    /// Resumes after [`Self::pause`] (`_resume_conversion`).
+    /// Resumes after [`Self::pause`].
     #[cfg(windows)]
     pub fn resume(&self) -> bool {
         self.shared.child.lock().unwrap().as_ref().is_some_and(crate::win32::suspend::resume)

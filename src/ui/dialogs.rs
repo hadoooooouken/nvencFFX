@@ -1,4 +1,4 @@
-//! In-window replacements for Tk's `messagebox` / `simpledialog`, and the
+//! In-window message boxes and input dialogs, and the
 //! self-drawn title bar of secondary windows.
 
 use eframe::egui::{

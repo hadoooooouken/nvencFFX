@@ -1,4 +1,4 @@
-//! `HH:MM:SS` trim times (`_time_str_to_seconds`, `_validate_trim_time`, ...).
+//! `HH:MM:SS` trim times.
 
 /// Seconds of a valid `HH:MM:SS` string, 0 for anything else.
 pub fn to_seconds(s: &str) -> u64 {
@@ -27,7 +27,7 @@ fn is_valid(s: &str) -> bool {
 }
 
 /// Checks one trim field against the duration and the other field. Values without a
-/// colon are left alone, as in the original. Returns the error message to show.
+/// colon are left alone. Returns the error message to show.
 pub fn validate(value: &str, other: &str, is_start: bool, duration: Option<f64>) -> Result<(), String> {
     if !value.contains(':') {
         return Ok(());
@@ -53,7 +53,7 @@ pub fn validate(value: &str, other: &str, is_start: bool, duration: Option<f64>)
     Ok(())
 }
 
-/// `_remove_existing_trim_options`: drops `-ss X`, `-to X` and `-c copy`.
+/// Drops `-ss X`, `-to X` and `-c copy`.
 pub fn strip_trim_options(options: &str) -> String {
     let words: Vec<&str> = options.split_whitespace().collect();
     let mut out = Vec::with_capacity(words.len());

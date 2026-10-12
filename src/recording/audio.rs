@@ -1,5 +1,5 @@
-//! Desktop audio of a screen recording (`_record_audio_loop`): WASAPI loopback of the
-//! default playback device, written to a 16-bit PCM WAV file.
+//! Desktop audio of a screen recording: WASAPI loopback of the default playback
+//! device, written to a 16-bit PCM WAV file.
 //!
 //! Raw COM through hand-written vtables like the taskbar overlay; `cpal` would pull
 //! in the `windows` crate for this one stream.
@@ -109,7 +109,7 @@ pub struct Capture {
 
 impl Capture {
     /// Records the desktop audio into `path` until [`Capture::stop`]. Errors only
-    /// leave the recording without audio, as in the original.
+    /// leave the recording without audio.
     pub fn start(path: PathBuf) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let (done_tx, done) = channel::<()>();

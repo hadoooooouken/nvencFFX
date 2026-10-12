@@ -1,5 +1,5 @@
-//! CustomTkinter look-alike widgets. Every widget takes its exact size (or derives it
-//! from its label) so screens can be laid out on the same pixel grid as `nvencFFX.py`.
+//! Custom-drawn widgets. Every widget takes its exact size (or derives it from its
+//! label) so screens can be laid out on a fixed pixel grid.
 
 use std::path::PathBuf;
 use eframe::egui::{
@@ -43,7 +43,7 @@ pub fn place<R>(ui: &mut Ui, rect: Rect, add: impl FnOnce(&mut Ui) -> R) -> R {
     add(&mut child)
 }
 
-/// Reserves a row and paints a CTkFrame (`SECONDARY_BG`, rounded) at `x` inside it.
+/// Reserves a row and paints a frame (`SECONDARY_BG`, rounded) at `x` inside it.
 /// Returns the frame rect for placing contents.
 pub fn section_frame(ui: &mut Ui, x: f32, width: f32, height: f32) -> Rect {
     let frame = cell(row(ui, height), x, width);
@@ -64,7 +64,7 @@ fn layout_text(ui: &Ui, text: &str, font: FontId, color: Color32) -> Arc<Galley>
 // Text
 // ---------------------------------------------------------------------------
 
-/// Plain CTkLabel text.
+/// Plain label text.
 pub fn label(ui: &mut Ui, text: &str) -> Response {
     ui.label(text)
 }
@@ -121,14 +121,14 @@ fn paint_button(ui: &mut Ui, size: Vec2, kind: ButtonKind) -> (Rect, Response) {
     (rect, response)
 }
 
-/// CTkButton: flat rounded fill, black 13px text.
+/// Button: flat rounded fill, black 13px text.
 pub fn button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response {
     let (rect, response) = paint_button(ui, size, kind);
     ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, body_font(), kind.text_color());
     response
 }
 
-/// CTkButton with `font=("", 14, "bold")` (the Convert button).
+/// Button with 14px bold text (the Convert button).
 pub fn bold_button(ui: &mut Ui, size: Vec2, text: &str, kind: ButtonKind) -> Response {
     let (rect, response) = paint_button(ui, size, kind);
     let font = FontId::proportional(14.0);
@@ -181,8 +181,8 @@ pub struct EntryStyle<'a> {
     pub disabled: bool,
 }
 
-/// CTkEntry: `SECONDARY_BG` fill, 2px `#565B5E` border, white text.
-/// Disabled entries turn grey like the original's custom FPS / width / bitrate fields.
+/// Entry: `SECONDARY_BG` fill, 2px `#565B5E` border, white text.
+/// Disabled entries turn grey (custom FPS / width / bitrate fields).
 pub fn entry(
     ui: &mut Ui,
     id_salt: &str,
@@ -227,7 +227,7 @@ pub fn entry(
 }
 
 // ---------------------------------------------------------------------------
-// Text context menu (CTkContextMenu)
+// Text context menu
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -251,7 +251,7 @@ pub fn selection_before_right_click(ctx: &Context, id: Id) -> Option<TextEditSta
     }
 }
 
-/// `CTkContextMenu`: Cut / Copy / Paste / Delete / Select All on a right click
+/// Cut / Copy / Paste / Delete / Select All on a right click
 /// into a text field. `selection` comes from [`selection_before_right_click`].
 pub fn text_context_menu(
     ui: &Ui,
@@ -301,8 +301,7 @@ pub fn text_context_menu(
     }
 }
 
-/// Runs a menu action on the `TextEdit` `id` and focuses it (`_cut_text`,
-/// `_copy_text`, `_paste_text`, `_delete_text`, `_select_all`). Copy takes the whole
+/// Runs a menu action on the `TextEdit` `id` and focuses it. Copy takes the whole
 /// text if nothing is selected; Cut and Delete need a selection.
 pub fn edit_text(
     ctx: &Context,
@@ -375,8 +374,8 @@ fn paint_control_label(ui: &Ui, box_rect: Rect, galley: Arc<Galley>) {
     ui.painter().galley(pos, galley, colors::LABEL_TEXT);
 }
 
-/// CTkCheckBox: 24px rounded box, 3px grey border; filled green with a checkmark
-/// when on. Hovering fills the box with the hover green, like CTk does.
+/// Checkbox: 24px rounded box, 3px grey border; filled green with a checkmark
+/// when on. Hovering fills the box with the hover green.
 pub fn checkbox(ui: &mut Ui, value: &mut bool, text: &str) -> Response {
     checkbox_enabled(ui, value, text, true)
 }
@@ -423,7 +422,7 @@ pub fn checkbox_enabled(ui: &mut Ui, value: &mut bool, text: &str, enabled: bool
     response
 }
 
-/// CTkRadioButton: 22px circle, 3px grey ring when off, 6px green ring when on.
+/// Radio button: 22px circle, 3px grey ring when off, 6px green ring when on.
 pub fn radio(ui: &mut Ui, selected: bool, text: &str) -> Response {
     let (_, box_rect, response, galley) = control_with_label(ui, dimensions::RADIO_SIZE, text);
     let (width, color) = match (selected, response.hovered()) {
@@ -453,7 +452,7 @@ pub fn radio_value(ui: &mut Ui, current: &mut String, value: &str, text: &str) -
 // Option menu
 // ---------------------------------------------------------------------------
 
-/// CTkOptionMenu: dark field + green arrow button, dropdown list with green hover.
+/// Option menu: dark field + green arrow button, dropdown list with green hover.
 pub fn option_menu(
     ui: &mut Ui,
     id_salt: &str,
@@ -535,10 +534,10 @@ pub fn option_menu(
 }
 
 // ---------------------------------------------------------------------------
-// Section toggle (TextCheckbox)
+// Section toggle
 // ---------------------------------------------------------------------------
 
-/// The original's `TextCheckbox`: 24px green badge with a white ▲/▼ and a title.
+/// Section header: 24px green badge with a white ▲/▼ and a title.
 pub fn text_checkbox(ui: &mut Ui, is_expanded: &mut bool, title: &str) -> Response {
     let badge = dimensions::BADGE_SIZE;
     let gap = 8.0;
@@ -578,7 +577,7 @@ pub fn text_checkbox(ui: &mut Ui, is_expanded: &mut bool, title: &str) -> Respon
 // Trim slider
 // ---------------------------------------------------------------------------
 
-/// Two-handle range slider from the original's trim canvas: grey 3px track,
+/// Two-handle range slider for trimming: grey 3px track,
 /// green selection bar and 16px green handles. `start`/`end` are fractions 0..=1.
 pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> Response {
     let (rect, mut response) = ui.allocate_exact_size(size, Sense::click_and_drag());
@@ -629,7 +628,7 @@ pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> R
     response
 }
 
-/// CTkProgressBar: 8px pill, `SECONDARY_BG` track, green progress (`fraction` 0..=1).
+/// Progress bar: 8px pill, `SECONDARY_BG` track, green progress (`fraction` 0..=1).
 pub fn progress_bar(ui: &mut Ui, width: f32, fraction: f32) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(width, 8.0), Sense::hover());
     let pill = CornerRadius::same(4);
@@ -706,7 +705,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn text_actions_follow_the_original() {
+    fn text_actions() {
         let ctx = egui::Context::default();
         let id = Id::new("field");
         let select = |from: usize, to: usize| {
@@ -774,7 +773,7 @@ mod tests {
         assert_eq!(c.size(), vec2(350.0, 38.0));
     }
 
-    /// CTkRadioButton is 22px across, checked or not; the checked ring leaves a 10px hole.
+    /// A radio button is 22px across, checked or not; the checked ring leaves a 10px hole.
     #[test]
     fn radio_circle_is_22px() {
         let ctx = Context::default();

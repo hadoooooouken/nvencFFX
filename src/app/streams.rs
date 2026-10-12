@@ -1,5 +1,5 @@
-//! Streams window (`_open_map_window`, `_create_stream_map_window`): checkboxes for
-//! the input's streams, written to Add FF Options as `-map` options.
+//! Streams window: checkboxes for the input's streams, written to Add FF Options as
+//! `-map` options.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -60,7 +60,7 @@ impl StreamsWindow {
 }
 
 impl NvencFfxApp {
-    /// The Streams button (`_open_map_window`).
+    /// The Streams button.
     pub(super) fn open_streams(&mut self, ctx: &egui::Context) {
         if self.streams.is_some() {
             ctx.send_viewport_cmd_to(viewport(), ViewportCommand::Focus);

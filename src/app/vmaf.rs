@@ -1,6 +1,4 @@
-//! VMAF analysis from a right click on Play Output File (`_on_vmaf_right_click`,
-//! `_run_vmaf_analysis`, `_execute_vmaf`). Runs alongside a conversion, as in the
-//! original.
+//! VMAF analysis from a right click on Play Output File. Runs alongside a conversion.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
@@ -26,7 +24,7 @@ pub(super) enum Vmaf {
     },
 }
 
-/// Both sizes, then the command (the part of `_run_vmaf_analysis` off the UI thread).
+/// Both sizes, then the command (the part of the analysis off the UI thread).
 fn prepare(ffmpeg: &str, ffprobe: Option<&Path>, input: &str, output: &str, scale_flags: &str) -> Prepared {
     let size = |file| ffprobe.and_then(|p| probe::resolution(p, file));
     let (Some(input_size), Some(output_size)) = (size(input), size(output)) else {
@@ -36,8 +34,8 @@ fn prepare(ffmpeg: &str, ffprobe: Option<&Path>, input: &str, output: &str, scal
     Ok(vmaf::command(ffmpeg, input, output, input_size, output_size, scale_flags, threads))
 }
 
-/// The status line for a finished run (`_execute_vmaf`): `Ok` only when the
-/// score parsed, which is when 1.8.4 beeps.
+/// The status line for a finished run: `Ok` only when the score parsed, which is
+/// when the app beeps.
 fn result_status(label: &str, score: Option<&str>) -> Result<String, String> {
     match score.map(str::parse::<f64>) {
         Some(Ok(score)) => Ok(format!("{label}: {score:.2}")),
@@ -73,7 +71,6 @@ impl NvencFfxApp {
         self.vmaf = Some(Vmaf::Probing(rx));
     }
 
-    /// `_cancel_vmaf`
     fn cancel_vmaf(&mut self) {
         if let Some(Vmaf::Running { runner, .. }) = self.vmaf.take() {
             runner.cancel();

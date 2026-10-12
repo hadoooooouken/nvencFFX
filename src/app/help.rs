@@ -1,5 +1,5 @@
-//! Help windows: the Help button's Manual / About / License tabs (`_show_main_help`)
-//! and the `?` buttons' ffmpeg help output (`_show_help_window`).
+//! Help windows: the Help button's Manual / About / License tabs and the `?`
+//! buttons' ffmpeg help output.
 
 use std::sync::{Arc, mpsc::{Receiver, channel}};
 use eframe::egui::{
@@ -78,7 +78,7 @@ impl Topic {
         ViewportId::from_hash_of(("help", self.title()))
     }
 
-    /// `_fetch_help_info`: the ffmpeg arguments for this topic.
+    /// The ffmpeg arguments for this topic.
     fn args(self, codec: VideoCodec) -> Vec<String> {
         match self {
             Self::Encoder => vec!["-h".to_owned(), format!("encoder={}_nvenc", codec.suffix())],
@@ -87,7 +87,7 @@ impl Topic {
     }
 }
 
-/// `_fetch_help_info`: ffmpeg's stdout, or its stderr if that is empty.
+/// Runs ffmpeg and returns its stdout, or its stderr if that is empty.
 fn fetch(ffmpeg: &str, args: &[String]) -> String {
     match hidden_command(ffmpeg).args(args).stdin(std::process::Stdio::null()).output() {
         Ok(out) => {
@@ -173,7 +173,7 @@ fn text_box(ui: &mut Ui, rect: egui::Rect, id: &str, both: bool, add: impl FnOnc
 }
 
 impl NvencFfxApp {
-    /// The Help button (`_show_main_help`).
+    /// The Help button.
     pub(super) fn open_main_help(&mut self, ctx: &egui::Context) {
         if self.help.main.is_some() {
             ctx.send_viewport_cmd_to(main_viewport(), ViewportCommand::Focus);
@@ -183,7 +183,7 @@ impl NvencFfxApp {
         self.help.main = Some(MainWindow { tab, text: Arc::new(tab_text(tab)), position: centered(ctx, MAIN_SIZE) });
     }
 
-    /// A `?` button (`_show_help_window`): runs ffmpeg in the background and shows
+    /// A `?` button: runs ffmpeg in the background and shows
     /// what it prints.
     pub(super) fn open_help(&mut self, topic: Topic, ctx: &egui::Context) {
         if self.help.topic(topic).is_some() {

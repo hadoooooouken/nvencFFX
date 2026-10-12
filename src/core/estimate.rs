@@ -1,4 +1,4 @@
-//! Output size estimate shown under the sections (`_run_ffprobe_for_size`).
+//! Output size estimate shown under the sections.
 
 /// Audio bitrate (kbit/s) counted for an audio option; 160 when unknown.
 pub fn audio_kbps(option: &str, custom: &str) -> f64 {
@@ -11,7 +11,7 @@ pub fn audio_kbps(option: &str, custom: &str) -> f64 {
     }
 }
 
-/// `(video + audio) kbit/s * seconds / 8 / 1024` in MB, as the original computes it.
+/// `(video + audio) kbit/s * seconds / 8 / 1024` in MB.
 pub fn size_mb(video_kbps: f64, audio_kbps: f64, seconds: f64) -> f64 {
     (video_kbps + audio_kbps) * seconds / 8.0 / 1024.0
 }
@@ -21,7 +21,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn estimate_matches_the_original_formula() {
+    fn estimate_formula() {
         assert_eq!(audio_kbps("copy", ""), 160.0);
         assert_eq!(audio_kbps("opus_256k", ""), 256.0);
         assert_eq!(audio_kbps("custom", "320"), 320.0);

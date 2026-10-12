@@ -1,5 +1,4 @@
-//! VMAF analysis of the output against the input (`_run_vmaf_analysis`,
-//! `_execute_vmaf`).
+//! VMAF analysis of the output against the input.
 
 /// The analysis command and the label its score is shown with. The output is the
 /// distorted video, the input the reference; both are cut to their first 30 s. An

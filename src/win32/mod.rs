@@ -76,7 +76,7 @@ pub fn display_scaling() -> f32 {
     (dpi as f32 / 96.0 * 100.0).round()
 }
 
-/// Dark title bar, like CustomTkinter gives the original.
+/// Dark title bar.
 ///
 /// Must run before the window is first shown (eframe keeps it hidden until the first
 /// frame): switching an already visible window on Windows 10 only repaints the caption
@@ -100,9 +100,8 @@ pub fn use_dark_title_bar(window: &impl HasWindowHandle) {
     }
 }
 
-/// `_center_window`: centred horizontally on the primary screen, 50 px from the top.
-/// Like Tk's `+x+y` (CustomTkinter leaves positions unscaled), these are physical
-/// pixels: the client width is centred, the frame's top-left corner is placed.
+/// Centred horizontally on the primary screen, 50 px from the top. These are
+/// physical pixels: the client width is centred, the frame's top-left corner is placed.
 pub fn center_window(window: &impl HasWindowHandle) {
     let Some(hwnd) = hwnd(window) else { return };
     let mut rect = unsafe { std::mem::zeroed() };

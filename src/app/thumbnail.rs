@@ -1,6 +1,4 @@
-//! Frame preview above the trim slider while the mouse button is held on it
-//! (`_on_slider_click`, `_schedule_thumbnail_preview`, `_show_thumbnail_preview`,
-//! `_hide_thumbnail_preview`).
+//! Frame preview above the trim slider while the mouse button is held on it.
 
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};

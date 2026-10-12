@@ -60,8 +60,8 @@ fn main() -> eframe::Result<()> {
             ..Default::default()
         },
         viewport: egui::ViewportBuilder::default()
-            // Same footprint as the CustomTkinter original: fixed width, resizable
-            // height within limits that shrink at higher display scaling
+            // Fixed width, resizable height within limits that shrink at higher
+            // display scaling
             .with_inner_size([820.0, height])
             .with_min_inner_size([820.0, min_height])
             .with_max_inner_size([820.0, max_height])

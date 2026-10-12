@@ -66,8 +66,7 @@ pub fn builtin_name(value: &str) -> &str {
     }
 }
 
-/// `_apply_preset`: "none" restores the defaults, the others apply the FHD/HD
-/// Fast/Quality profiles. Both first clear the filters and trimming; the caller
+/// "none" restores the defaults, the others apply the FHD/HD Fast/Quality profiles. Both first clear the filters and trimming; the caller
 /// moves `trim_end` to the probed duration afterwards.
 pub fn apply_builtin(s: &mut Settings, value: &str) {
     s.additional_options.clear();
@@ -156,7 +155,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_presets_match_the_original() {
+    fn builtin_presets_have_fixed_values() {
         let mut s = Settings { additional_options: "-ss 1".into(), ..Default::default() };
         apply_builtin(&mut s, "hdq");
         assert_eq!(s.video_format_option, "1280");

@@ -1,4 +1,4 @@
-//! Screen recording session (`_start_recording` … `_finalize_recording`).
+//! Screen recording session.
 //!
 //! One worker thread runs a whole recording: after a short delay ffmpeg captures the
 //! desktop (ddagrab) into numbered segments, and a new segment starts whenever ffmpeg
@@ -30,7 +30,7 @@ const POLL: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Timing {
-    /// Before the first segment (the original's 2 s `Timer`).
+    /// Before the first segment.
     pub start_delay: Duration,
     /// Before a restarted segment: lets DXGI settle after a display change.
     pub restart_delay: Duration,
@@ -141,7 +141,7 @@ impl Session {
         self.rx.try_iter().collect()
     }
 
-    /// `_stop_recording`: ffmpeg finishes its segment, then the recording is saved.
+    /// Lets ffmpeg finish its segment, then the recording is saved.
     pub fn stop(&self) {
         *self.shared.stopped.lock().unwrap() = true;
         self.shared.wake.notify_all();
@@ -167,7 +167,6 @@ fn run(config: &Config, shared: &Shared, send: &dyn Fn(Event)) {
     let mut audio = None;
     let (mut part, mut attempts) = (1, 0);
     let failure = loop {
-        // `_launch_recording_segment`
         let segment = config.files.part(part, &config.extension);
         let code = match spawn(&config.command, &segment) {
             Ok((child, lines)) => {
@@ -182,7 +181,7 @@ fn run(config: &Config, shared: &Shared, send: &dyn Fn(Event)) {
             Err(e) if part == 1 => return send(Event::StartFailed(e.to_string())),
             Err(e) => format!("restart error: {e}"),
         };
-        // `_restart_recording`; a manual stop never triggers it
+        // Restart; a manual stop never triggers it
         if shared.stopped() {
             break None;
         }
@@ -225,8 +224,7 @@ fn spawn(args: &[String], segment: &Path) -> std::io::Result<(Child, Receiver<St
     Ok((child, rx))
 }
 
-/// `_monitor_recording`: forwards ffmpeg's output until it exits; on a stop request
-/// sends `q` and kills it if it does not finish in time. Returns the exit code.
+/// Forwards ffmpeg's output until it exits; on a stop request sends `q` and kills it if it does not finish in time. Returns the exit code.
 fn watch(
     mut child: Child,
     lines: &Receiver<String>,
@@ -262,7 +260,7 @@ fn watch(
             Ok(Some(status)) => Some(status),
             Err(_) => None,
         };
-        // Windows exit codes unsigned, as Python reported them
+        // Windows exit codes unsigned
         return status.and_then(|s| s.code()).map_or_else(|| "unknown".to_owned(), |c| (c as u32).to_string());
     }
 }
@@ -283,7 +281,7 @@ fn non_empty(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|m| m.len() > 0)
 }
 
-/// `_concat_recording_parts`: one usable segment is used as it is.
+/// One usable segment is used as it is.
 fn join_parts(config: &Config, parts: &[PathBuf]) -> Result<PathBuf, String> {
     let usable: Vec<&Path> = parts.iter().map(PathBuf::as_path).filter(|p| non_empty(p)).collect();
     match usable[..] {
@@ -327,7 +325,7 @@ fn save(config: &Config, parts: &[PathBuf], send: &dyn Fn(Event)) -> Result<Path
     Ok(joined)
 }
 
-/// `_finalize_recording`: temp files are deleted only once the output is saved.
+/// Temp files are deleted only once the output is saved.
 fn finalize(config: &Config, parts: &[PathBuf], failure: Option<String>, send: &dyn Fn(Event)) {
     send(Event::Joining);
     match save(config, parts, send) {

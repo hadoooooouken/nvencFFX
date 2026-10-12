@@ -1,11 +1,11 @@
-//! The persisted settings model: the same keys, value types and key order as
-//! `_get_current_settings` in `nvencFFX.py`, so preset files stay interchangeable.
+//! The persisted settings model. Keys, value types and key order are fixed, so
+//! settings and preset files stay interchangeable with older versions.
 
 use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-/// `nff_settings.json` next to the executable, where the original keeps it.
+/// `nff_settings.json` next to the executable.
 pub fn settings_file() -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -93,7 +93,7 @@ pub struct Settings {
 
     pub selected_preset: String,
     /// The preset dropdown's value. Written out only while `selected_preset` is
-    /// "custom", like the original.
+    /// "custom".
     pub custom_preset_selected: String,
 
     pub batch_output_folder: String,
@@ -101,7 +101,7 @@ pub struct Settings {
     pub batch_output_container: String,
 
     /// Always this build's version: `apply_json` ignores the stored one, so saving
-    /// stamps the writer's version like the original. The schema is unchanged since
+    /// stamps the writer's version. The schema is unchanged since
     /// 1.x; a migration step would go into `load`, keyed on the file's version.
     pub version: String,
 }
@@ -169,7 +169,7 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// JSON object in the original's key order (`_get_current_settings`).
+    /// JSON object in the fixed key order.
     pub fn to_json(&self) -> Map<String, Value> {
         let Ok(Value::Object(mut map)) = serde_json::to_value(self) else {
             unreachable!("Settings serializes to an object");
@@ -180,7 +180,7 @@ impl Settings {
         map
     }
 
-    /// `_load_settings`: merges the file into `self`. A missing file is not an error.
+    /// Merges the file into `self`. A missing file is not an error.
     pub fn load(&mut self, path: &Path) -> Result<(), String> {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
@@ -195,8 +195,7 @@ impl Settings {
     }
 
     /// Writes `nff_settings.json` / a preset file with 4-space indentation and raw
-    /// UTF-8, like `json.dump(indent=4, ensure_ascii=False)`, and CRLF line ends like
-    /// the original's text-mode file on Windows, so both versions write the same bytes.
+    /// UTF-8 and CRLF line ends, the same bytes older versions write.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         let mut out = Vec::new();
         let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
@@ -207,7 +206,7 @@ impl Settings {
         std::fs::write(path, text.replace('\n', "\r\n"))
     }
 
-    /// Merges a settings / preset object into `self` like `_apply_settings_dict`:
+    /// Merges a settings / preset object into `self`:
     /// missing or empty keys keep the current value, except the three
     /// additional-option fields, which a preset without them clears.
     pub fn apply_json(&mut self, map: &Map<String, Value>) {
@@ -292,7 +291,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_keys_follow_the_original_order() {
+    fn json_keys_keep_their_order() {
         let keys: Vec<String> = Settings::default().to_json().keys().cloned().collect();
         assert_eq!(keys.first().map(String::as_str), Some("ffmpeg_path"));
         assert_eq!(keys.last().map(String::as_str), Some("version"));
@@ -310,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_merges_like_the_original() {
+    fn apply_merges_into_current_values() {
         let mut s = Settings {
             additional_filter_options: "hflip".into(),
             encoder_preset: "p3".into(),
@@ -338,7 +337,7 @@ mod tests {
         fresh.load(&file).expect("a missing file keeps the defaults");
         assert_eq!(fresh, Settings::default());
 
-        // A 1.8.4 file: older version, keys in any order, some missing
+        // An older version's file: keys in any order, some missing
         std::fs::write(
             &file,
             r#"{"version": "1.8.4", "codec": "h264", "last_input_dir": "D:\\clips",
@@ -380,15 +379,14 @@ mod tests {
         assert_eq!(back, s);
     }
 
-    /// `testdata/nff_settings-1.8.4.json` was written like the original's `_save_settings`
-    /// (`json.dump(indent=4, ensure_ascii=False)` to a UTF-8 text file, Python 3 on
-    /// Windows): non-ASCII paths, quotes, backslashes, control characters. Loading and
-    /// saving it gives the same bytes apart from the version stamp, so 1.8.4 reads ours.
+    /// `testdata/nff_settings-1.8.4.json` was written by version 1.8.4: non-ASCII paths,
+    /// quotes, backslashes, control characters. Loading and saving it gives the same
+    /// bytes apart from the version stamp, so 1.8.4 reads ours.
     #[test]
-    fn rewrites_a_python_written_file_byte_for_byte() {
-        const PYTHON: &str = include_str!("testdata/nff_settings-1.8.4.json");
-        let file = std::env::temp_dir().join(format!("nvencffx-python-{}.json", std::process::id()));
-        std::fs::write(&file, PYTHON).unwrap();
+    fn rewrites_a_1_8_4_file_byte_for_byte() {
+        const OLD: &str = include_str!("testdata/nff_settings-1.8.4.json");
+        let file = std::env::temp_dir().join(format!("nvencffx-1.8.4-{}.json", std::process::id()));
+        std::fs::write(&file, OLD).unwrap();
         let mut s = Settings::default();
         s.load(&file).unwrap();
         assert_eq!(s.last_input_dir, r"D:\Видео\клипы «новые» 日本");
@@ -402,6 +400,6 @@ mod tests {
         let written = std::fs::read_to_string(&file).unwrap();
         let _ = std::fs::remove_file(&file);
         let version = format!(r#""version": "{}""#, env!("CARGO_PKG_VERSION"));
-        assert_eq!(written, PYTHON.replace(r#""version": "1.8.4""#, &version));
+        assert_eq!(written, OLD.replace(r#""version": "1.8.4""#, &version));
     }
 }

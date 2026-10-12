@@ -1,5 +1,4 @@
-//! Terminates the ffmpeg / ffprobe processes we started (`_kill_our_ffmpeg_processes`),
-//! so none outlive the app.
+//! Terminates the ffmpeg / ffprobe processes we started, so none outlive the app.
 
 use windows_sys::Win32::{
     Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
@@ -13,8 +12,7 @@ use windows_sys::Win32::{
 };
 
 /// PIDs of this process's children whose executable name is one of `names`
-/// (ignoring case). The original matched every `ffmpeg.exe` started from our
-/// ffmpeg path, which also hit instances other programs launched from it.
+/// (ignoring case), so instances other programs launched are left alone.
 pub fn children_named(names: &[&str]) -> Vec<u32> {
     let me = std::process::id();
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };

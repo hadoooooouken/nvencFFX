@@ -1,5 +1,5 @@
-//! FFmpeg argument builder (`_build_ffmpeg_command`) and the parsing / quoting
-//! used by the editable command preview (custom command mode).
+//! FFmpeg argument builder and the parsing / quoting used by the editable command
+//! preview (custom command mode).
 
 use std::path::{Path, PathBuf};
 use crate::config::settings::{Settings, VideoCodec};
@@ -9,8 +9,8 @@ pub struct Job<'a> {
     pub ffmpeg: &'a str,
     pub input: &'a str,
     pub output: &'a str,
-    /// The "Additional Options (Trimming)" section is expanded. Like the original, in
-    /// precise-trim mode its FF options only apply while it is.
+    /// The "Additional Options (Trimming)" section is expanded. In precise-trim mode
+    /// its FF options only apply while it is.
     pub additional_enabled: bool,
 }
 
@@ -64,7 +64,6 @@ fn append_mapping(cmd: &mut Vec<String>, output: &str, other: &[String]) {
     }
 }
 
-/// `_append_audio_options`
 pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
     match s.audio_option.as_str() {
         "disable" => extend(cmd, &["-an"]),
@@ -83,7 +82,7 @@ pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
                 .map_err(|_| "Custom audio bitrate must be a number.".to_owned())?;
             cmd.extend(["-c:a".into(), "aac".into(), "-b:a".into(), format!("{kbps}k")]);
         }
-        // Unknown values (hand-edited presets) add nothing, as in 1.8.4
+        // Unknown values (hand-edited presets) add nothing
         _ => {}
     }
     Ok(())
@@ -147,7 +146,7 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         }
         rate.extend(["-rc:v".into(), "constqp".into(), "-qp:v".into(), quality.to_owned()]);
     } else {
-        // Python's ints never overflow; a bitrate too large for i64 maths is rejected
+        // A bitrate too large for i64 maths is rejected
         // with the same message as a non-number
         let (maxrate, bufsize) = bitrate
             .parse::<i64>()
@@ -278,8 +277,7 @@ pub fn preview(custom: Option<&[String]>, s: &Settings, job: &Job<'_>) -> Result
     Ok(cmd)
 }
 
-/// The commands behind "Play 10s Preview" (`_create_10s_preview`): 10 seconds from
-/// the middle of the input are stream-copied to `clip`, which is then encoded to
+/// The commands behind "Play 10s Preview": 10 seconds from the middle of the input are stream-copied to `clip`, which is then encoded to
 /// `encoded` with the current settings (or custom command) minus any trimming.
 pub struct PreviewClip {
     pub copy: Vec<String>,
@@ -353,9 +351,9 @@ fn looks_like_path(arg: &str) -> bool {
     (arg.contains(':') && arg.contains('\\')) || arg.starts_with("\\\\")
 }
 
-/// Splits an edited command line. Double quotes group words and are removed. As in
-/// the original, an unquoted Windows path that was split at its spaces is glued back
-/// together up to the next `-option`.
+/// Splits an edited command line. Double quotes group words and are removed. An
+/// unquoted Windows path that was split at its spaces is glued back together up to
+/// the next `-option`.
 pub fn split(text: &str) -> Vec<String> {
     let mut args: Vec<(String, bool)> = Vec::new();
     let (mut cur, mut quoted, mut in_quotes, mut started) = (String::new(), false, false, false);
@@ -398,7 +396,7 @@ pub fn split(text: &str) -> Vec<String> {
     out
 }
 
-/// `_apply_command_changes` validation: an input after `-i` and an output file
+/// Validates an edited command: an input after `-i` and an output file
 /// (the last argument that is not an option value).
 pub fn parse_custom(text: &str) -> Result<Vec<String>, String> {
     let args = split(text);
@@ -436,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn default_settings_build_the_original_command() {
+    fn default_settings_build_the_default_command() {
         let cmd = build(&Settings::default(), &job("out.mp4")).unwrap().join(" ");
         assert_eq!(
             cmd,

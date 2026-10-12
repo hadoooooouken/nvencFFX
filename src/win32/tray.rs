@@ -1,8 +1,6 @@
-//! Notification-area icon with its menu, balloons and the global recording hotkeys
-//! (`TrayIcon`).
+//! Notification-area icon with its menu, balloons and the global recording hotkeys.
 //!
-//! The original hooked the main window's procedure. Here a hidden window on its own
-//! thread receives the tray and `WM_HOTKEY` messages, and the chosen commands reach
+//! A hidden window on its own thread receives the tray and `WM_HOTKEY` messages, and the chosen commands reach
 //! the UI over a channel, like ffmpeg output does.
 
 use std::cell::RefCell;
@@ -37,9 +35,9 @@ pub enum Command {
     StartRecording,
     /// Alt+F9 / "Stop Recording"
     StopRecording,
-    /// Double click / "Open nvencFFX" (`_restore_app`)
+    /// Double click / "Open nvencFFX"
     Open,
-    /// "Exit" (`_on_close`)
+    /// "Exit"
     Exit,
 }
 
@@ -76,7 +74,6 @@ struct Icon {
 }
 
 impl Icon {
-    /// `_nid`
     fn data(self) -> NOTIFYICONDATAW {
         let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
         nid.cbSize = size_of::<NOTIFYICONDATAW>() as u32;
@@ -211,7 +208,7 @@ fn run(tx: Sender<Command>, wake: impl Fn() + Send + 'static, ready: Sender<Icon
     };
     STATE.with(|s| *s.borrow_mut() = Some(Rc::new(state)));
     unsafe {
-        // Another instance may hold them; the original ignored that too
+        // Another instance may hold them; that is ignored
         RegisterHotKey(hwnd, HOTKEY_START_ID, MOD_ALT | MOD_NOREPEAT, VK_F8 as u32);
         RegisterHotKey(hwnd, HOTKEY_STOP_ID, MOD_ALT | MOD_NOREPEAT, VK_F9 as u32);
     }
@@ -231,7 +228,6 @@ fn run(tx: Sender<Command>, wake: impl Fn() + Send + 'static, ready: Sender<Icon
     }
 }
 
-/// `_show_context_menu`
 fn show_menu(hwnd: HWND) -> Option<Command> {
     let items: [(usize, &str); 4] = [
         (IDM_START_RECORDING, "Start Recording (Alt + F8)"),

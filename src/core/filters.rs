@@ -1,4 +1,4 @@
-//! Quick buttons of the Additional Options section (`_add_video_filter`, ...).
+//! Quick buttons of the Additional Options section.
 
 use crate::config::settings::Settings;
 
@@ -47,7 +47,7 @@ pub fn set_speed(s: &mut Settings, speed: f64) {
     s.additional_audio_filter_options = format!("atempo={}", py_float(speed));
 }
 
-/// Python's `str(float)`: always at least one decimal (`2.0`, `0.5`).
+/// Always at least one decimal (`2.0`, `0.5`).
 fn py_float(v: f64) -> String {
     if v.fract() == 0.0 { format!("{v:.1}") } else { v.to_string() }
 }

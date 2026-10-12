@@ -4,16 +4,16 @@ use eframe::egui::{
     epaint::text::HintingTarget,
 };
 
-/// nvencFFX palette: the app's own colors from `nvencFFX.py` plus the CustomTkinter
-/// dark-theme defaults the original inherits (labels, borders, scrollbar).
+/// nvencFFX palette: the app's own colors plus the dark-theme defaults for labels,
+/// borders and the scrollbar.
 pub mod colors {
     use super::Color32;
 
-    // Backgrounds (nvencFFX.py)
+    // Backgrounds
     pub const PRIMARY_BG: Color32 = Color32::from_rgb(0x0e, 0x11, 0x13);
     pub const SECONDARY_BG: Color32 = Color32::from_rgb(0x17, 0x1b, 0x1f);
 
-    // Accents (nvencFFX.py)
+    // Accents
     pub const ACCENT_GREEN: Color32 = Color32::from_rgb(0x4f, 0xb6, 0x2f);
     pub const HOVER_GREEN: Color32 = Color32::from_rgb(0x47, 0xa3, 0x2a);
     pub const ACCENT_GREY: Color32 = Color32::from_rgb(0xb2, 0xb2, 0xb2);
@@ -23,12 +23,12 @@ pub mod colors {
     pub const ACCENT_ORANGE: Color32 = Color32::from_rgb(0xf0, 0xa0, 0x20);
     pub const HOVER_ORANGE: Color32 = Color32::from_rgb(0xd3, 0x8c, 0x1a);
 
-    // Text (nvencFFX.py)
+    // Text
     pub const TEXT_COLOR_W: Color32 = Color32::WHITE;
     pub const TEXT_COLOR_B: Color32 = Color32::BLACK;
     pub const PLACEHOLDER: Color32 = Color32::from_rgb(0xa0, 0xa0, 0xa0);
 
-    // CustomTkinter dark-theme defaults
+    // Dark-theme defaults
     pub const LABEL_TEXT: Color32 = Color32::from_rgb(0xdc, 0xe4, 0xee);
     pub const TEXT_DISABLED: Color32 = Color32::from_rgb(0x99, 0x99, 0x99); // gray60
     pub const ENTRY_BORDER: Color32 = Color32::from_rgb(0x56, 0x5b, 0x5e);
@@ -41,11 +41,11 @@ pub mod colors {
     pub const WINDOW_BORDER: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
 }
 
-/// Sizes of the CustomTkinter widgets the original layout is built from.
+/// Widget sizes the layout is built from.
 pub mod dimensions {
     pub const CORNER_RADIUS: u8 = 6;
-    pub const WIDGET_HEIGHT: f32 = 28.0; // CTkButton / CTkEntry / CTkOptionMenu
-    pub const BUTTON_WIDTH: f32 = 140.0; // CTkButton / CTkOptionMenu default width
+    pub const WIDGET_HEIGHT: f32 = 28.0; // button / entry / option menu
+    pub const BUTTON_WIDTH: f32 = 140.0; // button / option menu default width
     pub const BIG_BUTTON_HEIGHT: f32 = 40.0; // bottom bar
     pub const ENTRY_BORDER: f32 = 2.0;
     pub const CHECKBOX_SIZE: f32 = 24.0;
@@ -55,15 +55,15 @@ pub mod dimensions {
     pub const RADIO_BORDER_CHECKED: f32 = 6.0;
     pub const BADGE_SIZE: f32 = 24.0;
     pub const CONTROL_TEXT_GAP: f32 = 6.0; // box/circle to label
-    pub const FONT_SIZE: f32 = 13.0; // CTkFont default on Windows
+    pub const FONT_SIZE: f32 = 13.0;
 }
 
-/// Installs Roboto (the font CustomTkinter ships and uses on Windows) as the
+/// Installs Roboto as the
 /// primary proportional font. egui's bundled fonts stay as glyph fallbacks.
 fn install_fonts(ctx: &egui::Context) {
     // egui's default (smooth) hinting leaves stems soft at 13-14px, and its options change
     // nothing on Consolas, whose own instructions skip horizontal fitting in smooth mode.
-    // Mono hinting snaps the stems to whole pixels, the closest to Tk's GDI text.
+    // Mono hinting snaps the stems to whole pixels, the closest to GDI text.
     let crisp = || FontTweak { hinting_target: HintingTarget::Mono, ..Default::default() };
 
     let mut fonts = FontDefinitions::default();
@@ -109,10 +109,10 @@ fn visuals() -> egui::Visuals {
     // smoother kerning (egui documents it as "more blurry"), so keep it off for 13px UI text.
     visuals.text_options.font_hinting = true;
     visuals.text_options.subpixel_binning = false;
-    // The dark-mode default (2c - c^2) thickens glyphs; Tk/GDI text is thinner, and the
+    // The dark-mode default (2c - c^2) thickens glyphs; GDI text is thinner, and the
     // black labels on the green/grey buttons turned bold with it. Use raw coverage.
     visuals.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Off;
-    // Also the scrollbar track: keep it invisible like CTkScrollableFrame's
+    // Also the scrollbar track: keep it invisible
     visuals.extreme_bg_color = colors::PRIMARY_BG;
     visuals.faint_bg_color = colors::SECONDARY_BG;
     visuals.code_bg_color = colors::SECONDARY_BG;
@@ -121,8 +121,8 @@ fn visuals() -> egui::Visuals {
     visuals.selection.stroke = Stroke::new(1.0_f32, colors::TEXT_COLOR_W);
     visuals.text_cursor.stroke = Stroke::new(1.5_f32, colors::LABEL_TEXT);
 
-    // egui's built-in widgets are only used for the scrollbar handle; the CTk look
-    // of every other control is drawn by `widgets.rs`.
+    // egui's built-in widgets are only used for the scrollbar handle; every other
+    // control is drawn by `widgets.rs`.
     let pill = CornerRadius::same(4);
     for (w, fill) in [
         (&mut visuals.widgets.inactive, colors::SCROLLBAR),
@@ -169,10 +169,10 @@ pub fn apply_theme(ctx: &egui::Context) {
             style.spacing.button_padding = egui::vec2(10.0, 4.0);
             style.spacing.menu_margin = egui::Margin::same(3);
             style.spacing.interact_size.y = dimensions::WIDGET_HEIGHT;
-            // CTkToolTip(delay=0.3) of the buttons' right-click hints
+            // The buttons' right-click hints
             style.interaction.tooltip_delay = 0.3;
 
-            // CTkScrollableFrame: 8px grey pill, 4px from the window edge
+            // Scrollbar: 8px grey pill, 4px from the window edge
             let mut scroll = egui::style::ScrollStyle::solid();
             scroll.bar_width = 8.0;
             scroll.bar_inner_margin = 0.0;

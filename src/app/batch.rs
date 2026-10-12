@@ -1,5 +1,5 @@
-//! Batch Converter (`BatchConverterWindow`): a list of files converted one after
-//! another with the main window's settings, in a window of its own.
+//! Batch Converter: a list of files converted one after another with the main
+//! window's settings, in a window of its own.
 
 use std::path::{Path, PathBuf};
 use eframe::egui::{
@@ -62,7 +62,7 @@ struct Run {
     /// The file being converted was removed from the list, so `index` already
     /// points at the next one.
     removed: bool,
-    /// A file failed (`_batch_had_error`): the taskbar button ends up red.
+    /// A file failed: the taskbar button ends up red.
     had_error: bool,
     /// The main window's input / output, restored afterwards.
     saved_input: String,
@@ -85,14 +85,14 @@ impl Batch {
         self.run.is_some()
     }
 
-    /// `_add_file_to_list`: a file already listed is ignored.
+    /// A file already listed is ignored.
     fn add(&mut self, path: String) {
         if !self.files.iter().any(|f| f.path == path) {
             self.files.push(BatchFile { path, status: Status::Ready });
         }
     }
 
-    /// `_remove_file`. A running batch carries on with the file after the one it
+    /// A running batch carries on with the file after the one it
     /// is converting, wherever that ends up in the list.
     fn remove(&mut self, index: usize) {
         if index >= self.files.len() {
@@ -108,7 +108,6 @@ impl Batch {
         }
     }
 
-    /// `_remove_all_files`
     fn clear(&mut self) {
         self.files.clear();
         if let Some(run) = &mut self.run {
@@ -117,7 +116,7 @@ impl Batch {
         }
     }
 
-    /// `_get_taskbar_progress`: during a batch the taskbar shows the progress of the
+    /// During a batch the taskbar shows the progress of the
     /// whole list (finished files plus the one in flight) instead of restarting at 0%
     /// for every file.
     pub fn overall_progress(&self, file_progress: f32) -> f32 {
@@ -130,7 +129,7 @@ impl Batch {
     }
 }
 
-/// `_convert_next_file`: `<stem>_<codec>_custom<ext>` in the batch output folder,
+/// `<stem>_<codec>_custom<ext>` in the batch output folder,
 /// else in the main window's last output folder if it still exists, else next to
 /// the input. `<ext>` is the chosen container, or the input's own.
 fn output_path(input: &Path, codec: VideoCodec, folder: &str, last_output_dir: &str, container: Option<&str>) -> PathBuf {
@@ -149,7 +148,7 @@ fn output_path(input: &Path, codec: VideoCodec, folder: &str, last_output_dir: &
     dir.join(format!("{stem}_{}_custom{ext}", codec.suffix()))
 }
 
-/// `_update_path_label`: where the files will go.
+/// Where the files will go.
 fn output_label(folder: &str, last_output_dir: &str) -> String {
     let text = if !folder.is_empty() {
         folder
@@ -189,7 +188,7 @@ fn file_dialog(title: &str, dir: PathBuf) -> rfd::FileDialog {
     dialog
 }
 
-/// `_create_file_entry`: number, file name, status and the remove button; true when
+/// Number, file name, status and the remove button; true when
 /// the button was clicked.
 fn file_row(ui: &mut Ui, index: usize, file: &BatchFile) -> bool {
     let r = row(ui, dimensions::WIDGET_HEIGHT);
@@ -199,7 +198,7 @@ fn file_row(ui: &mut Ui, index: usize, file: &BatchFile) -> bool {
 
     let painter = ui.painter();
     painter.text(pos2(r.min.x + 20.0, r.center().y), Align2::CENTER_CENTER, format!("{}.", index + 1), font.clone(), color);
-    // At least 80px wide; a longer status pushes the name aside, as in the original
+    // At least 80px wide; a longer status pushes the name aside
     let status = painter.layout_no_wrap(file.status.text(), font.clone(), color);
     let status_w = status.size().x.max(80.0);
     let status_rect = Rect::from_min_max(pos2(remove.min.x - 5.0 - status_w, r.min.y), pos2(remove.min.x - 5.0, r.max.y));
@@ -218,7 +217,7 @@ fn file_row(ui: &mut Ui, index: usize, file: &BatchFile) -> bool {
 }
 
 impl NvencFfxApp {
-    /// The Batch Convert button (`_open_batch_converter`).
+    /// The Batch Convert button.
     pub(super) fn open_batch_converter(&mut self, ctx: &egui::Context) {
         if self.batch.open {
             ctx.send_viewport_cmd_to(viewport(), egui::ViewportCommand::Focus);
@@ -246,7 +245,7 @@ impl NvencFfxApp {
         self.convert_next_file(ctx);
     }
 
-    /// `_convert_next_file`: starts the file the batch is at (as the main window's
+    /// Starts the file the batch is at (as the main window's
     /// input, with an output named after it), or ends the batch after the last one.
     fn convert_next_file(&mut self, ctx: &egui::Context) {
         loop {
@@ -294,7 +293,7 @@ impl NvencFfxApp {
         run.index += 1;
     }
 
-    /// The current file's ffmpeg is done (`_run_single_conversion`); on to the next.
+    /// The current file's ffmpeg is done; on to the next.
     pub(super) fn batch_file_finished(&mut self, exit: Exit, ctx: &egui::Context) {
         let status = match exit {
             Exit::Success => Status::Done,
@@ -306,7 +305,7 @@ impl NvencFfxApp {
         self.convert_next_file(ctx);
     }
 
-    /// The end of `_convert_next_file`. No completion sound, as in the original.
+    /// The end of a batch. No completion sound.
     fn batch_completed(&mut self) {
         let Some(run) = self.batch.run.take() else { return };
         self.progress = None;
@@ -335,7 +334,7 @@ impl NvencFfxApp {
         self.restore_input_output(run);
     }
 
-    /// `_restore_input_output`: the main window's own files, if it had any.
+    /// The main window's own files, if it had any.
     fn restore_input_output(&mut self, run: Run) {
         if !run.saved_input.is_empty() {
             self.input_file = run.saved_input;
@@ -345,7 +344,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_add_files`
     fn batch_add_files(&mut self) {
         let files = file_dialog("Select Video Files", start_dir(&[&self.s.last_input_dir]))
             .add_filter("Video Files", VIDEO_EXTENSIONS)
@@ -356,7 +354,6 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_select_output_folder`
     fn batch_select_output_folder(&mut self) {
         let dir = start_dir(&[&self.s.batch_output_folder, &self.s.last_output_dir]);
         if let Some(folder) = file_dialog("Select Output Folder", dir).pick_folder() {
@@ -364,7 +361,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_process_dropped_file`: video files join the list, anything else gets a warning.
+    /// Video files join the list, anything else gets a warning.
     fn batch_files_dropped(&mut self, files: Vec<PathBuf>) {
         let mut unsupported = false;
         for file in files {
@@ -398,7 +395,6 @@ impl NvencFfxApp {
         ctx.show_viewport_immediate(viewport(), builder, |ui, _| self.batch_window_ui(ui));
     }
 
-    /// `_create_widgets`
     fn batch_window_ui(&mut self, ui: &mut Ui) {
         enum Clicked {
             OutputFolder,
@@ -504,7 +500,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn outputs_are_named_like_the_original() {
+    fn output_names() {
         let input = Path::new(r"C:\v\clip.MKV");
         let out = |folder, last, container| output_path(input, VideoCodec::Hevc, folder, last, container);
         assert_eq!(out("", "", None), Path::new(r"C:\v\clip_hevc_custom.MKV"));

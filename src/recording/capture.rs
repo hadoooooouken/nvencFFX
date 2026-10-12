@@ -1,5 +1,4 @@
-//! Screen recording command lines and file names (`_start_recording`,
-//! `_recording_part_filename`, `_concat_recording_parts`, `_finalize_recording`).
+//! Screen recording command lines and file names.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -120,7 +119,7 @@ pub fn concat_command(ffmpeg: &str, list: &Path, output: &Path) -> Vec<String> {
 }
 
 /// Video copied, the desktop audio encoded with the Audio Settings (`audio`, from
-/// `_append_audio_options`).
+/// [`crate::core::command::append_audio`]).
 pub fn mux_command(ffmpeg: &str, video: &Path, wav: &Path, audio: &[String], output: &Path) -> Vec<String> {
     let [video, wav, output] = [video, wav, output].map(|p| p.to_string_lossy().into_owned());
     let mut cmd: Vec<String> = [ffmpeg, "-y", "-i", &video, "-i", &wav, "-c:v", "copy"].map(str::to_owned).to_vec();
@@ -135,7 +134,7 @@ mod tests {
     use crate::config::settings::VideoCodec;
 
     #[test]
-    fn capture_command_follows_the_original() {
+    fn capture_command() {
         let s = Settings::default();
         let cmd = command(&s, "ffmpeg.exe", false).join(" ");
         assert_eq!(

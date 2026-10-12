@@ -1,6 +1,5 @@
-//! Screen recording in the main window (`_screen_record`, `_start_recording`,
-//! `_stop_recording`): the Screen Record button, the window title, tray balloons and
-//! the status lines of a [`recording::Session`].
+//! Screen recording in the main window: the Screen Record button, the window title,
+//! tray balloons and the status lines of a [`recording::Session`].
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -33,7 +32,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// The Screen Record / Stop Recording button (`_screen_record`).
+    /// The Screen Record / Stop Recording button.
     pub(super) fn toggle_recording(&mut self, ctx: &egui::Context) {
         if self.recording.is_some() {
             self.stop_recording(ctx);
@@ -42,7 +41,7 @@ impl NvencFfxApp {
         }
     }
 
-    /// `_start_recording`. Alt+F8 and the tray's Start do nothing while recording.
+    /// Alt+F8 and the tray's Start do nothing while recording.
     pub(super) fn start_recording(&mut self, ctx: &egui::Context) {
         match &self.recording {
             Some(r) if r.stopping => {
@@ -91,7 +90,7 @@ impl NvencFfxApp {
         self.recording = Some(Recording { session: Session::start(config, ctx), stopping: false });
     }
 
-    /// `_stop_recording`. Alt+F9 and the tray's Stop do nothing without a recording.
+    /// Alt+F9 and the tray's Stop do nothing without a recording.
     pub(super) fn stop_recording(&mut self, ctx: &egui::Context) {
         let Some(recording) = &mut self.recording else { return };
         if recording.stopping {
@@ -137,7 +136,6 @@ impl NvencFfxApp {
                     self.status_message = format!("Display changed. Restarting recording ({attempt}/{MAX_RESTART_ATTEMPTS})...");
                     self.ffmpeg_output = format!("FFmpeg stopped unexpectedly; starting segment {part} (attempt {attempt}).");
                 }
-                // `_recording_recovery_failed`
                 Event::GaveUp => {
                     stopping = true;
                     ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
@@ -154,7 +152,6 @@ impl NvencFfxApp {
                     self.status_message = "Screen recording cancelled".to_owned();
                     self.ffmpeg_output.clear();
                 }
-                // `_handle_recording_error`
                 Event::StartFailed(e) => {
                     self.status_message = "Screen recording failed".to_owned();
                     self.ffmpeg_output.clear();

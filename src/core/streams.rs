@@ -1,5 +1,5 @@
-//! Stream selection of the Streams window (`_create_stream_map_window`): the
-//! streams listed by `ffprobe -hide_banner` and the `-map` options written for them.
+//! Stream selection of the Streams window: the streams listed by
+//! `ffprobe -hide_banner` and the `-map` options written for them.
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Stream {
@@ -76,8 +76,7 @@ pub fn parse(output: &str) -> Streams {
     streams
 }
 
-/// The original's case-insensitive
-/// `Stream #0:(\d+)(.*?)\s*:\s*(Video|Audio|Subtitle)\s*:\s*(.*)`.
+/// Case-insensitive `Stream #0:(\d+)(.*?)\s*:\s*(Video|Audio|Subtitle)\s*:\s*(.*)`.
 fn parse_line(line: &str) -> Option<(usize, &str, Type, &str)> {
     const PREFIX: &str = "stream #0:";
     let lower = line.to_ascii_lowercase();
@@ -119,8 +118,7 @@ pub fn apply_map(options: &str, selected: &[&str], all: bool) -> String {
     format!("{cleaned} -ignore_unknown {}", maps.join(" ")).trim().to_owned()
 }
 
-/// Python's `sub(r"-map\s+\S+", "", text)` (`with_value`) or
-/// `sub(r"-ignore_unknown\s*", "", text)`.
+/// Removes every `-map\s+\S+` (`with_value`) or `-ignore_unknown\s*` match.
 fn remove_option(text: &str, option: &str, with_value: bool) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
@@ -180,7 +178,7 @@ mod tests {
         let options = "-ac 2 -ignore_unknown -map 0:v:0 -map 0:a:1 -map_metadata 0";
         assert_eq!(apply_map(options, &["0:v:0", "0:s:0"], false), "-ac 2 -map_metadata 0 -ignore_unknown -map 0:v:0 -map 0:s:0");
         assert_eq!(apply_map(options, &["0:v:0", "0:a:0"], true), "-ac 2 -map_metadata 0");
-        assert_eq!(apply_map("-y -map 0:a:0 -ac 2", &[], true), "-y  -ac 2", "spaces left as the original's regex left them");
+        assert_eq!(apply_map("-y -map 0:a:0 -ac 2", &[], true), "-y  -ac 2", "surrounding spaces are kept");
         assert_eq!(apply_map("", &["0:a:0"], false), "-ignore_unknown -map 0:a:0");
         assert_eq!(apply_map("-map", &[], true), "-map", "an option without a value stays");
     }

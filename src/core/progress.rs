@@ -1,4 +1,4 @@
-//! Progress from ffmpeg's status lines (`_update_progress`).
+//! Progress from ffmpeg's status lines.
 
 /// ffmpeg's time duration syntax: `[-][HH:]MM:SS[.m...]` or `[-]S+[.m...][s|ms|us]`.
 pub fn parse_time(s: &str) -> Option<f64> {
@@ -54,8 +54,7 @@ fn time_arg(args: &[String], name: &str) -> Option<f64> {
 }
 
 /// Length of the output the `time=` values count towards: the `-ss`/`-to`/`-t` range
-/// of the command, capped by the input duration. The original divided by the full
-/// input duration, so trimmed conversions finished well short of 100%.
+/// of the command, capped by the input duration, so trimmed conversions reach 100%.
 pub fn expected_duration(args: &[String], input: Option<f64>) -> Option<f64> {
     let start = time_arg(args, "-ss").unwrap_or(0.0).max(0.0);
     let end = match (time_arg(args, "-t"), time_arg(args, "-to")) {

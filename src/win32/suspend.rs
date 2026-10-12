@@ -1,4 +1,4 @@
-//! Pausing a running ffmpeg (`_suspend_process_by_pid`, `_resume_process_by_pid`).
+//! Pausing a running ffmpeg.
 
 use std::os::windows::io::AsRawHandle;
 use windows_sys::Win32::Foundation::{HANDLE, NTSTATUS};
