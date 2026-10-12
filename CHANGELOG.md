@@ -1,47 +1,41 @@
 # nvencFFX - Changelog
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-12
 - **Rewritten in Rust**:
-    - nvencFFX has been rewritten from Python (CustomTkinter) in Rust (egui / wgpu). The interface, settings, presets and FFmpeg command lines stay the same;
-    - The release is a single `nvencFFX.exe` (about 8.5 MB) instead of a folder with 68+ files. Help texts, fonts and the icon are embedded; the release folder holds `nvencFFX.exe`, `presets`, `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt`;
-    - The window opens almost instantly and is drawn on the GPU (Vulkan or DirectX 12, with the Windows software renderer as a fallback);
+    - nvencFFX has been rewritten from Python (CustomTkinter) in Rust (egui). The interface, settings and presets stay the same;
+    - The release is a single `nvencFFX.exe` (about 8 MB) instead of a folder with dozens of files, and it starts almost instantly;
+    - The window is drawn on the GPU through Vulkan, or DirectX 12 when Vulkan is not available;
     - `nff_settings.json` and presets from 1.7.x / 1.8.x load unchanged, and files saved by 2.0.0 can still be read by 1.8.x;
-    - The "Send to" shortcut points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` is no longer needed;
-    - The Python sources (`nvencFFX.py`, `requirements.txt`, the Nuitka build script) and `Send to nvencFFX.bat` were removed from the repository; 1.8.4 stays available under the `1.8.4` tag.
+    - The "Send to" shortcut points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` is no longer needed.
 - **Conversion**:
-    - Progress of a trimmed conversion is measured against the trimmed range, so it now reaches 100%;
-    - **Play 10s Preview** no longer freezes the window while the clip is cut;
-    - On exit, only FFmpeg processes started by nvencFFX are closed (1.8.4 also closed other programs' `ffmpeg.exe` started from the same path);
-    - The command preview quotes arguments with spaces, so options like `-metadata title="a b"` survive editing and applying the command;
-    - `tune = lossless` from a preset or saved settings now always turns Spatial / Temporal AQ off (HEVC / AV1 presets could keep AQ on);
+    - Progress of a trimmed conversion now reaches 100%;
+    - **Play 10s Preview** no longer freezes the window;
+    - On exit, only FFmpeg processes started by nvencFFX are closed, not other programs' `ffmpeg.exe`;
+    - The command preview keeps arguments with spaces (e.g. `-metadata title="a b"`) when the command is edited and applied;
+    - `tune = lossless` from a preset or saved settings now always turns Spatial / Temporal AQ off;
     - Loading a preset keeps its profile (e.g. `main10`) instead of resetting it to `main`;
-    - With streams picked in the Streams window (or other `-map` options), MKV outputs keep the input's attachments, so ASS subtitles keep their fonts;
-    - Stream mapping follows the input's streams (read with ffprobe): a file with one video and one audio stream and no subtitles gets a plain command without `-map` / `-c:v copy` / `-c:s mov_text`, and the other options are only added when the file needs them. Picture-based subtitles (PGS, VobSub, DVB) are left out of MP4 / MOV outputs instead of failing the conversion, the encoder targets the main video stream even when cover art comes first, and MKV outputs copy subtitles instead of converting them to ASS and leave cover art out (MKV would store it as extra one-frame video tracks). Without ffprobe the full mapping is used as before.
+    - Stream mapping follows the input's actual streams (read with ffprobe): a simple file with one video and one audio stream gets a plain command without extra `-map` options, and the encoder always targets the main video stream, even when cover art comes first;
+    - Picture-based subtitles (PGS, VobSub, DVB) are left out of MP4 / MOV outputs instead of failing the conversion;
+    - MKV outputs copy subtitles as they are, keep attachments (so ASS subtitles keep their fonts) and leave out cover art.
 - **Interface**:
-    - Input / Output / FFmpeg Path fields start right after their labels and are wider; the Presets section uses its full width; the right-hand buttons line up with the right edge;
-    - The main scroll bar appears only when the content does not fit, and the window never opens taller than the screen above the taskbar;
-    - Help and `?` windows open centered on the main window, come to the front when clicked again, and the `?` windows scroll horizontally for long lines;
-    - The input file tooltip loads on first hover instead of on every input change;
-    - The frame preview above the trim slider no longer freezes the window, keeps the video's aspect ratio, stays inside the main window at any display scaling, and shows "Preview unavailable" in place instead of in a popup;
-    - Clicking the trim slider (not a handle) moves the nearer handle, and the frame preview follows it;
-    - At the very end of the trim slider, the frame preview shows the last keyframe instead of "Preview unavailable" when the file runs longer than its video (e.g. the audio ends later).
+    - Wider path fields and a more even layout of the main window;
+    - The scroll bar appears only when needed, and the window never opens taller than the screen;
+    - Help and `?` windows open centered on the main window and come to the front when clicked again;
+    - The trim slider's frame preview no longer freezes the window, keeps the video's aspect ratio and works at any display scaling;
+    - Clicking the trim slider (not a handle) moves the nearer handle;
+    - At the very end of the trim slider, the frame preview shows the last frame when the audio runs longer than the video.
 - **Batch Converter**:
-    - An applied custom command now gets each file's input and output, instead of running the identical command for every file;
+    - An applied custom command now gets each file's input and output, instead of running the same command for every file;
     - Removing files during a batch no longer marks the wrong file or skips one;
     - A batch and **Play 10s Preview** can no longer run at the same time;
-    - The Convert button text always matches what is running;
-    - Dropping several unsupported files shows one warning instead of one per file;
-    - The next file starts immediately; durations are read in the background;
-    - With `-map 0:<type>:N` options (as written by the Streams window), the files' streams are compared with the main window's input before the batch starts. Files whose stream layout differs (other track count, language or order) are listed with a choice to continue, since those options would pick other streams or fail there.
-    - With no input file in the main window, the **Streams** button opens the first file of the batch list instead of asking for an input file.
+    - When streams are picked in the Streams window, files with a different stream layout are listed before the batch starts, with a choice to continue;
+    - With no input file in the main window, the **Streams** button opens the first file of the batch list.
 - **Screen Recording**:
-    - **Alt+F8** / tray Start is ignored while a recording runs (1.8.4 started a second session and orphaned the first); **Alt+F9** / tray Stop without a recording does nothing;
-    - Closing nvencFFX during a recording now saves it first (1.8.4 lost the recording);
-    - Silent stretches are recorded as silence, so the audio stays in sync with the video;
-    - An invalid custom audio bitrate is reported before recording starts instead of failing the save afterwards;
+    - **Alt+F8** / tray Start no longer starts a second recording while one is running;
+    - Closing nvencFFX during a recording now saves it instead of losing it;
+    - The audio stays in sync with the video through silent stretches;
     - The default output goes to the actual Desktop folder, also when it was moved (e.g. into OneDrive);
-    - The window title no longer stays at "Screen is recording now" when the FFmpeg path is empty;
-    - Holding a hotkey no longer repeats it; the tray icon comes back after Explorer restarts, and its menu opens reliably on every right-click.
+    - Holding a hotkey no longer repeats it, and the tray icon comes back after Explorer restarts.
 
 ## [1.8.4] - 2026-08-07
 - Added Windows taskbar progress indicator for conversions;

@@ -41,6 +41,31 @@ fn window_icon() -> egui::IconData {
     egui::IconData { rgba, width: SIZE as u32, height: SIZE as u32 }
 }
 
+/// Renderer setup: Vulkan only when a Vulkan adapter exists, otherwise D3D12. With both
+/// backends enabled, wgpu loads both user-mode drivers while enumerating adapters and
+/// keeps them resident (~30 MB more private memory), although only one of them renders.
+/// `WGPU_BACKEND` still overrides the choice.
+fn wgpu_setup() -> eframe::egui_wgpu::WgpuSetup {
+    use eframe::wgpu::Backends;
+    use std::task::{Context, Poll, Waker};
+
+    let mut setup = eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle();
+    if Backends::from_env().is_none() {
+        let probe = eframe::wgpu::Instance::new(eframe::wgpu::InstanceDescriptor {
+            backends: Backends::VULKAN,
+            ..eframe::wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        // Native adapter enumeration completes synchronously
+        let enumerate = std::pin::pin!(probe.enumerate_adapters(Backends::VULKAN));
+        let vulkan = matches!(
+            enumerate.poll(&mut Context::from_waker(Waker::noop())),
+            Poll::Ready(adapters) if !adapters.is_empty()
+        );
+        setup.instance_descriptor.backends = if vulkan { Backends::VULKAN } else { Backends::DX12 };
+    }
+    setup.into()
+}
+
 fn main() -> eframe::Result<()> {
     #[cfg(windows)]
     let scaling = win32::display_scaling();
@@ -57,6 +82,7 @@ fn main() -> eframe::Result<()> {
                 present_mode: eframe::wgpu::PresentMode::AutoNoVsync,
                 ..eframe::egui_wgpu::SurfaceConfig::LOW_LATENCY
             },
+            wgpu_setup: wgpu_setup(),
             ..Default::default()
         },
         viewport: egui::ViewportBuilder::default()
