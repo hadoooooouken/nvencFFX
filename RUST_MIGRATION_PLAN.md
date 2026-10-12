@@ -262,6 +262,7 @@ Deliberate differences from 1.8.4:
 - The preview's stream copy runs in the background thread; the original ran it synchronously and froze the window meanwhile.
 - The process kill on exit matches our own children by parent PID, not every `ffmpeg.exe` started from the same path (which also hit other programs' instances).
 - The input tooltip is probed on first hover instead of on every input change.
+- A video bitrate whose maxrate (`bitrate * 1.2`) or bufsize no longer fits in i64 (above 768,614,336,404,564,649 kbit/s) is rejected with "Video bitrate must be a number."; Python's unbounded ints passed it on to ffmpeg.
 
 Pause / resume and the taskbar progress overlay followed in Phase 5.
 
@@ -456,7 +457,7 @@ Open before publishing:
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
 | Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
 
-**Current Rust codebase**: ~10,360 LOC across 34 files (97 tests).
+**Current Rust codebase**: ~10,380 LOC across 34 files (98 tests).
 
 ---
 

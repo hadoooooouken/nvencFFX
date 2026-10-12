@@ -147,13 +147,20 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         }
         rate.extend(["-rc:v".into(), "constqp".into(), "-qp:v".into(), quality.to_owned()]);
     } else {
-        let kbps: i64 = bitrate.parse().map_err(|_| "Video bitrate must be a number.".to_owned())?;
-        let maxrate = (kbps * 12 + 9).div_euclid(10);
+        // Python's ints never overflow; a bitrate too large for i64 maths is rejected
+        // with the same message as a non-number
+        let (maxrate, bufsize) = bitrate
+            .parse::<i64>()
+            .ok()
+            .and_then(|kbps| kbps.checked_mul(12)?.checked_add(9))
+            .map(|v| v.div_euclid(10))
+            .and_then(|maxrate| Some((maxrate, maxrate.checked_mul(2)?)))
+            .ok_or_else(|| "Video bitrate must be a number.".to_owned())?;
         rate.extend([
             "-rc:v".into(), s.encoder_rc.clone(),
             "-b:v".into(), format!("{bitrate}k"),
             "-maxrate:v".into(), format!("{maxrate}k"),
-            "-bufsize:v".into(), format!("{}k", maxrate * 2),
+            "-bufsize:v".into(), format!("{bufsize}k"),
         ]);
     }
 
@@ -479,6 +486,21 @@ mod tests {
         let s = Settings { quality_level: "60".into(), ..Default::default() };
         assert!(build(&s, &job("o.mp4")).is_err());
         assert!(build(&Settings::default(), &job("")).is_err());
+    }
+
+    #[test]
+    fn huge_bitrate_is_rejected_not_overflowed() {
+        let rate = |bitrate: &str| {
+            let s = Settings { constant_qp_mode: false, bitrate: bitrate.into(), ..Default::default() };
+            build(&s, &job("o.mp4")).map(|cmd| cmd.join(" "))
+        };
+        let max_ok = (i64::MAX - 9) / 12;
+        let cmd = rate(&max_ok.to_string()).unwrap();
+        let maxrate = (max_ok * 12 + 9) / 10;
+        assert!(cmd.contains(&format!("-maxrate:v:0 {maxrate}k -bufsize:v:0 {}k", maxrate * 2)), "{cmd}");
+        for bad in [(max_ok + 1).to_string(), "999999999999999999".into(), i64::MAX.to_string(), "1".repeat(30)] {
+            assert_eq!(rate(&bad).unwrap_err(), "Video bitrate must be a number.", "{bad}");
+        }
     }
 
     #[test]
