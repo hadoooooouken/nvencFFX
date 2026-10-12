@@ -5,7 +5,7 @@
 .DESCRIPTION
     cargo build --release, then dist\nvencFFX-<version>\ with nvencFFX.exe, the
     presets folder, LICENSE.txt and THIRD-PARTY-NOTICES.txt, zipped as
-    dist\nvencFFX-<version>.zip.
+    dist\nvencFFX-<version>_no_ffmpeg.zip (ffmpeg / ffprobe are not included).
     THIRD-PARTY-NOTICES.txt lists the fonts and crates inside the exe with their
     licenses; cargo-about generates it from about.toml and about.hbs
     (cargo install --locked cargo-about --features cli).
@@ -45,7 +45,7 @@ $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"' |
 $name = "nvencFFX-$version"
 $out = Join-Path 'dist' $name
 $exe = Join-Path $out 'nvencFFX.exe'
-$zip = Join-Path 'dist' "$name.zip"
+$zip = Join-Path 'dist' "${name}_no_ffmpeg.zip"
 
 if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
     throw 'cargo-about not found: cargo install --locked cargo-about --features cli'
@@ -68,6 +68,16 @@ if ($Upx) {
 }
 
 Compress-Archive -Path $out -DestinationPath $zip
+
+# The exe creates nff_settings.json on the first run; a shipped one would carry local paths
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+try { $stray = @($archive.Entries | Where-Object { $_.Name -eq 'nff_settings.json' }) }
+finally { $archive.Dispose() }
+if ($stray) {
+    Remove-Item $zip -Force
+    throw "nff_settings.json must not be in the archive: $($stray.FullName -join ', ')"
+}
 
 Get-Item $exe, $zip | ForEach-Object {
     '{0,-28} {1,8:N2} MB' -f $_.Name, ($_.Length / 1MB)

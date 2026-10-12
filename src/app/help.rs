@@ -17,7 +17,8 @@ use super::NvencFfxApp;
 
 // Embedded, so the single exe needs no text files next to it
 const MANUAL: &str = include_str!("../../nff-help.txt");
-const ABOUT: &str = include_str!("../../nff-about.txt");
+/// First line is the window title, so the version comes from `Cargo.toml` alone.
+const ABOUT: &str = concat!("nvencFFX ", env!("CARGO_PKG_VERSION"), "\n", include_str!("../../nff-about.txt"));
 const LICENSE: &str = include_str!("../../nff-license.txt");
 
 const MAIN_TITLE: &str = "nvencFFX Help";
@@ -295,7 +296,8 @@ mod tests {
         assert!(!job.text.contains('\r'));
         let about = tab_text(Tab::About);
         assert!(about.sections.iter().all(|s| s.format.color == colors::LABEL_TEXT));
-        assert!(about.text.starts_with(&format!("{}\n", crate::WINDOW_TITLE)), "nff-about.txt names this version");
+        assert!(about.text.starts_with(&format!("{}\n", crate::WINDOW_TITLE)), "About names this version");
+        assert!(about.text.contains("\nVideo converter"));
         assert!(tab_text(Tab::License).text.starts_with("MIT License"));
     }
 
