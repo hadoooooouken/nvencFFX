@@ -3,8 +3,8 @@
 
 use std::path::{Path, PathBuf};
 use eframe::egui::{
-    self, Align2, CornerRadius, FontId, Pos2, Rect, ScrollArea, Ui, UiBuilder, Vec2,
-    ViewportBuilder, ViewportId, pos2, vec2,
+    self, Align, Align2, CornerRadius, FontId, Pos2, Rect, ScrollArea, Ui, UiBuilder, Vec2,
+    Layout, ViewportBuilder, ViewportId, pos2, vec2,
 };
 use crate::config::settings::VideoCodec;
 use crate::core::{command, process::{Exit, Runner}};
@@ -437,7 +437,12 @@ impl NvencFfxApp {
             if place(ui, folder_button, |ui| button(ui, folder_button.size(), "Output Folder", ButtonKind::Green)).clicked() {
                 clicked = Some(Clicked::OutputFolder);
             }
-            place(ui, cell(r, col, col), |ui| checkbox(ui, &mut self.s.batch_change_container, "Change output container"));
+            // Kept against the container menu so the two stay together when the window widens
+            place(ui, cell(r, col, col - 10.0), |ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    checkbox(ui, &mut self.s.batch_change_container, "Change output container")
+                })
+            });
             let enabled = self.s.batch_change_container;
             place(ui, cell(r, 2.0 * col, col), |ui| {
                 option_menu(ui, "batch_container", col, &mut self.s.batch_output_container, CONTAINERS, enabled)

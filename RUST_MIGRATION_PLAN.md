@@ -345,6 +345,7 @@ Deliberate differences from 1.8.4:
 - The Convert button's text follows the state on every frame. 1.8.4 could show "Batch Convert" during a single conversion after files were added, and adding a file reset the single conversion's pause flag.
 - Dropping several unsupported files shows one warning instead of one per file.
 - The next file starts right away instead of after 100 ms, and durations are probed in the background instead of blocking the window before every file.
+- "Change output container" is right-aligned in its column, next to the container menu, so the two stay together when the window is widened. 1.8.4 left-aligned it in the middle column.
 
 ### Phase 7: Screen Recording & WASAPI Audio Capture ✅ DONE
 
