@@ -1758,17 +1758,25 @@ impl NvencFfxApp {
         let h = dimensions::WIDGET_HEIGHT;
 
         let r = sub_rect(f, 0.0, 0.0, f.width(), 32.0);
-        for (x, (text, value)) in [10.0, 145.0, 265.0, 385.0, 505.0].into_iter().zip([
+        // the second row ends where the "HD Quality" text ends
+        let mut row_end = 0.0;
+        for (x, (text, value)) in [10.0, 155.0, 300.0, 445.0, 590.0].into_iter().zip([
             ("Default (Reset)", "none"),
             ("FHD Fast", "fhdf"),
             ("FHD Quality", "fhdq"),
             ("HD Fast", "hdf"),
             ("HD Quality", "hdq"),
         ]) {
-            if place(ui, cell(r, x, 130.0), |ui| radio_value(ui, &mut self.s.selected_preset, value, text)).clicked() {
+            let radio = place(ui, cell(r, x, 130.0), |ui| radio_value(ui, &mut self.s.selected_preset, value, text));
+            row_end = radio.rect.max.x - r.min.x;
+            if radio.clicked() {
                 self.apply_builtin_preset(value);
             }
         }
+        let delete_x = (row_end - 60.0).round();
+        let save_x = delete_x - 70.0;
+        let save_as_x = save_x - 80.0;
+        let menu_w = save_as_x - 15.0 - 206.0;
 
         let r = sub_rect(f, 0.0, 32.0, f.width(), 38.0);
         if place(ui, cell(r, 10.0, 100.0), |ui| radio_value(ui, &mut self.s.selected_preset, "custom", "Custom"))
@@ -1778,22 +1786,22 @@ impl NvencFfxApp {
             let name = self.s.custom_preset_selected.clone();
             self.load_custom_preset(&name);
         }
-        place_label(ui, cell(r, 145.0, 50.0), "Preset:");
+        place_label(ui, cell(r, 155.0, 50.0), "Preset:");
         let names: Vec<&str> = self.custom_presets.iter().map(String::as_str).collect();
         let mut picked = self.s.custom_preset_selected.clone();
-        let menu = place(ui, cell(r, 196.0, 170.0), |ui| {
-            option_menu(ui, "custom_preset", 170.0, &mut picked, &names, true)
+        let menu = place(ui, cell(r, 206.0, menu_w), |ui| {
+            option_menu(ui, "custom_preset", menu_w, &mut picked, &names, true)
         });
         if menu.changed() {
             self.load_custom_preset(&picked);
         }
-        if place(ui, cell(r, 385.0, 70.0), |ui| button(ui, vec2(70.0, h), "Save As", ButtonKind::Green)).clicked() {
+        if place(ui, cell(r, save_as_x, 70.0), |ui| button(ui, vec2(70.0, h), "Save As", ButtonKind::Green)).clicked() {
             self.save_preset_as();
         }
-        if place(ui, cell(r, 465.0, 60.0), |ui| button(ui, vec2(60.0, h), "Save", ButtonKind::Green)).clicked() {
+        if place(ui, cell(r, save_x, 60.0), |ui| button(ui, vec2(60.0, h), "Save", ButtonKind::Green)).clicked() {
             self.save_preset();
         }
-        if place(ui, cell(r, 535.0, 60.0), |ui| button(ui, vec2(60.0, h), "Delete", ButtonKind::Red)).clicked() {
+        if place(ui, cell(r, delete_x, 60.0), |ui| button(ui, vec2(60.0, h), "Delete", ButtonKind::Red)).clicked() {
             self.delete_preset();
         }
 

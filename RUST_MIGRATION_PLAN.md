@@ -208,6 +208,7 @@ Deliberate differences from 1.8.4:
 - The command preview quotes arguments with spaces and its parser removes double quotes, so `-metadata title="a b"` style arguments round-trip (Python's non-POSIX `shlex` kept the quote characters).
 - The Input / Output / FFmpeg Path fields, the quality field + Constant QP checkbox and the codec radios start at x = 120 instead of 226 (the original's empty gap after the labels came from CTk grid column sizing); the path fields widen from 350 to 478 px up to the buttons. The Auto / Default buttons on the encoder section header stay at 226.
 - The right-hand buttons (Browse … Help) move from x = 586 to 608 and the section frames widen from 736 to 738 px, so everything ends 41 px from the right window edge, the same as the labels on the left (1.8.4 left 63 px on the right).
+- The Presets section uses its full width: the five radios sit every 145 px (x = 10 … 590 instead of 10 … 505), "Preset:" lines up under FHD Fast, Save As / Save / Delete (same widths and gaps as 1.8.4) end where the "HD Quality" text ends, and the preset dropdown widens from 170 px to fill the space up to Save As.
 
 ### Phase 3: Configuration Persistence & Presets ✅ DONE
 
