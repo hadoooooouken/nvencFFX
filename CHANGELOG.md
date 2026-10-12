@@ -22,7 +22,8 @@
     - Help and `?` windows open centered on the main window, come to the front when clicked again, and the `?` windows scroll horizontally for long lines;
     - The input file tooltip loads on first hover instead of on every input change;
     - The frame preview above the trim slider no longer freezes the window, keeps the video's aspect ratio, stays inside the main window at any display scaling, and shows "Preview unavailable" in place instead of in a popup;
-    - Clicking the trim slider (not a handle) moves the nearer handle, and the frame preview follows it.
+    - Clicking the trim slider (not a handle) moves the nearer handle, and the frame preview follows it;
+    - At the very end of the trim slider, the frame preview shows the last keyframe instead of "Preview unavailable" when the file runs longer than its video (e.g. the audio ends later).
 - **Batch Converter**:
     - An applied custom command now gets each file's input and output, instead of running the identical command for every file;
     - Removing files during a batch no longer marks the wrong file or skips one;
