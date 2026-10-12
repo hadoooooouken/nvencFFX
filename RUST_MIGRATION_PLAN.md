@@ -24,43 +24,46 @@ This document outlines the step-by-step roadmap for migrating **nvencFFX** from 
 ```text
 nvencffx/
 ├── Cargo.toml
-├── build.rs                  # Embed nff.ico and Windows manifest via winresource
+├── build.rs                  # Embed nff.ico, the manifest and version info via winresource
+├── assets/
+│   ├── nvencFFX.manifest     # DPI awareness, common controls v6
+│   └── fonts/Roboto-Regular.ttf  # Embedded UI font (theme.rs), as CustomTkinter on Windows
 ├── src/
-│   ├── main.rs               # Entry point, winit/eframe setup, windows_subsystem attribute
-│   ├── app.rs                # Main App state (eframe::App implementation)
+│   ├── main.rs               # Entry point, eframe / wgpu setup, window icon, windows_subsystem attribute
+│   ├── app.rs                # Main App state (eframe::App) and the whole main-window UI on the original's pixel grid:
+│   │                         #   paths, codec / quality, Encoder / FPS & Scale / Audio / Additional Options / Presets
+│   │                         #   sections, trim, status rows, bottom bar, command window, conversion and 10s preview
 │   ├── app/batch.rs          # Batch Converter window + queue (child module of app)
 │   ├── app/record.rs         # Screen Record button, title, minimize, balloons (child module of app)
 │   ├── app/help.rs           # Help window (Manual / About / License) and the `?` ffmpeg help windows
 │   ├── app/streams.rs        # Streams window (stream checkboxes → -map options)
 │   ├── app/thumbnail.rs      # Frame preview above the trim slider
 │   ├── app/vmaf.rs           # VMAF analysis (right click on Play Output File)
-│   ├── ui/                   # egui interface components
+│   ├── ui/                   # CTk look-alike building blocks
 │   │   ├── mod.rs
-│   │   ├── theme.rs          # Color palette (#4FB62F accent, dark mode, styles)
-│   │   ├── widgets.rs        # Custom widgets (TextCheckbox, chip_button, radio_button, tooltip helpers)
-│   │   ├── main_view.rs      # Main layout (Input/Output, codec, quality, actions)
-│   │   ├── encoder_section.rs  # Advanced NVENC settings (preset, tune, multipass, AQ, profile, level, tier)
-│   │   ├── fps_scale_section.rs # FPS mode, scaling, interpolation
-│   │   ├── audio_section.rs  # Audio codec selection (Copy, AAC, Opus, Custom, Disable)
-│   │   ├── trim_section.rs   # Trimming controls (timeline slider, -ss/-to, streamcopy, precise)
-│   │   └── presets_section.rs # Preset selector with save/load/delete
+│   │   ├── theme.rs          # CTk dark palette (#4FB62F accent), dimensions, egui style
+│   │   ├── widgets.rs        # Grid placement (row / cell / sub_rect / place), buttons, entries, checkboxes,
+│   │   │                     #   radios, option menus, section toggles, trim slider, progress bar, drag & drop
+│   │   └── dialogs.rs        # In-window messagebox / simpledialog replacements, self-drawn title bar of secondary windows
 │   ├── core/                 # FFmpeg business logic
 │   │   ├── mod.rs
-│   │   ├── command.rs        # FFmpeg CLI argument builder (encoding, streamcopy, custom command modes)
-│   │   ├── probe.rs          # ffprobe runner (media info, duration, codec detection, LRU cache)
-│   │   ├── process.rs        # Process management (spawn, stderr reader, cancel, kill tree via toolhelp32)
-│   │   ├── progress.rs       # Stream parser for progress (time=, fps=, speed=, size=, bitrate=, percentage)
+│   │   ├── command.rs        # FFmpeg CLI argument builder (encoding, streamcopy, custom command parsing / quoting)
+│   │   ├── probe.rs          # Locating ffmpeg / ffprobe, durations, resolution, media info, tooltip / duration caches
+│   │   ├── process.rs        # ffmpeg runner off the UI thread: output lines over a channel, cancel
+│   │   ├── progress.rs       # Progress from ffmpeg status lines (time=, fps=, speed=, size=, bitrate=, percentage)
 │   │   ├── estimate.rs       # Output file size estimation (ffprobe duration × bitrate)
+│   │   ├── filters.rs        # Quick buttons of the Additional Options section (-vf / -af / speed / stereo)
+│   │   ├── timecode.rs       # HH:MM:SS trim times: parsing, formatting, validation, stripping -ss/-to
 │   │   ├── streams.rs        # Stream list from ffprobe, -map options
 │   │   ├── thumbnail.rs      # Trim slider frame grabs (CUDA nv12 / p010le, CPU), raw RGBA
 │   │   └── vmaf.rs           # libvmaf command and score parsing
 │   ├── config/               # Settings & presets
 │   │   ├── mod.rs
-│   │   ├── settings.rs       # AppSettings: serde model for nff_settings.json (all 47 fields)
-│   │   ├── presets.rs         # Preset JSON serde models, backward-compatible loading
-│   │   └── defaults.rs       # Default values per codec, factory presets
+│   │   ├── settings.rs       # Settings: serde model for nff_settings.json (all 46 keys, same order, defaults)
+│   │   ├── presets.rs        # presets/*.json files and the built-in presets
+│   │   └── testdata/         # nff_settings.json written by 1.8.4 (compatibility test)
 │   ├── win32/                # Native Windows API integration
-│   │   ├── mod.rs
+│   │   ├── mod.rs            # Dark title bar, centering, DPI scaling, ShellExecute, MessageBeep, timestamps
 │   │   ├── taskbar.rs        # ITaskbarList3 (green/yellow/red progress overlay)
 │   │   ├── suspend.rs        # NtSuspendProcess / NtResumeProcess (pause/resume conversion)
 │   │   ├── tray.rs           # Tray icon, menu, balloons + global hotkeys (Alt+F8 / Alt+F9)

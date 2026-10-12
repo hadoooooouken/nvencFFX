@@ -80,12 +80,13 @@
 
 ## План
 
-### [ ] 9. Раздел 2 «Target Rust Architecture» устарел
+### [x] 9. Раздел 2 «Target Rust Architecture» устарел
 
 - `RUST_MIGRATION_PLAN.md:22-72`.
 - Таких файлов нет: `ui/main_view.rs`, `ui/encoder_section.rs`, `ui/fps_scale_section.rs`, `ui/audio_section.rs`, `ui/trim_section.rs`, `ui/presets_section.rs`, `config/defaults.rs`.
 - Эти файлы есть, но не перечислены: `ui/dialogs.rs`, `core/filters.rs`, `core/timecode.rs`.
 - Сделать: привести дерево к фактическому `src/`.
+- Готово: дерево переписано по `src/`: убраны несуществующие `ui/*_section.rs`, `ui/main_view.rs`, `config/defaults.rs`; добавлены `ui/dialogs.rs`, `core/filters.rs`, `core/timecode.rs`, `config/testdata/`, `assets/`; у `app.rs` и `win32/mod.rs` описано фактическое содержимое. В строке `settings.rs` сразу 46 ключей (строка 134 остаётся задачей 11).
 
 ### [ ] 10. Раздел 3 «Complete Dependency List» не совпадает с Cargo.toml
 
