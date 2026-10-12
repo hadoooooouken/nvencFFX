@@ -18,7 +18,10 @@ use windows_sys::Win32::{
     UI::{
         HiDpi::{GetDpiForSystem, GetDpiForWindow},
         Shell::{FOLDERID_Desktop, SHGetKnownFolderPath, ShellExecuteW},
-        WindowsAndMessaging::{GetForegroundWindow, MB_ICONASTERISK, SW_SHOWNORMAL},
+        WindowsAndMessaging::{
+            GetClientRect, GetForegroundWindow, GetSystemMetrics, MB_ICONASTERISK, SM_CXSCREEN,
+            SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos,
+        },
     },
 };
 use windows_sys::core::PWSTR;
@@ -94,6 +97,22 @@ pub fn use_dark_title_bar(window: &impl HasWindowHandle) {
         if hr >= 0 {
             break;
         }
+    }
+}
+
+/// `_center_window`: centred horizontally on the primary screen, 50 px from the top.
+/// Like Tk's `+x+y` (CustomTkinter leaves positions unscaled), these are physical
+/// pixels: the client width is centred, the frame's top-left corner is placed.
+pub fn center_window(window: &impl HasWindowHandle) {
+    let Some(hwnd) = hwnd(window) else { return };
+    let mut rect = unsafe { std::mem::zeroed() };
+    if unsafe { GetClientRect(hwnd, &mut rect) } == 0 {
+        return;
+    }
+    let screen_width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    let x = screen_width / 2 - (rect.right - rect.left) / 2;
+    unsafe {
+        SetWindowPos(hwnd, std::ptr::null_mut(), x, 50, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
 

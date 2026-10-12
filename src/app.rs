@@ -417,6 +417,8 @@ impl NvencFfxApp {
         cc.egui_ctx.options_mut(|o| o.sync_window_theme = false);
         #[cfg(windows)]
         crate::win32::use_dark_title_bar(cc);
+        #[cfg(windows)]
+        crate::win32::center_window(cc);
 
         let presets_dir = presets::presets_dir();
         let mut app = Self {
