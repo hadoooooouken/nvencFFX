@@ -87,10 +87,13 @@ fn main() -> eframe::Result<()> {
         },
         viewport: egui::ViewportBuilder::default()
             // Fixed width, resizable height within limits that shrink at higher
-            // display scaling
+            // display scaling. Maximizing would ignore the size limits and stretch the
+            // window over the whole work area, so there is no maximize button (this also
+            // turns off maximize on title bar double-click and Win+Up).
             .with_inner_size([820.0, height])
             .with_min_inner_size([820.0, min_height])
             .with_max_inner_size([820.0, max_height])
+            .with_maximize_button(false)
             .with_title(WINDOW_TITLE)
             .with_icon(window_icon()),
         renderer: eframe::Renderer::Wgpu,
