@@ -131,6 +131,20 @@ fn append_mapping(cmd: &mut Vec<String>, output: &str, other: &[String], streams
     }
 }
 
+/// Fonts and other attachments for MKV outputs when the user maps streams, so
+/// selected ASS subtitles keep their fonts. Skipped when the maps already cover
+/// attachments (`-map 0`, `-map 0:t...`, `-map -0:t...`).
+fn append_attachments(cmd: &mut Vec<String>, output: &str, other: &[String]) {
+    let maps: Vec<&str> = other.windows(2).filter(|w| w[0] == "-map").map(|w| w[1].as_str()).collect();
+    let covers_attachments = |map: &&str| {
+        let map = map.trim_start_matches('-').trim_end_matches('?');
+        map == "0" || map.starts_with("0:t")
+    };
+    if is_mkv(output) && !maps.is_empty() && !maps.iter().any(covers_attachments) {
+        extend(cmd, &["-map", "0:t?"]);
+    }
+}
+
 pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
     match s.audio_option.as_str() {
         "disable" => extend(cmd, &["-an"]),
@@ -175,6 +189,7 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         cmd.extend(trim);
         extend(&mut cmd, &["-y", "-i", input]);
         append_mapping(&mut cmd, output, &other, job.streams);
+        append_attachments(&mut cmd, output, &other);
         cmd.extend(other);
         extend(&mut cmd, &["-c:v", "copy"]);
         append_audio(&mut cmd, s)?;
@@ -304,6 +319,7 @@ pub fn build(s: &Settings, job: &Job<'_>) -> Result<Vec<String>, String> {
         extend(&mut cmd, &["-weighted_pred:v", "1", "-bf", "0"]);
     }
     cmd.extend(rate);
+    append_attachments(&mut cmd, output, &other);
     cmd.extend(other);
 
     let extra_af = s.additional_audio_filter_options.trim();
@@ -598,6 +614,25 @@ mod tests {
         let streams = probed(&[VIDEO, AUDIO, "Stream #0:2: Audio: ac3, 48000 Hz, 5.1", "Stream #0:3: Subtitle: ass"]);
         let cmd = build(&Settings::default(), &Job { streams: Some(&streams), ..job("o.mp4") }).unwrap().join(" ");
         assert!(cmd.contains("-map 0:v -map 0:a -map 0:s -c:s mov_text -c:v hevc_nvenc -preset:v p7"), "{cmd}");
+    }
+
+    #[test]
+    fn user_maps_keep_the_attachments_of_mkv_outputs() {
+        let with_options = |options: &str, output: &str, streamcopy: bool| {
+            let s = Settings { additional_options: options.into(), trim_streamcopy: streamcopy, ..Default::default() };
+            build(&s, &job(output)).unwrap().join(" ")
+        };
+        let selection = "-ignore_unknown -map 0:v:0 -map 0:a:1 -map 0:s:0";
+        let cmd = with_options(selection, "o.mkv", false);
+        assert!(cmd.contains("-qp:v:0 30 -map 0:t? -ignore_unknown -map 0:v:0 -map 0:a:1 -map 0:s:0 -c:a copy o.mkv"), "{cmd}");
+        let cmd = with_options(selection, "o.mkv", true);
+        assert!(cmd.contains("-y -i C:\\in put.mp4 -map 0:t? -ignore_unknown -map 0:v:0"), "{cmd}");
+
+        assert!(!with_options(selection, "o.mp4", false).contains("0:t"), "MP4 cannot store attachments");
+        assert!(!with_options("-ac 2", "o.mkv", false).contains("0:t?"), "the default mapping has them");
+        for covered in ["-map 0", "-map 0:v -map 0:t", "-map 0:v -map -0:t:1", "-map 0:a -map 0:t:0?"] {
+            assert!(!with_options(covered, "o.mkv", false).contains("0:t?"), "{covered}");
+        }
     }
 
     #[test]

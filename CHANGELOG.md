@@ -14,6 +14,7 @@
     - The command preview quotes arguments with spaces, so options like `-metadata title="a b"` survive editing and applying the command;
     - `tune = lossless` from a preset or saved settings now always turns Spatial / Temporal AQ off (HEVC / AV1 presets could keep AQ on);
     - Loading a preset keeps its profile (e.g. `main10`) instead of resetting it to `main`;
+    - With streams picked in the Streams window (or other `-map` options), MKV outputs keep the input's attachments, so ASS subtitles keep their fonts;
     - Stream mapping follows the input's streams (read with ffprobe): a file with one video and one audio stream and no subtitles gets a plain command without `-map` / `-c:v copy` / `-c:s mov_text`, and the other options are only added when the file needs them. Picture-based subtitles (PGS, VobSub, DVB) are left out of MP4 / MOV outputs instead of failing the conversion, the encoder targets the main video stream even when cover art comes first, and MKV outputs copy subtitles instead of converting them to ASS and leave cover art out (MKV would store it as extra one-frame video tracks). Without ffprobe the full mapping is used as before.
 - **Interface**:
     - Input / Output / FFmpeg Path fields start right after their labels and are wider; the Presets section uses its full width; the right-hand buttons line up with the right edge;
