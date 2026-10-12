@@ -42,6 +42,12 @@ fn window_icon() -> egui::IconData {
 }
 
 fn main() -> eframe::Result<()> {
+    #[cfg(windows)]
+    let scaling = win32::display_scaling();
+    #[cfg(not(windows))]
+    let scaling = 100.0;
+    let (height, min_height, max_height) = app::height_limits(scaling);
+
     let native_options = eframe::NativeOptions {
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
             // With vsync, every repaint blocks in present() for up to a frame. eframe
@@ -54,10 +60,11 @@ fn main() -> eframe::Result<()> {
             ..Default::default()
         },
         viewport: egui::ViewportBuilder::default()
-            // Same footprint as the CustomTkinter original: fixed width, resizable height
-            .with_inner_size([820.0, 700.0])
-            .with_min_inner_size([820.0, 600.0])
-            .with_max_inner_size([820.0, 4096.0])
+            // Same footprint as the CustomTkinter original: fixed width, resizable
+            // height within limits that shrink at higher display scaling
+            .with_inner_size([820.0, height])
+            .with_min_inner_size([820.0, min_height])
+            .with_max_inner_size([820.0, max_height])
             .with_title(WINDOW_TITLE)
             .with_icon(window_icon()),
         renderer: eframe::Renderer::Wgpu,

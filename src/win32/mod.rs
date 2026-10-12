@@ -16,6 +16,7 @@ use windows_sys::Win32::{
     Foundation::{HWND, SYSTEMTIME},
     System::{Com::CoTaskMemFree, Diagnostics::Debug::MessageBeep, SystemInformation::GetLocalTime},
     UI::{
+        HiDpi::{GetDpiForSystem, GetDpiForWindow},
         Shell::{FOLDERID_Desktop, SHGetKnownFolderPath, ShellExecuteW},
         WindowsAndMessaging::{GetForegroundWindow, MB_ICONASTERISK, SW_SHOWNORMAL},
     },
@@ -58,6 +59,18 @@ impl HasDisplayHandle for Window {
 pub fn foreground_window() -> Option<Window> {
     let hwnd = unsafe { GetForegroundWindow() };
     (!hwnd.is_null()).then_some(Window(hwnd))
+}
+
+/// `get_real_dpi`: display scaling in percent (`int(round(dpi / 96 * 100))`), from the
+/// DPI of the foreground window's monitor or else the system DPI. Valid before eframe
+/// creates a window because the manifest declares per-monitor DPI awareness.
+pub fn display_scaling() -> f32 {
+    let hwnd = unsafe { GetForegroundWindow() };
+    let dpi = match unsafe { GetDpiForWindow(hwnd) } {
+        0 => unsafe { GetDpiForSystem() },
+        dpi => dpi,
+    };
+    (dpi as f32 / 96.0 * 100.0).round()
 }
 
 /// Dark title bar, like CustomTkinter gives the original.

@@ -163,17 +163,23 @@ const BASE_HEIGHT: f32 = 700.0;
 /// Room left on the monitor for the title bar and the taskbar.
 const SCREEN_MARGIN: f32 = 80.0;
 
+/// Window height limits of `__init__` for the display scaling (`scaling` in %):
+/// `(geometry, minsize, maxsize)`.
+pub fn height_limits(scaling: f32) -> (f32, f32, f32) {
+    if scaling >= 200.0 {
+        (600.0, 600.0, 650.0)
+    } else if scaling >= 125.0 {
+        (650.0, 650.0, 800.0)
+    } else {
+        (700.0, 700.0, 900.0)
+    }
+}
+
 /// `_update_window_size`: [`BASE_HEIGHT`] plus the height the open sections add,
 /// capped at the original's `maxsize` for the display scaling (`scaling` in %) and
 /// at the monitor height.
 fn fitted_height(sections: f32, scaling: f32, monitor_height: Option<f32>) -> f32 {
-    let max: f32 = if scaling >= 200.0 {
-        650.0
-    } else if scaling >= 125.0 {
-        800.0
-    } else {
-        900.0
-    };
+    let (_, _, max) = height_limits(scaling);
     let max = monitor_height.map_or(max, |m| max.min(m - SCREEN_MARGIN));
     (BASE_HEIGHT + sections).min(max).round()
 }
@@ -2228,6 +2234,15 @@ mod tests {
         assert_eq!(app.s.additional_options, "-ss 00:00:00 -to 00:00:30");
         click(&mut app, egui::pos2(grid::SECTION_X + 10.0 + 232.0 + 50.0, section_y + 232.0 + 14.0), false);
         assert_eq!(app.s.additional_filter_options, "hflip");
+    }
+
+    #[test]
+    fn window_height_limits_follow_scaling() {
+        assert_eq!(height_limits(100.0), (700.0, 700.0, 900.0));
+        assert_eq!(height_limits(124.0), (700.0, 700.0, 900.0));
+        assert_eq!(height_limits(125.0), (650.0, 650.0, 800.0));
+        assert_eq!(height_limits(175.0), (650.0, 650.0, 800.0));
+        assert_eq!(height_limits(200.0), (600.0, 600.0, 650.0));
     }
 
     #[test]

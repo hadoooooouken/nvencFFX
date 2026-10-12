@@ -170,7 +170,7 @@ Completed:
 - [x] Roboto Regular embedded (only face used; Convert and the drop overlay use it at 14/20px) (`assets/fonts/`, Apache 2.0, the same font CustomTkinter ships), 13px body like `CTkFont`
 - [x] Palette = `nvencFFX.py` colors + CTk dark-theme defaults (`#DCE4EE` labels, `#565B5E` entry border, `#949A9F` checkbox/radio border, `gray41` scrollbar)
 - [x] Both egui theme slots styled, so the OS light/dark setting cannot swap the look
-- [x] Window 820×700, fixed width and resizable height, as in the original
+- [x] Window 820 px wide (fixed) with a resizable height, as in the original; start / min / max height follow the display scaling (Phase 2)
 - [x] Pixel grid of the original reproduced (`app.rs::grid`): label col 41px, entry col 257px (350 wide), button col 617px (140 wide), 38px rows, 736px section frames
 - [x] CTk look-alike widgets (`widgets.rs`): `button`/`bold_button`, `entry` (incl. disabled grey state), `checkbox`, `radio`/`radio_value`, `option_menu` (dark field + green arrow, dropdown with green hover), `text_checkbox`, `trim_slider`, `reset_button`, `section_frame`, `file_drag_drop_overlay`
 - [x] Layout helpers `row` / `cell` / `sub_rect` / `place` for absolute placement on that grid
@@ -191,6 +191,7 @@ Every control of the 1.8.4 main window is on screen and wired to the original's 
 - [x] **Trim slider**: handles map to `trim_start`/`trim_end` via the ffprobe duration (1 s minimum gap, end stops 0.1 s before the last frame); reset restores the full range; a new input sets `trim_end` to its duration
 - [x] **Output auto-naming**: `<stem>_<codec>_custom.<ext>` in `last_output_dir` (if it exists) or next to the input, container kept for mp4/mkv/mov/ts/mts/m2ts/webm; a codec switch renames only auto-named outputs
 - [x] **Estimated file size**: `(video + audio kbps) × duration / 8 / 1024` from a background, cached ffprobe run (`core/probe.rs`, `core/estimate.rs`)
+- [x] **Startup height by display scaling** (`__init__`): 700 / min 700 / max 900 px below 125%, 650 / 650 / 800 from 125%, 600 / 600 / 650 from 200% (`app::height_limits`); the scaling comes from `get_real_dpi`'s lookup (`win32::display_scaling`: DPI of the foreground window, else the system DPI) before the window is created, so it opens at the right size without a resize on the first frame. Checked live at 100%; 125% / 150% / 200% still to look at by hand (risk 13)
 - [x] **Window height follows the sections** (`_update_window_size`): opening or closing a section sets the height to 700 + what the open sections add, capped at 1.8.4's `maxsize` (900 / 800 / 650 px at <125% / ≥125% / ≥200% scaling); only on a toggle, so a height dragged by hand stays until then
 - [x] **Output line + progress bar** under the status row (parity with 1.8.4's `ffmpeg_output` label and hidden progress frame)
 - [x] **Custom command mode**: Output opens an editable preview window (Copy / Apply / Reset / Close); Apply validates `-i` + output file; right-click on Output copies the command with spaced paths quoted
@@ -453,7 +454,7 @@ Open before publishing:
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
 | Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
 
-**Current Rust codebase**: ~10,200 LOC across 34 files (94 tests).
+**Current Rust codebase**: ~10,300 LOC across 34 files (95 tests).
 
 ---
 
@@ -471,3 +472,4 @@ Open before publishing:
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.
 11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` was updated for 2.0.0 in Phase 9 (so this branch's copy no longer fits the Python version).
 12. **Release, open items**: third-party license notices (Roboto, egui's fonts, the crates) are not shipped yet; the GLES backend is gone, so a machine where neither DX12 (incl. WARP) nor Vulkan works can no longer start the app (not seen on Windows 10 / 11); UPX-packed builds may be flagged by antivirus scanners, which is why `-Upx` is opt-in.
+13. **Startup height at higher scaling, manual check**: the window opens at 1.8.4's height for the display scaling (Phase 2), checked live only at 100%. Still to look at: 125% / 150% (650 px, max 800) and 200% (600 px, max 650), e.g. that at 150% on a 1080p screen the window stays above the taskbar.
