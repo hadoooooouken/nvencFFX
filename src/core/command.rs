@@ -69,6 +69,12 @@ pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
     match s.audio_option.as_str() {
         "disable" => extend(cmd, &["-an"]),
         "copy" => extend(cmd, &["-c:a", "copy"]),
+        "aac_96k" => extend(cmd, &["-c:a", "aac", "-b:a", "96k"]),
+        "aac_160k" => extend(cmd, &["-c:a", "aac", "-b:a", "160k"]),
+        "aac_256k" => extend(cmd, &["-c:a", "aac", "-b:a", "256k"]),
+        "opus_96k" => extend(cmd, &["-c:a", "libopus", "-b:a", "96k"]),
+        "opus_160k" => extend(cmd, &["-c:a", "libopus", "-b:a", "160k"]),
+        "opus_256k" => extend(cmd, &["-c:a", "libopus", "-b:a", "256k"]),
         "custom" => {
             let kbps: i64 = s
                 .custom_abitrate
@@ -77,12 +83,8 @@ pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
                 .map_err(|_| "Custom audio bitrate must be a number.".to_owned())?;
             cmd.extend(["-c:a".into(), "aac".into(), "-b:a".into(), format!("{kbps}k")]);
         }
-        other => {
-            if let Some((codec, rate)) = other.split_once('_') {
-                let codec = if codec == "opus" { "libopus" } else { codec };
-                extend(cmd, &["-c:a", codec, "-b:a", rate]);
-            }
-        }
+        // Unknown values (hand-edited presets) add nothing, as in 1.8.4
+        _ => {}
     }
     Ok(())
 }
@@ -477,6 +479,27 @@ mod tests {
         let s = Settings { quality_level: "60".into(), ..Default::default() };
         assert!(build(&s, &job("o.mp4")).is_err());
         assert!(build(&Settings::default(), &job("")).is_err());
+    }
+
+    #[test]
+    fn audio_options_known_values_only() {
+        let audio = |opt: &str| {
+            let s = Settings { audio_option: opt.into(), custom_abitrate: "128".into(), ..Default::default() };
+            let mut cmd = Vec::new();
+            append_audio(&mut cmd, &s).map(|()| cmd.join(" "))
+        };
+        assert_eq!(audio("disable").unwrap(), "-an");
+        assert_eq!(audio("copy").unwrap(), "-c:a copy");
+        assert_eq!(audio("aac_96k").unwrap(), "-c:a aac -b:a 96k");
+        assert_eq!(audio("aac_160k").unwrap(), "-c:a aac -b:a 160k");
+        assert_eq!(audio("aac_256k").unwrap(), "-c:a aac -b:a 256k");
+        assert_eq!(audio("opus_96k").unwrap(), "-c:a libopus -b:a 96k");
+        assert_eq!(audio("opus_160k").unwrap(), "-c:a libopus -b:a 160k");
+        assert_eq!(audio("opus_256k").unwrap(), "-c:a libopus -b:a 256k");
+        assert_eq!(audio("custom").unwrap(), "-c:a aac -b:a 128k");
+        for unknown in ["mp3_320k", "x_y", "aac_128k", "", "AAC_96K"] {
+            assert_eq!(audio(unknown).unwrap(), "", "{unknown}");
+        }
     }
 
     #[test]
