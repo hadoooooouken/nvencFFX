@@ -6,7 +6,8 @@
     - The release is a single `nvencFFX.exe` (about 8.5 MB) instead of a folder with 68+ files. Help texts, fonts and the icon are embedded; the release folder holds `nvencFFX.exe`, `presets`, `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt`;
     - The window opens almost instantly and is drawn on the GPU (Vulkan or DirectX 12, with the Windows software renderer as a fallback);
     - `nff_settings.json` and presets from 1.7.x / 1.8.x load unchanged, and files saved by 2.0.0 can still be read by 1.8.x;
-    - The "Send to" shortcut points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` is no longer needed.
+    - The "Send to" shortcut points straight at `nvencFFX.exe`; `Send to nvencFFX.bat` is no longer needed;
+    - The Python sources (`nvencFFX.py`, `requirements.txt`, the Nuitka build script) and `Send to nvencFFX.bat` were removed from the repository; 1.8.4 stays available under the `1.8.4` tag.
 - **Conversion**:
     - Progress of a trimmed conversion is measured against the trimmed range, so it now reaches 100%;
     - **Play 10s Preview** no longer freezes the window while the clip is cut;

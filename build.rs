@@ -5,7 +5,6 @@ fn main() {
 
     #[cfg(windows)]
     {
-        // Version info as the 1.8.4 Nuitka build set it (`nff-nuitka-build.txt`);
         // FileVersion / ProductVersion come from `package.version`.
         let mut res = winresource::WindowsResource::new();
         res.set_icon("nff.ico")
