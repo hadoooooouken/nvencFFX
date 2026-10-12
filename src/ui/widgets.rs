@@ -591,24 +591,23 @@ pub fn trim_slider(ui: &mut Ui, size: Vec2, start: &mut f32, end: &mut f32) -> R
 
     // Which handle is being dragged: 0 = start, 1 = end
     let drag_id = response.id.with("handle");
-    if response.drag_started() {
-        if let Some(p) = response.interact_pointer_pos() {
-            let handle = if (p.x - to_x(*start)).abs() <= (p.x - to_x(*end)).abs() { 0u8 } else { 1u8 };
-            ui.data_mut(|d| d.insert_temp(drag_id, handle));
-        }
+    if response.drag_started()
+        && let Some(p) = response.interact_pointer_pos()
+    {
+        let handle = if (p.x - to_x(*start)).abs() <= (p.x - to_x(*end)).abs() { 0u8 } else { 1u8 };
+        ui.data_mut(|d| d.insert_temp(drag_id, handle));
     }
-    if response.dragged() {
-        if let (Some(p), Some(handle)) =
+    if response.dragged()
+        && let (Some(p), Some(handle)) =
             (response.interact_pointer_pos(), ui.data(|d| d.get_temp::<u8>(drag_id)))
-        {
-            let f = to_frac(p.x);
-            if handle == 0 {
-                *start = f.min(*end);
-            } else {
-                *end = f.max(*start);
-            }
-            response.mark_changed();
+    {
+        let f = to_frac(p.x);
+        if handle == 0 {
+            *start = f.min(*end);
+        } else {
+            *end = f.max(*start);
         }
+        response.mark_changed();
     }
 
     let painter = ui.painter();

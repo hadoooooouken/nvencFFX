@@ -2,8 +2,9 @@
 //! self-drawn title bar of secondary windows.
 
 use eframe::egui::{
-    self, Align, Align2, CornerRadius, FontId, Id, Key, Layout, Margin, Modal, Rect, Response,
-    RichText, Sense, Stroke, Ui, ViewportCommand, pos2, vec2,
+    self, Align, Align2, Color32, ColorImage, CornerRadius, FontId, Id, Key, Layout, Margin,
+    Modal, Rect, Response, RichText, Sense, Stroke, TextureHandle, TextureOptions, Ui,
+    ViewportCommand, pos2, vec2,
 };
 use super::{
     theme::{colors, dimensions},
@@ -122,10 +123,13 @@ pub fn title_bar(ui: &mut Ui, title: &str) -> bool {
     }
     let close = ui.interact(close_rect, ui.id().with("title_close"), Sense::click());
 
+    let icon = title_bar_icon(ui.ctx());
     let painter = ui.painter();
     painter.rect_filled(bar, CornerRadius::ZERO, colors::SECONDARY_BG);
+    let icon_rect = Rect::from_center_size(pos2(bar.min.x + 18.0, bar.center().y), vec2(16.0, 16.0));
+    painter.image(icon.id(), icon_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
     painter.text(
-        pos2(bar.min.x + 12.0, bar.center().y),
+        pos2(icon_rect.max.x + 9.0, bar.center().y),
         Align2::LEFT_CENTER,
         title,
         FontId::proportional(dimensions::FONT_SIZE),
@@ -148,6 +152,20 @@ pub fn title_bar(ui: &mut Ui, title: &str) -> bool {
 
     ui.advance_cursor_after_rect(bar);
     close.clicked()
+}
+
+/// The app icon of the main window's native title bar, uploaded once and shared by
+/// all viewports.
+fn title_bar_icon(ctx: &egui::Context) -> TextureHandle {
+    let id = Id::new("title_bar_icon");
+    if let Some(texture) = ctx.data(|d| d.get_temp::<TextureHandle>(id)) {
+        return texture;
+    }
+    let icon = crate::window_icon();
+    let image = ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+    let texture = ctx.load_texture("title_bar_icon", image, TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+    texture
 }
 
 /// Resize borders for an undecorated resizable window (winit gives those none):

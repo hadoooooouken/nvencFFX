@@ -34,8 +34,8 @@ fn window_icon() -> egui::IconData {
 
     let mut rgba = Vec::with_capacity(SIZE * SIZE * 4);
     for row in (0..SIZE).rev() {
-        for px in ICO[pixels + row * SIZE * 4..][..SIZE * 4].chunks_exact(4) {
-            rgba.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        for &[b, g, r, a] in ICO[pixels + row * SIZE * 4..][..SIZE * 4].as_chunks::<4>().0 {
+            rgba.extend_from_slice(&[r, g, b, a]);
         }
     }
     egui::IconData { rgba, width: SIZE as u32, height: SIZE as u32 }
@@ -78,6 +78,6 @@ mod tests {
         let icon = super::window_icon();
         assert_eq!((icon.width, icon.height), (32, 32));
         assert_eq!(icon.rgba.len(), 32 * 32 * 4);
-        assert!(icon.rgba.chunks_exact(4).any(|p| p[3] == 255), "icon has opaque pixels");
+        assert!(icon.rgba.as_chunks::<4>().0.iter().any(|p| p[3] == 255), "icon has opaque pixels");
     }
 }
