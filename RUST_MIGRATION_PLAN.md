@@ -174,6 +174,7 @@ Completed:
 - [x] Pixel grid of the original reproduced (`app.rs::grid`): label col 41px, entry col 257px (350 wide), button col 617px (140 wide), 38px rows, 736px section frames
 - [x] CTk look-alike widgets (`widgets.rs`): `button`/`bold_button`, `entry` (incl. disabled grey state), `checkbox`, `radio`/`radio_value`, `option_menu` (dark field + green arrow, dropdown with green hover), `text_checkbox`, `trim_slider`, `reset_button`, `section_frame`, `file_drag_drop_overlay`
 - [x] Layout helpers `row` / `cell` / `sub_rect` / `place` for absolute placement on that grid
+- [x] Text rendering: hinting on, no subpixel binning, no color transfer curve (thinner, like Tk's GDI text); Roboto and Consolas use `HintingTarget::Mono` (`FontTweak`), which snaps stems to whole pixels. egui's default smooth hinting looked soft at 13–14px, and its options (light / symmetric / linear metrics) changed no pixel of Consolas and 65 of a Roboto test line; Mono changes ~700 / ~1,600. The remaining difference to 1.8.4 is ClearType: egui antialiases in greyscale only, whatever the GPU backend
 
 - [x] `rfd` file dialogs on Browse / Save As / FFmpeg (parented to the main window); right-click opens the containing folder
 - [x] Modal dialogs replacing Tk `messagebox` / `simpledialog` (`ui/dialogs.rs`: info, warning, error, yes/no, text prompt)
@@ -452,7 +453,7 @@ Open before publishing:
 | Phase 8 — Help, Streams, Preview, VMAF | ✅ Done | `app/help.rs`, `app/streams.rs`, `app/thumbnail.rs`, `app/vmaf.rs`, `core/streams.rs`, `core/thumbnail.rs`, `core/vmaf.rs`, `core/probe.rs` (timeouts, sizes) | ~1,550 |
 | Phase 9 — Release | ✅ Done (third-party notices open) | `Cargo.toml`, `build.rs`, `assets/nvencFFX.manifest`, `build-release.ps1`, `config/testdata/` | ~150 |
 
-**Current Rust codebase**: ~10,200 LOC across 34 files (93 tests).
+**Current Rust codebase**: ~10,200 LOC across 34 files (94 tests).
 
 ---
 
@@ -466,7 +467,7 @@ Open before publishing:
 6. **Screen recording, manual checks**: the session (restart limit, stop, join, mux, cleanup) is covered by tests with stand-in commands and with the real ffmpeg (`testsrc`) plus real WASAPI capture, and a full desktop recording (ddagrab + hevc_nvenc + AAC) was checked once through the app layer. Still to try by hand: a restart after a real display mode change (a fullscreen game switching resolution), audio while sound plays, and the minimize / balloons / hotkeys in the running app. A default playback device that changes mid-recording (headphones unplugged) ends the audio there; the WAV stays valid, so the output just has shorter audio.
 7. **Work while minimized**: eframe 0.36 calls only `App::logic` (not `App::ui`) while the window is minimized or hidden. Anything that must keep running then (ffmpeg progress, tray / hotkey commands, the recording's events and its delayed minimize) belongs in `update_state`, which runs from `logic`.
 8. ~~**Tray / hotkey commands for recording**~~: resolved in Phase 7; Alt+F8 / Alt+F9 and the tray menu drive the recorder, and `Tray::balloon` shows its notifications.
-9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
+9. **eframe 0.36 + edition 2024**: eframe 0.36 needs rustc ≥ 1.95 (`rust-version` in `Cargo.toml`). It brings hinted text (skrifa + vello_cpu, rasterized on the CPU, so the wgpu backend does not affect it; see Phase 1 for the Mono hinting); keep `PresentMode::AutoNoVsync` in `main.rs`, since eframe still repaints on every window move and vsync makes dragging stutter on Windows.
 10. **Batch window, manual checks**: the queue run is covered by tests and was checked with the real ffmpeg / NVENC. Resizing by the self-drawn borders, the native file dialogs being owned by the batch window, and drag & drop onto it need a manual run; the dialog parent is the foreground window at click time, which is the batch window unless focus moved meanwhile.
 11. **Phase 8, manual checks**: the windows' contents and buttons are covered by UI tests, the frame grab and the VMAF run by tests with the real ffmpeg (testsrc clips). Still to look at in the running app: the help / Streams windows' layout against 1.8.4, the frame preview's position while dragging (also at 125% / 150% scaling and with the window scrolled), and the CUDA → CPU fallback on a file NVDEC cannot decode. `nff-about.txt` was updated for 2.0.0 in Phase 9 (so this branch's copy no longer fits the Python version).
 12. **Release, open items**: third-party license notices (Roboto, egui's fonts, the crates) are not shipped yet; the GLES backend is gone, so a machine where neither DX12 (incl. WARP) nor Vulkan works can no longer start the app (not seen on Windows 10 / 11); UPX-packed builds may be flagged by antivirus scanners, which is why `-Upx` is opt-in.

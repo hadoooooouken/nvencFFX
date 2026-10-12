@@ -1,5 +1,8 @@
 use std::sync::Arc;
-use eframe::egui::{self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Stroke, TextStyle};
+use eframe::egui::{
+    self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontTweak, Stroke, TextStyle,
+    epaint::text::HintingTarget,
+};
 
 /// nvencFFX palette: the app's own colors from `nvencFFX.py` plus the CustomTkinter
 /// dark-theme defaults the original inherits (labels, borders, scrollbar).
@@ -58,10 +61,18 @@ pub mod dimensions {
 /// Installs Roboto (the font CustomTkinter ships and uses on Windows) as the
 /// primary proportional font. egui's bundled fonts stay as glyph fallbacks.
 fn install_fonts(ctx: &egui::Context) {
+    // egui's default (smooth) hinting leaves stems soft at 13-14px, and its options change
+    // nothing on Consolas, whose own instructions skip horizontal fitting in smooth mode.
+    // Mono hinting snaps the stems to whole pixels, the closest to Tk's GDI text.
+    let crisp = || FontTweak { hinting_target: HintingTarget::Mono, ..Default::default() };
+
     let mut fonts = FontDefinitions::default();
     fonts.font_data.insert(
         "roboto".to_owned(),
-        Arc::new(FontData::from_static(include_bytes!("../../assets/fonts/Roboto-Regular.ttf"))),
+        Arc::new(
+            FontData::from_static(include_bytes!("../../assets/fonts/Roboto-Regular.ttf"))
+                .tweak(crisp()),
+        ),
     );
     fonts
         .families
@@ -72,7 +83,7 @@ fn install_fonts(ctx: &egui::Context) {
     // `font=("Consolas", 14)` of the input tooltip, command preview and help windows.
     // Read from the system (it cannot be redistributed); egui's Hack stays the fallback.
     if let Some(consolas) = system_font("consola.ttf") {
-        fonts.font_data.insert("consolas".to_owned(), Arc::new(FontData::from_owned(consolas)));
+        fonts.font_data.insert("consolas".to_owned(), Arc::new(FontData::from_owned(consolas).tweak(crisp())));
         fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "consolas".to_owned());
     }
 
@@ -212,5 +223,21 @@ mod tests {
         out.textures_delta.clear();
         let families = ctx.fonts(|f| f.definitions().families[&FontFamily::Monospace].clone());
         assert_eq!(families[0], "consolas");
+    }
+
+    #[test]
+    fn our_fonts_use_mono_hinting() {
+        let ctx = egui::Context::default();
+        apply_theme(&ctx);
+        let mut out = ctx.run_ui(Default::default(), |_| {});
+        out.textures_delta.clear();
+        ctx.fonts(|f| {
+            let data = &f.definitions().font_data;
+            for name in ["roboto", "consolas"] {
+                let Some(font) = data.get(name) else { continue }; // Consolas is optional
+                assert_eq!(font.tweak.hinting_target, HintingTarget::Mono, "{name}");
+            }
+            assert!(data.contains_key("roboto"));
+        });
     }
 }
