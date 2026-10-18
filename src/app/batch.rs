@@ -1,7 +1,7 @@
 //! Batch Converter: a list of files converted one after another with the main
 //! window's settings, in a window of its own.
 
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 use eframe::egui::{
     self, Align, Align2, CornerRadius, FontId, Pos2, Rect, ScrollArea, Ui, UiBuilder, Vec2,
     Layout, ViewportBuilder, ViewportId, pos2, vec2,
@@ -216,6 +216,23 @@ fn file_row(ui: &mut Ui, index: usize, file: &BatchFile) -> bool {
     );
 
     place(ui, remove, |ui| cross_button(ui, remove.size(), ButtonKind::Red)).clicked()
+}
+
+/// Recursively collects supported video files in stable, case-insensitive name order.
+/// Symlinks are skipped so a linked directory cannot create a traversal cycle.
+fn collect_video_files(directory: &Path, videos: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(directory) else { return };
+    let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
+    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_lowercase());
+    for entry in entries {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else { continue };
+        if file_type.is_dir() {
+            collect_video_files(&path, videos);
+        } else if file_type.is_file() && has_extension(&path, VIDEO_EXTENSIONS) {
+            videos.push(path);
+        }
+    }
 }
 
 impl NvencFfxApp {
@@ -447,14 +464,23 @@ impl NvencFfxApp {
         }
     }
 
-    /// Video files join the list, anything else gets a warning.
+    /// Adds supported video files and scans any dropped folders recursively.
     fn batch_files_dropped(&mut self, files: Vec<PathBuf>) {
         let mut unsupported = false;
         for file in files {
-            if has_extension(&file, VIDEO_EXTENSIONS) {
-                self.batch.add(file.to_string_lossy().into_owned());
-            } else {
-                unsupported = true;
+            let Ok(metadata) = fs::symlink_metadata(&file) else { continue };
+            if metadata.file_type().is_dir() {
+                let mut videos = Vec::new();
+                collect_video_files(&file, &mut videos);
+                for video in videos {
+                    self.batch.add(video.to_string_lossy().into_owned());
+                }
+            } else if metadata.file_type().is_file() {
+                if has_extension(&file, VIDEO_EXTENSIONS) {
+                    self.batch.add(file.to_string_lossy().into_owned());
+                } else {
+                    unsupported = true;
+                }
             }
         }
         if unsupported {

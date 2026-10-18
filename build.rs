@@ -11,7 +11,6 @@ fn main() {
             .set_manifest_file("assets/nvencFFX.manifest")
             .set("ProductName", "nvencFFX")
             .set("FileDescription", "nvencFFX")
-            .set("CompanyName", "Deepseek Enjoyer")
             .set("LegalCopyright", "Copyright (C) 2026 hadouken")
             .set("OriginalFilename", "nvencFFX.exe")
             .set("InternalName", "nvencFFX");
