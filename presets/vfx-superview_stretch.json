@@ -1,0 +1,7 @@
+{
+    "cuda_output_format": false,
+    "additional_filter_options": "scale=ih*16/9:ih,libplacebo=custom_shader_path='presets/shaders/superview.glsl',setsar=1",
+    "selected_preset": "custom",
+    "custom_preset_selected": "vfx-superview_stretch",
+    "version": "2.0.2"
+}

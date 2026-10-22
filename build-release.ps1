@@ -57,7 +57,7 @@ if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 if (Test-Path $zip) { Remove-Item $zip -Force }
 New-Item -ItemType Directory -Force (Join-Path $out 'presets') | Out-Null
 Copy-Item 'target\release\nvencffx.exe' $exe
-Copy-Item 'presets\*.json' (Join-Path $out 'presets')
+Copy-Item 'presets\*' (Join-Path $out 'presets') -Recurse
 Copy-Item 'LICENSE' (Join-Path $out 'LICENSE.txt')
 # --fail: a crate whose license cannot be determined stops the build
 Invoke-Native cargo @('about', 'generate', '--locked', '--fail', 'about.hbs',
