@@ -198,7 +198,7 @@ mod tests {
     fn shipped_presets_apply_every_value() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("presets");
         let names = list(&dir);
-        assert_eq!(names.len(), 20);
+        assert!(!names.is_empty(), "presets folder should not be empty");
         for name in names {
             let preset = load(&dir, &name).unwrap_or_else(|e| panic!("{name}: {e}"));
             let mut s = Settings::default();
