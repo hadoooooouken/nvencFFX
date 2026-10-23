@@ -29,9 +29,8 @@ Credits:
 • Roboto — Interface font
 
 Links:
-• GitLab Repository: https://gitlab.com/hadoukez/nvencffx
-• GitHub Mirror: https://github.com/hadoooooouken/nvencFFX
+• GitHub Repository: https://github.com/hadoooooouken/nvencFFX
 • FFmpeg Official: https://ffmpeg.org/
 • NVIDIA Video Codec SDK: https://developer.nvidia.com/nvidia-video-codec-sdk
 
-For support and bug reports, please use the GitLab repository.
+For support and bug reports, please use the GitHub repository.

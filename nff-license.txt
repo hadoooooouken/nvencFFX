@@ -1,5 +1,5 @@
 MIT License — Modified for nvencFFX
-Copyright (c) 2026 hadouken (GitLab) / hadoooooouken (GitHub)
+Copyright (c) 2026 hadouken
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -13,7 +13,7 @@ furnished to do so, subject to the following conditions:
 
 2. Any public fork, mirror, or redistribution of the Software must include
    a clear reference to the original repository:
-   https://gitlab.com/hadoukez/nvencffx
+   https://github.com/hadoooooouken/nvencFFX
 
 3. The name "nvencFFX", "hadouken", or "hadoooooouken" may not be used
    to endorse or promote derivative products without explicit written permission

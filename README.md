@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/gitlab/v/release/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=blue&label=Version) ![License](https://img.shields.io/gitlab/license/hadoukez%2Fnvencffx?gitlab_url=https%3A%2F%2Fgitlab.com&color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-egui%20%2B%20wgpu-B7410E?logo=rust&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
+![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version) ![License](https://img.shields.io/github/license/hadoooooouken/nvencFFX?color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-egui%20%2B%20wgpu-B7410E?logo=rust&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
@@ -44,9 +44,9 @@ FFmpeg Windows builds links: [Windows builds from gyan.dev](https://www.gyan.dev
 
 #### 1. Download the Executable (Recommended) 🚀
 
-The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) page.
+The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://github.com/hadoooooouken/nvencFFX/releases) page.
 
-1.  Go to the [Releases](https://gitlab.com/hadoukez/nvencFFX/-/releases) section of this GitLab repository.
+1.  Go to the [Releases](https://github.com/hadoooooouken/nvencFFX/releases) section of this repository.
 2.  Download the release archive and extract it to any folder.
 3.  Run `nvencFFX.exe`. It is a single executable with no installer; `nff_settings.json` is created next to it, and the `presets` folder beside it holds the presets. Put `ffmpeg.exe` and `ffprobe.exe` in the same folder (or on `PATH`) and they are found automatically.
 
@@ -58,7 +58,7 @@ Requires [Rust](https://rustup.rs/) 1.95 or newer with the MSVC toolchain (Visua
 
 1.  **Clone the repository:**
     ```
-    git clone https://gitlab.com/hadoukez/nvencFFX.git
+    git clone https://github.com/hadoooooouken/nvencFFX.git
     cd nvencFFX
     ```
 2.  **Build and run:**
@@ -120,15 +120,15 @@ If you have a suggestion that would make this better, you can simply open an iss
 ## Notes
 
 - This app is designed for NVIDIA GPUs that support **NVENC hardware encoding**.
-- For AMD GPUs use [RedFFmpegatron](https://gitlab.com/hadoukez/redffmpegatron).
-- For Intel Arc GPUs and integrated graphics use [QuickFFSync](https://gitlab.com/hadoukez/quickffsync).
+- For AMD GPUs use [RedFFmpegatron](https://github.com/hadoooooouken/RedFFmpegatron).
+- For Intel Arc GPUs and integrated graphics use [QuickFFSync](https://github.com/hadoooooouken/QuickFFSync).
 - The tool is intended for Windows only.
 
 ## License
 
 nvencFFX is licensed under the MIT License — Modified for nvencFFX.
 
-© 2026 hadouken (GitLab) / hadoooooouken (GitHub)
+© 2026 hadouken
 
 You are free to use, copy, modify, merge, publish, distribute, sublicense,
 and/or sell copies of this software, **provided that**:
@@ -136,7 +136,7 @@ and/or sell copies of this software, **provided that**:
 1. The above copyright notice and this permission notice are included in
    all copies or substantial portions of the software.
 2. Any public fork, mirror, or redistribution must include a clear reference
-   to the original repository: https://gitlab.com/hadoukez/nvencffx
+   to the original repository: https://github.com/hadoooooouken/nvencFFX
 3. The name "nvencFFX", "hadouken", or "hadoooooouken" may not be used to
    endorse or promote derivative products without explicit written permission.
 
