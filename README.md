@@ -2,7 +2,7 @@
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
-# nvencFFX 🚀
+# nvencFFX
 
 The **nvencFFX** is a convenient graphical user interface (GUI) application designed to simplify video processing tasks using **FFmpeg** and leveraging **NVIDIA's NVENC hardware encoder**.
 
@@ -10,7 +10,7 @@ This project was primarily developed to explore the capabilities of FFmpeg and N
 
 ---
 
-## Features 🎥
+## Features
 
 * **Intuitive GUI:** Easy-to-use, responsive interface in a single portable executable - no Python or installer required.
 * **FFmpeg Integration:** Seamlessly integrates with FFmpeg for powerful video and audio processing.
@@ -42,7 +42,7 @@ FFmpeg Windows builds links: [Windows builds from gyan.dev](https://www.gyan.dev
 
 ### Installation
 
-#### 1. Download the Executable (Recommended) 🚀
+#### 1. Download the Executable (Recommended)
 
 The easiest way to get started is to download the latest release executable (`.exe`) from the [Releases](https://github.com/hadoooooouken/nvencFFX/releases) page.
 
@@ -52,7 +52,7 @@ The easiest way to get started is to download the latest release executable (`.e
 
 Settings and preset files are shared with nvencFFX 1.8.x, so an existing `nff_settings.json` and `presets` folder can be copied over.
 
-#### 2. Run from Source (For Developers) 🔧
+#### 2. Run from Source (For Developers)
 
 Requires [Rust](https://rustup.rs/) 1.95 or newer with the MSVC toolchain (Visual Studio Build Tools).
 
@@ -70,7 +70,7 @@ Requires [Rust](https://rustup.rs/) 1.95 or newer with the MSVC toolchain (Visua
     cargo test
     ```
 
-### Building a Release (For Developers) 🔧
+### Building a Release (For Developers)
 
 ```
 powershell -ExecutionPolicy Bypass -File build-release.ps1
@@ -84,7 +84,7 @@ Add `-Upx` (and `-UpxPath <path to upx.exe>` if UPX is not on `PATH`) to compres
 
 ---
 
-## Usage 🎥
+## Usage
 
 1.  **Launch the application:** Run `nvencFFX.exe`.
 2.  **Select Input File:** Click the "Browse Input" button or drag and drop your video file into the designated area.
@@ -98,7 +98,7 @@ Add `-Upx` (and `-UpxPath <path to upx.exe>` if UPX is not on `PATH`) to compres
 
 ---
 
-##  Easy access via Windows "Send to" context menu 📁
+##  Easy access via Windows "Send to" context menu
 
 ![sendto](screenshots/sendto.png)
 
