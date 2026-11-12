@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version) ![License](https://img.shields.io/github/license/hadoooooouken/nvencFFX?color=green) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-egui%20%2B%20wgpu-B7410E?logo=rust&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
+![Version](https://img.shields.io/github/v/release/hadoooooouken/nvencFFX?color=blue&label=Version) [![License](https://img.shields.io/badge/License-MIT%20Modified-green)](LICENSE) ![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white) ![Rust](https://img.shields.io/badge/Rust-egui%20%2B%20wgpu-B7410E?logo=rust&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-NVENC-76B900?logo=nvidia&logoColor=white)
 
 ![nff-mainwindow_start](screenshots/nff-mainwindow_start.png)
 
