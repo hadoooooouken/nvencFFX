@@ -1727,11 +1727,7 @@ impl NvencFfxApp {
             self.add_trim_options();
         }
         let s = &mut self.s;
-        place(ui, cell(r, 462.0, 70.0), |ui| {
-            if checkbox(ui, &mut s.trim_streamcopy, "Copy").clicked() && s.trim_streamcopy {
-                s.audio_option = "copy".to_owned();
-            }
-        });
+        place(ui, cell(r, 462.0, 70.0), |ui| checkbox(ui, &mut s.trim_streamcopy, "Copy"));
         place(ui, cell(r, 532.0, 100.0), |ui| checkbox(ui, &mut s.precise_trim, "Precise"));
 
         // Option / filter entries
@@ -2257,6 +2253,13 @@ mod tests {
         assert_eq!(app.s.additional_options, "-ss 00:00:00 -to 00:00:30");
         click(&mut app, egui::pos2(grid::SECTION_X + 10.0 + 232.0 + 50.0, section_y + 232.0 + 14.0), false);
         assert_eq!(app.s.additional_filter_options, "hflip");
+
+        // Copy checkbox toggles trim_streamcopy without resetting audio_option
+        app.s.audio_option = "disable".into();
+        assert!(!app.s.trim_streamcopy);
+        click(&mut app, egui::pos2(grid::SECTION_X + 462.0 + 20.0, section_y + 40.0 + 24.0), false);
+        assert!(app.s.trim_streamcopy);
+        assert_eq!(app.s.audio_option, "disable");
     }
 
     #[test]

@@ -670,6 +670,15 @@ mod tests {
         assert!(cmd.starts_with("ffmpeg.exe -hide_banner -ss 1 -to 2 -y -i"));
         assert!(cmd.ends_with("-c:s mov_text -c:v copy -c:a copy o.mp4"));
 
+        let s_disabled = Settings {
+            trim_streamcopy: true,
+            audio_option: "disable".into(),
+            additional_options: "-ss 1 -to 2".into(),
+            ..Default::default()
+        };
+        let cmd_disabled = build(&s_disabled, &job("o.mp4")).unwrap().join(" ");
+        assert!(cmd_disabled.ends_with("-c:s mov_text -c:v copy -an o.mp4"));
+
         let s = Settings { quality_level: "60".into(), ..Default::default() };
         assert!(build(&s, &job("o.mp4")).is_err());
         assert!(build(&Settings::default(), &job("")).is_err());
