@@ -524,9 +524,7 @@ pub fn option_menu(
         });
         });
 
-    if let Some(v) = picked
-        && value != v
-    {
+    if let Some(v) = picked {
         *value = v.to_owned();
         response.mark_changed();
     }
