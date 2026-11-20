@@ -3,7 +3,7 @@
 
 use std::{fs, path::{Path, PathBuf}};
 use eframe::egui::{
-    self, Align, Align2, CornerRadius, FontId, Label, Pos2, Rect, RichText, ScrollArea, Ui,
+    self, Align, Align2, CornerRadius, FontId, Pos2, Rect, ScrollArea, Ui,
     UiBuilder, Vec2, Layout, ViewportBuilder, ViewportId, pos2, vec2,
 };
 use crate::config::settings::VideoCodec;
@@ -173,15 +173,70 @@ fn raw_output_folder(same_folder: bool, folder: &str, last_output_dir: &str) -> 
     text.to_owned()
 }
 
-/// Where the files will go.
+/// Shortens a path by keeping the root and trailing folder(s) visible:
+/// `F:\...\Concept_art\PL`.
+fn compact_path(path: &str, max_len: usize) -> String {
+    if path.chars().count() <= max_len || !path.contains(['\\', '/']) {
+        return truncate(path, max_len);
+    }
+    let p = Path::new(path);
+    let prefix = match p.components().next() {
+        Some(std::path::Component::Prefix(prefix)) => {
+            let s = prefix.as_os_str().to_string_lossy();
+            if path.get(s.len()..).is_some_and(|rest| rest.starts_with(['\\', '/'])) {
+                format!("{s}\\")
+            } else {
+                s.into_owned()
+            }
+        }
+        Some(std::path::Component::RootDir) => "\\".to_owned(),
+        _ => String::new(),
+    };
+    let sep = "...\\";
+    let reserved = prefix.chars().count() + sep.chars().count();
+    if reserved + 3 >= max_len {
+        return truncate(path, max_len);
+    }
+    let avail = max_len - reserved;
+
+    let mut parts = Vec::new();
+    let mut accumulated_len = 0;
+
+    for comp in p.components().rev() {
+        let s = comp.as_os_str().to_string_lossy();
+        if matches!(comp, std::path::Component::Prefix(_) | std::path::Component::RootDir) {
+            break;
+        }
+        let needed = if parts.is_empty() { s.chars().count() } else { s.chars().count() + 1 };
+        if accumulated_len + needed > avail {
+            break;
+        }
+        accumulated_len += needed;
+        parts.push(s);
+    }
+
+    if parts.is_empty() {
+        let last = p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        return format!("{prefix}{sep}{}", truncate(&last, avail));
+    }
+
+    parts.reverse();
+    format!("{prefix}{sep}{}", parts.join("\\"))
+}
+
+/// Where the files will go, compacted so the destination folder is visible.
 fn output_label(same_folder: bool, folder: &str, last_output_dir: &str) -> String {
-    truncate(&raw_output_folder(same_folder, folder, last_output_dir), 85)
+    compact_path(&raw_output_folder(same_folder, folder, last_output_dir), 42)
 }
 
 /// `text` cut to `max` characters, the last three replaced by "...".
 fn truncate(text: &str, max: usize) -> String {
     if text.chars().count() > max {
-        format!("{}...", text.chars().take(max - 3).collect::<String>())
+        if max <= 3 {
+            "...".chars().take(max).collect()
+        } else {
+            format!("{}...", text.chars().take(max - 3).collect::<String>())
+        }
     } else {
         text.to_owned()
     }
@@ -571,9 +626,12 @@ impl NvencFfxApp {
             let raw_folder = raw_output_folder(self.s.batch_same_folder, &self.s.batch_output_folder, &self.s.last_output_dir);
             let folder = output_label(self.s.batch_same_folder, &self.s.batch_output_folder, &self.s.last_output_dir);
             place(ui, label_rect, |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                 colored_label(ui, "Output: ", colors::ACCENT_GREEN);
-                ui.add(Label::new(RichText::new(&folder).color(colors::TEXT_COLOR_W)).truncate())
-                    .on_hover_text(&raw_folder);
+                let resp = colored_label(ui, &folder, colors::TEXT_COLOR_W);
+                if folder != raw_folder {
+                    resp.on_hover_text(&raw_folder);
+                }
             });
 
             y += h + 5.0;
@@ -673,9 +731,29 @@ mod tests {
         assert_eq!(output_label(false, "", ""), "Original folder(s)");
         assert_eq!(output_label(false, r"D:\out", temp), r"D:\out");
         let long = format!(r"D:\{}", "é".repeat(90));
-        assert_eq!(output_label(false, &long, "").chars().count(), 85);
+        assert_eq!(output_label(false, &long, "").chars().count(), 42);
         assert!(output_label(false, &long, "").ends_with("..."));
         assert_eq!(truncate("short.mp4", 40), "short.mp4");
+        assert_eq!(truncate("toolong.mp4", 3), "...");
+        assert_eq!(truncate("toolong.mp4", 2), "..");
+        assert_eq!(truncate("toolong.mp4", 1), ".");
+        assert_eq!(truncate("toolong.mp4", 0), "");
+        assert_eq!(
+            compact_path(r"F:\Steam\steamapps\common\The Witcher 3\Blood and Wine extras\Concept_art\PL", 42),
+            r"F:\...\Concept_art\PL"
+        );
+        assert_eq!(
+            compact_path(r"\\media-server\very_long_share_name\nested\project\output", 30),
+            r"\\media-server\very_long_sh..."
+        );
+        assert_eq!(
+            compact_path(r"\\media-server\share\nested\project\output", 40),
+            r"\\media-server\share\...\project\output"
+        );
+        assert_eq!(
+            compact_path("A non-path long string without any directory slashes", 20),
+            "A non-path long s..."
+        );
     }
 
     #[test]
