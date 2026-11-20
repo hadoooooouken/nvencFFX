@@ -757,7 +757,15 @@ impl NvencFfxApp {
         match presets::load(&self.presets_dir, name) {
             Ok(map) => {
                 let ffmpeg = self.s.ffmpeg_path.clone();
+                let batch_output_folder = self.s.batch_output_folder.clone();
+                let batch_same_folder = self.s.batch_same_folder;
+                let batch_change_container = self.s.batch_change_container;
+                let batch_output_container = self.s.batch_output_container.clone();
                 self.s.apply_json(&map);
+                self.s.batch_output_folder = batch_output_folder;
+                self.s.batch_same_folder = batch_same_folder;
+                self.s.batch_change_container = batch_change_container;
+                self.s.batch_output_container = batch_output_container;
                 if self.s.ffmpeg_path != ffmpeg {
                     self.ffprobe = probe::ffprobe_for(&self.s.ffmpeg_path);
                 }

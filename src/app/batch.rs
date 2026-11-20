@@ -3,8 +3,8 @@
 
 use std::{fs, path::{Path, PathBuf}};
 use eframe::egui::{
-    self, Align, Align2, CornerRadius, FontId, Pos2, Rect, ScrollArea, Ui, UiBuilder, Vec2,
-    Layout, ViewportBuilder, ViewportId, pos2, vec2,
+    self, Align, Align2, CornerRadius, FontId, Label, Pos2, Rect, RichText, ScrollArea, Ui,
+    UiBuilder, Vec2, Layout, ViewportBuilder, ViewportId, pos2, vec2,
 };
 use crate::config::settings::VideoCodec;
 use crate::core::{command, probe::Probed, process::{Exit, Runner}, streams};
@@ -12,8 +12,8 @@ use crate::ui::{
     dialogs::{self, Kind},
     theme::{colors, dimensions},
     widgets::{
-        ButtonKind, button, cell, checkbox, cross_button, colored_label, file_drag_drop_overlay,
-        handle_dropped_files, option_menu, place, row,
+        ButtonKind, button, cell, checkbox, checkbox_enabled, cross_button, colored_label,
+        file_drag_drop_overlay, handle_dropped_files, option_menu, place, row,
     },
 };
 use super::{Action, NvencFfxApp, Task, TaskKind, Taskbar, VIDEO_EXTENSIONS, has_extension};
@@ -131,11 +131,20 @@ impl Batch {
     }
 }
 
-/// `<stem>_<codec>_custom<ext>` in the batch output folder,
-/// else in the main window's last output folder if it still exists, else next to
-/// the input. `<ext>` is the chosen container, or the input's own.
-fn output_path(input: &Path, codec: VideoCodec, folder: &str, last_output_dir: &str, container: Option<&str>) -> PathBuf {
-    let dir = if !folder.is_empty() {
+/// `<stem>_<codec>_custom<ext>` in the input's own folder (if `same_folder`),
+/// else in the batch output folder, else in the main window's last output folder if
+/// it still exists, else next to the input. `<ext>` is the chosen container, or the input's own.
+fn output_path(
+    input: &Path,
+    codec: VideoCodec,
+    same_folder: bool,
+    folder: &str,
+    last_output_dir: &str,
+    container: Option<&str>,
+) -> PathBuf {
+    let dir = if same_folder {
+        input.parent().map(Path::to_path_buf).unwrap_or_default()
+    } else if !folder.is_empty() {
         PathBuf::from(folder)
     } else if !last_output_dir.is_empty() && Path::new(last_output_dir).exists() {
         PathBuf::from(last_output_dir)
@@ -150,16 +159,23 @@ fn output_path(input: &Path, codec: VideoCodec, folder: &str, last_output_dir: &
     dir.join(format!("{stem}_{}_custom{ext}", codec.suffix()))
 }
 
-/// Where the files will go.
-fn output_label(folder: &str, last_output_dir: &str) -> String {
-    let text = if !folder.is_empty() {
+/// Where the files will go (untruncated).
+fn raw_output_folder(same_folder: bool, folder: &str, last_output_dir: &str) -> String {
+    let text = if same_folder {
+        "Original folder(s)"
+    } else if !folder.is_empty() {
         folder
     } else if !last_output_dir.is_empty() && Path::new(last_output_dir).exists() {
         last_output_dir
     } else {
         "Original folder(s)"
     };
-    truncate(text, 85)
+    text.to_owned()
+}
+
+/// Where the files will go.
+fn output_label(same_folder: bool, folder: &str, last_output_dir: &str) -> String {
+    truncate(&raw_output_folder(same_folder, folder, last_output_dir), 85)
 }
 
 /// `text` cut to `max` characters, the last three replaced by "...".
@@ -361,6 +377,7 @@ impl NvencFfxApp {
             let output = output_path(
                 Path::new(&input),
                 self.s.codec,
+                self.s.batch_same_folder,
                 &self.s.batch_output_folder,
                 &self.s.last_output_dir,
                 container,
@@ -536,17 +553,39 @@ impl NvencFfxApp {
             // The list takes what the rows below it (and their padding) leave
             let list = area.with_max_y(area.max.y - (5.0 + h + 5.0 + h + 10.0 + 5.0 + h + 5.0));
 
+            let is_running = self.batch.run.is_some();
             let mut y = list.max.y + 5.0;
-            let folder = output_label(&self.s.batch_output_folder, &self.s.last_output_dir);
-            place(ui, line(y), |ui| {
+            let r = line(y);
+            let check_w = 205.0;
+            place(ui, cell(r, r.width() - check_w, check_w), |ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    checkbox_enabled(
+                        ui,
+                        &mut self.s.batch_same_folder,
+                        "Save in input folder",
+                        !is_running,
+                    )
+                })
+            });
+            let label_rect = cell(r, 0.0, (r.width() - check_w - 10.0).max(50.0));
+            let raw_folder = raw_output_folder(self.s.batch_same_folder, &self.s.batch_output_folder, &self.s.last_output_dir);
+            let folder = output_label(self.s.batch_same_folder, &self.s.batch_output_folder, &self.s.last_output_dir);
+            place(ui, label_rect, |ui| {
                 colored_label(ui, "Output: ", colors::ACCENT_GREEN);
-                colored_label(ui, &folder, colors::TEXT_COLOR_W);
+                ui.add(Label::new(RichText::new(&folder).color(colors::TEXT_COLOR_W)).truncate())
+                    .on_hover_text(&raw_folder);
             });
 
             y += h + 5.0;
             let (r, col) = (line(y), area.width() / 3.0);
             let folder_button = cell(r, 0.0, col - 5.0);
-            if place(ui, folder_button, |ui| button(ui, folder_button.size(), "Output Folder", ButtonKind::Green)).clicked() {
+            let folder_kind = if self.s.batch_same_folder || is_running {
+                ButtonKind::Disabled
+            } else {
+                ButtonKind::Green
+            };
+            let folder_clicked = place(ui, folder_button, |ui| button(ui, folder_button.size(), "Output Folder", folder_kind)).clicked();
+            if folder_clicked && folder_kind != ButtonKind::Disabled {
                 clicked = Some(Clicked::OutputFolder);
             }
             // Kept against the container menu so the two stay together when the window widens
@@ -619,7 +658,7 @@ mod tests {
     #[test]
     fn output_names() {
         let input = Path::new(r"C:\v\clip.MKV");
-        let out = |folder, last, container| output_path(input, VideoCodec::Hevc, folder, last, container);
+        let out = |folder, last, container| output_path(input, VideoCodec::Hevc, false, folder, last, container);
         assert_eq!(out("", "", None), Path::new(r"C:\v\clip_hevc_custom.MKV"));
         assert_eq!(out(r"D:\out", "", Some("mov")), Path::new(r"D:\out\clip_hevc_custom.mov"));
         assert_eq!(out("", r"Z:\missing", None), Path::new(r"C:\v\clip_hevc_custom.MKV"), "a vanished folder is skipped");
@@ -627,16 +666,58 @@ mod tests {
         let temp = temp.to_str().unwrap();
         assert_eq!(out("", temp, None), Path::new(temp).join("clip_hevc_custom.MKV"));
         assert_eq!(
-            output_path(Path::new(r"C:\v\noext"), VideoCodec::Av1, "", "", None),
+            output_path(Path::new(r"C:\v\noext"), VideoCodec::Av1, false, "", "", None),
             Path::new(r"C:\v\noext_av1_custom.mp4")
         );
 
-        assert_eq!(output_label("", ""), "Original folder(s)");
-        assert_eq!(output_label(r"D:\out", temp), r"D:\out");
+        assert_eq!(output_label(false, "", ""), "Original folder(s)");
+        assert_eq!(output_label(false, r"D:\out", temp), r"D:\out");
         let long = format!(r"D:\{}", "é".repeat(90));
-        assert_eq!(output_label(&long, "").chars().count(), 85);
-        assert!(output_label(&long, "").ends_with("..."));
+        assert_eq!(output_label(false, &long, "").chars().count(), 85);
+        assert!(output_label(false, &long, "").ends_with("..."));
         assert_eq!(truncate("short.mp4", 40), "short.mp4");
+    }
+
+    #[test]
+    fn batch_same_folder_priority_and_output_labels() {
+        let file1 = Path::new(r"C:\Videos\clip1.mp4");
+        let file2 = Path::new(r"D:\Other\sub\clip2.mkv");
+        let temp = std::env::temp_dir();
+        let temp_str = temp.to_str().unwrap();
+
+        // 1. same_folder = true overrides both explicit folder and last_output_dir
+        assert_eq!(
+            output_path(file1, VideoCodec::Hevc, true, r"E:\Export", temp_str, None),
+            Path::new(r"C:\Videos\clip1_hevc_custom.mp4")
+        );
+        assert_eq!(
+            output_path(file2, VideoCodec::Av1, true, r"E:\Export", temp_str, Some("mp4")),
+            Path::new(r"D:\Other\sub\clip2_av1_custom.mp4")
+        );
+
+        // 2. same_folder = false keeps the existing priority order: folder -> last_output_dir -> input.parent()
+        assert_eq!(
+            output_path(file1, VideoCodec::Hevc, false, r"E:\Export", temp_str, None),
+            Path::new(r"E:\Export\clip1_hevc_custom.mp4")
+        );
+        assert_eq!(
+            output_path(file1, VideoCodec::Hevc, false, "", temp_str, None),
+            Path::new(temp_str).join("clip1_hevc_custom.mp4")
+        );
+        assert_eq!(
+            output_path(file1, VideoCodec::Hevc, false, "", r"Z:\nonexistent_12345", None),
+            Path::new(r"C:\Videos\clip1_hevc_custom.mp4")
+        );
+
+        // 3. raw_output_folder & output_label with same_folder = true is always "Original folder(s)"
+        assert_eq!(raw_output_folder(true, r"E:\Export", temp_str), "Original folder(s)");
+        assert_eq!(output_label(true, r"E:\Export", temp_str), "Original folder(s)");
+
+        // 4. Output name is guaranteed to differ from input by the codec custom suffix
+        let input_exact = Path::new(r"C:\Videos\clip_hevc_custom.mp4");
+        let generated = output_path(input_exact, VideoCodec::Hevc, true, "", "", None);
+        assert_eq!(generated, Path::new(r"C:\Videos\clip_hevc_custom_hevc_custom.mp4"));
+        assert_ne!(generated, input_exact);
     }
 
     fn files(batch: &Batch) -> Vec<&str> {

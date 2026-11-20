@@ -97,6 +97,7 @@ pub struct Settings {
     pub custom_preset_selected: String,
 
     pub batch_output_folder: String,
+    pub batch_same_folder: bool,
     pub batch_change_container: bool,
     pub batch_output_container: String,
 
@@ -160,6 +161,7 @@ impl Default for Settings {
             custom_preset_selected: String::new(),
 
             batch_output_folder: String::new(),
+            batch_same_folder: false,
             batch_change_container: false,
             batch_output_container: s("mp4"),
 
@@ -281,7 +283,7 @@ impl Settings {
         {
             self.batch_output_folder = folder;
         }
-        flags!(batch_change_container);
+        flags!(batch_change_container, batch_same_folder);
         texts!(batch_output_container);
     }
 }
@@ -295,9 +297,22 @@ mod tests {
         let keys: Vec<String> = Settings::default().to_json().keys().cloned().collect();
         assert_eq!(keys.first().map(String::as_str), Some("ffmpeg_path"));
         assert_eq!(keys.last().map(String::as_str), Some("version"));
-        assert_eq!(keys.len(), 46);
+        assert_eq!(keys.len(), 47);
         let json = serde_json::to_string(&Settings::default().to_json()).unwrap();
         assert!(json.contains(r#""codec":"hevc""#));
+    }
+
+    #[test]
+    fn old_json_without_batch_same_folder_defaults_to_false() {
+        let mut s = Settings::default();
+        let mut map = Map::new();
+        map.insert("batch_output_folder".into(), Value::String(r"C:\out".into()));
+        s.apply_json(&map);
+        assert!(!s.batch_same_folder);
+
+        map.insert("batch_same_folder".into(), Value::Bool(true));
+        s.apply_json(&map);
+        assert!(s.batch_same_folder);
     }
 
     #[test]
@@ -400,6 +415,12 @@ mod tests {
         let written = std::fs::read_to_string(&file).unwrap();
         let _ = std::fs::remove_file(&file);
         let version = format!(r#""version": "{}""#, env!("CARGO_PKG_VERSION"));
-        assert_eq!(written, OLD.replace(r#""version": "1.8.4""#, &version));
+        let expected = OLD
+            .replace(r#""version": "1.8.4""#, &version)
+            .replace(
+                "\"batch_output_folder\": \"\",\r\n",
+                "\"batch_output_folder\": \"\",\r\n    \"batch_same_folder\": false,\r\n",
+            );
+        assert_eq!(written, expected);
     }
 }

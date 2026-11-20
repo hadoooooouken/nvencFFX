@@ -206,7 +206,7 @@ mod tests {
             let applied = s.to_json();
             for (key, value) in &preset {
                 let expected = match value {
-                    _ if matches!(key.as_str(), "version" | "ffmpeg_path" | "batch_output_folder") => continue,
+                    _ if matches!(key.as_str(), "version" | "ffmpeg_path" | "batch_output_folder" | "batch_same_folder") => continue,
                     Value::String(v) if v.is_empty() => continue,
                     Value::Number(n) => Value::String(n.to_string()),
                     v => v.clone(),
