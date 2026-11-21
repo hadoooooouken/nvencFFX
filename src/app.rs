@@ -22,7 +22,7 @@ use crate::ui::{
     widgets::{
         ButtonKind, EntryStyle, bold_button, button, cell, checkbox, checkbox_enabled,
         colored_label, entry, file_drag_drop_overlay, handle_dropped_files, label, option_menu,
-        place, progress_bar, radio_value, reset_button, row, section_frame,
+        place, preset_menu, progress_bar, radio_value, reset_button, row, section_frame,
         selection_before_right_click, sub_rect, text_checkbox, text_context_menu, trim_slider,
     },
 };
@@ -209,7 +209,7 @@ pub struct NvencFfxApp {
 
     // Presets
     presets_dir: PathBuf,
-    pub custom_presets: Vec<String>,
+    pub custom_presets: Vec<presets::PresetItem>,
     preset_indicator: String,
     preset_indicator_active: bool,
 
@@ -486,10 +486,17 @@ impl NvencFfxApp {
     fn on_dialog(&mut self, action: Action, outcome: Outcome, ctx: &egui::Context) {
         match (action, outcome) {
             (Action::SavePresetAs, Outcome::Accepted(name)) => {
-                let name = name.trim().to_owned();
-                if name.is_empty() {
+                let raw = name.trim();
+                if raw.is_empty() {
                     return;
                 }
+                let name = match presets::normalize_name(raw) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        self.message(Kind::Error, "Error", e);
+                        return;
+                    }
+                };
                 if presets::path(&self.presets_dir, &name).exists() {
                     let text = format!("Preset '{name}' already exists. Overwrite?");
                     self.show_dialog_in(ViewportId::ROOT, Kind::Question, "Overwrite", text,
@@ -784,7 +791,10 @@ impl NvencFfxApp {
     }
 
     fn finish_save_as(&mut self, name: String) {
-        if let Err(e) = presets::save(&self.presets_dir, &name, &self.s) {
+        let mut to_save = self.s.clone();
+        to_save.custom_preset_selected = name.clone();
+        to_save.selected_preset = "custom".to_owned();
+        if let Err(e) = presets::save(&self.presets_dir, &name, &to_save) {
             self.message(Kind::Error, "Error", e);
             return;
         }
@@ -801,11 +811,15 @@ impl NvencFfxApp {
         } else if !presets::path(&self.presets_dir, &name).exists() {
             let text = format!("Preset '{name}' does not exist. Saving as new preset.");
             self.show_dialog_in(ViewportId::ROOT, Kind::Warning, "Warning", text, Action::ThenSavePresetAs);
-        } else if let Err(e) = presets::save(&self.presets_dir, &name, &self.s) {
-            self.message(Kind::Error, "Error", e);
         } else {
-            self.s.selected_preset = "custom".to_owned();
-            self.set_preset_indicator(format!("Preset saved: {name}"));
+            let mut to_save = self.s.clone();
+            to_save.selected_preset = "custom".to_owned();
+            if let Err(e) = presets::save(&self.presets_dir, &name, &to_save) {
+                self.message(Kind::Error, "Error", e);
+            } else {
+                self.s.selected_preset = "custom".to_owned();
+                self.set_preset_indicator(format!("Preset saved: {name}"));
+            }
         }
     }
 
@@ -1821,10 +1835,9 @@ impl NvencFfxApp {
             self.load_custom_preset(&name);
         }
         place_label(ui, cell(r, 155.0, 50.0), "Preset:");
-        let names: Vec<&str> = self.custom_presets.iter().map(String::as_str).collect();
         let mut picked = self.s.custom_preset_selected.clone();
         let menu = place(ui, cell(r, 206.0, menu_w), |ui| {
-            option_menu(ui, "custom_preset", menu_w, &mut picked, &names, true)
+            preset_menu(ui, "custom_preset", menu_w, &mut picked, &self.custom_presets, true)
         });
         if menu.changed() {
             self.load_custom_preset(&picked);

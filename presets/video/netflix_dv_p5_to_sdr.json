@@ -32,6 +32,6 @@
     "additional_filter_options": "libplacebo=apply_dolbyvision=true:tonemapping=bt.2446a:colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv:format=yuv420p",
     "additional_audio_filter_options": "",
     "selected_preset": "custom",
-    "custom_preset_selected": "video-netflix_dv_p5_to_sdr",
+    "custom_preset_selected": "video/netflix_dv_p5_to_sdr",
     "version": "2.0.2"
 }

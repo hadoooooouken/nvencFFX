@@ -8,6 +8,6 @@
     "additional_filter_options": "",
     "additional_audio_filter_options": "",
     "selected_preset": "custom",
-    "custom_preset_selected": "strip_metadata_without_re-encode",
+    "custom_preset_selected": "tools/strip_metadata_without_re-encode",
     "version": "1.7.0"
 }

@@ -32,6 +32,6 @@
     "additional_filter_options": "",
     "additional_audio_filter_options": "",
     "selected_preset": "custom",
-    "custom_preset_selected": "video-rtx3060_optimal",
+    "custom_preset_selected": "video/rtx3060_optimal",
     "version": "1.7.0"
 }

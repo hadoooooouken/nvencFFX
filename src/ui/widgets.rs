@@ -11,6 +11,7 @@ use eframe::egui::{
     vec2,
 };
 use std::sync::Arc;
+use crate::config::presets::PresetItem;
 use super::theme::{colors, dimensions};
 
 // ---------------------------------------------------------------------------
@@ -531,6 +532,412 @@ pub fn option_menu(
     response
 }
 
+/// Preset option menu opening upward with a collapsible category accordion and bottom search bar.
+pub fn preset_menu(
+    ui: &mut Ui,
+    id_salt: &str,
+    width: f32,
+    selected_id: &mut String,
+    items: &[PresetItem],
+    enabled: bool,
+) -> Response {
+    let size = vec2(width, dimensions::WIDGET_HEIGHT);
+    let sense = if enabled { Sense::click() } else { Sense::hover() };
+    let (rect, mut response) = ui.allocate_exact_size(size, sense);
+
+    let r = dimensions::CORNER_RADIUS;
+    let hovered = enabled && response.hovered();
+    let (field, arrow_bg, text_color) = if enabled {
+        let arrow = if hovered { colors::HOVER_GREEN } else { colors::ACCENT_GREEN };
+        (colors::PRIMARY_BG, arrow, colors::LABEL_TEXT)
+    } else {
+        (colors::ACCENT_GREY, colors::ACCENT_GREY, colors::TEXT_DISABLED)
+    };
+
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius::same(r), field);
+    let arrow_rect = Rect::from_min_max(pos2(rect.max.x - rect.height(), rect.min.y), rect.max);
+    painter.rect_filled(
+        arrow_rect,
+        CornerRadius { nw: 0, sw: 0, ne: r, se: r },
+        arrow_bg,
+    );
+    let c = arrow_rect.center();
+    painter.add(Shape::line(
+        vec![c + vec2(-4.5, 2.0), c + vec2(0.0, -2.5), c + vec2(4.5, 2.0)],
+        Stroke::new(2.0_f32, text_color),
+    ));
+
+    let display_text = if let Some(item) = items.iter().find(|i| i.id == *selected_id) {
+        item.display_label()
+    } else {
+        selected_id.clone()
+    };
+
+    painter.with_clip_rect(rect.with_max_x(arrow_rect.min.x - 2.0)).text(
+        pos2(rect.min.x + 8.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        &display_text,
+        body_font(),
+        text_color,
+    );
+
+    let popup_id = ui.make_persistent_id(("preset_menu", id_salt));
+    let search_id = popup_id.with("preset_search");
+    let open_group_id = popup_id.with("preset_open_group");
+
+    // Empty string "" represents the root ("other") section so it never collides with a real "other" folder.
+    let active_group_key = items
+        .iter()
+        .find(|i| i.id == *selected_id)
+        .map(|i| i.group.to_lowercase());
+
+    if enabled && response.clicked() {
+        ui.data_mut(|d| {
+            d.insert_temp(search_id, String::new());
+            if let Some(ref g) = active_group_key {
+                d.insert_temp(open_group_id, g.clone());
+            } else {
+                d.remove_temp::<String>(open_group_id);
+            }
+        });
+    }
+
+    let mut picked = None;
+    if enabled {
+        Popup::menu(&response)
+            .id(popup_id)
+            .align(egui::RectAlign::TOP_START)
+            .width(width.max(220.0))
+            .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+                let prev_query: String = ui.data_mut(|d| d.get_temp(search_id).unwrap_or_default());
+
+                let paint_clipped_text =
+                    |ui: &Ui, row: Rect, x_offset: f32, text: &str, color: Color32| {
+                        let clip = ui.clip_rect().intersect(row.with_max_x(row.max.x - 6.0));
+                        ui.painter().with_clip_rect(clip).text(
+                            pos2(row.min.x + x_offset, row.center().y),
+                            Align2::LEFT_CENTER,
+                            text,
+                            body_font(),
+                            color,
+                        );
+                    };
+
+                let content_rect = ui.ctx().content_rect();
+                let space_above = (rect.min.y - content_rect.min.y - 48.0).max(80.0);
+                let max_list_h = 380.0_f32.min(space_above);
+
+                let query = prev_query.trim().to_lowercase();
+                if !query.is_empty() {
+                    let matches: Vec<&PresetItem> = items
+                        .iter()
+                        .filter(|i| {
+                            i.display_label().to_lowercase().contains(&query)
+                                || i.id.to_lowercase().contains(&query)
+                        })
+                        .collect();
+
+                    let content_h = if matches.is_empty() {
+                        26.0
+                    } else {
+                        matches.len() as f32 * 24.0
+                    };
+                    let scroll_h = content_h.min(max_list_h);
+
+                    egui::ScrollArea::vertical()
+                        .id_salt("search_scroll")
+                        .min_scrolled_height(scroll_h)
+                        .max_height(scroll_h)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+                            if matches.is_empty() {
+                                let (item, _) = ui.allocate_exact_size(
+                                    vec2(ui.available_width(), 26.0),
+                                    Sense::hover(),
+                                );
+                                paint_clipped_text(
+                                    ui,
+                                    item,
+                                    12.0,
+                                    "No presets found",
+                                    colors::PLACEHOLDER,
+                                );
+                            } else {
+                                for item in matches {
+                                    let (row, resp) = ui
+                                        .push_id(&item.id, |ui| {
+                                            ui.allocate_exact_size(
+                                                vec2(ui.available_width(), 24.0),
+                                                Sense::click(),
+                                            )
+                                        })
+                                        .inner;
+                                    let is_selected = item.id == *selected_id;
+                                    if resp.hovered() {
+                                        ui.painter().rect_filled(
+                                            row,
+                                            CornerRadius::same(4),
+                                            colors::ACCENT_GREEN,
+                                        );
+                                    } else if is_selected {
+                                        ui.painter().rect_filled(
+                                            row,
+                                            CornerRadius::same(4),
+                                            colors::SECONDARY_BG,
+                                        );
+                                    }
+                                    let text_color = if resp.hovered() {
+                                        colors::TEXT_COLOR_B
+                                    } else {
+                                        colors::LABEL_TEXT
+                                    };
+                                    let label = item.display_label();
+                                    paint_clipped_text(ui, row, 12.0, &label, text_color);
+                                    if resp.clicked() {
+                                        picked = Some(item.id.clone());
+                                        ui.close();
+                                    }
+                                }
+                            }
+                        });
+                } else {
+                    // (canonical_key, display_title, items)
+                    let mut groups: Vec<(String, String, Vec<&PresetItem>)> = Vec::new();
+                    for item in items {
+                        let key = item.group.to_lowercase();
+                        let display = if item.group.is_empty() {
+                            "other".to_owned()
+                        } else {
+                            item.group.clone()
+                        };
+                        if let Some((_, _, list)) = groups.iter_mut().find(|(k, _, _)| k == &key) {
+                            list.push(item);
+                        } else {
+                            groups.push((key, display, vec![item]));
+                        }
+                    }
+
+                    let mut open_group: Option<String> =
+                        ui.data_mut(|d| d.get_temp::<String>(open_group_id));
+
+                    let content_h = if items.is_empty() {
+                        26.0
+                    } else {
+                        let open_items = open_group
+                            .as_deref()
+                            .and_then(|og| groups.iter().find(|(k, _, _)| k == og))
+                            .map_or(0, |(_, _, list)| list.len());
+                        groups.len() as f32 * 26.0 + open_items as f32 * 24.0
+                    };
+                    let scroll_h = content_h.min(max_list_h);
+
+                    egui::ScrollArea::vertical()
+                        .id_salt("accordion_scroll")
+                        .min_scrolled_height(scroll_h)
+                        .max_height(scroll_h)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+                            if items.is_empty() {
+                                let (item, _) = ui.allocate_exact_size(
+                                    vec2(ui.available_width(), 26.0),
+                                    Sense::hover(),
+                                );
+                                paint_clipped_text(
+                                    ui,
+                                    item,
+                                    12.0,
+                                    "No presets found",
+                                    colors::PLACEHOLDER,
+                                );
+                                return;
+                            }
+
+                            for (group_key, group_display, group_items) in &groups {
+                                let (header_row, header_resp) = ui
+                                    .push_id(("group", group_key), |ui| {
+                                        ui.allocate_exact_size(
+                                            vec2(ui.available_width(), 26.0),
+                                            Sense::click(),
+                                        )
+                                    })
+                                    .inner;
+
+                                if header_resp.clicked() {
+                                    let was_open =
+                                        open_group.as_deref() == Some(group_key.as_str());
+                                    let next = if was_open { None } else { Some(group_key.clone()) };
+                                    ui.data_mut(|d| {
+                                        if let Some(ref g) = next {
+                                            d.insert_temp(open_group_id, g.clone());
+                                        } else {
+                                            d.remove_temp::<String>(open_group_id);
+                                        }
+                                    });
+                                    open_group = next;
+                                    ui.ctx().request_repaint();
+                                }
+
+                                let is_open = open_group.as_deref() == Some(group_key.as_str());
+
+                                if header_resp.hovered() {
+                                    ui.painter().rect_filled(
+                                        header_row,
+                                        CornerRadius::same(4),
+                                        colors::SECONDARY_BG,
+                                    );
+                                }
+
+                                let c = pos2(header_row.min.x + 12.0, header_row.center().y);
+                                let arrow_stroke = Stroke::new(1.8_f32, colors::ACCENT_GREEN);
+                                if is_open {
+                                    ui.painter().add(Shape::line(
+                                        vec![
+                                            c + vec2(-3.5, -2.0),
+                                            c + vec2(0.0, 2.0),
+                                            c + vec2(3.5, -2.0),
+                                        ],
+                                        arrow_stroke,
+                                    ));
+                                } else {
+                                    ui.painter().add(Shape::line(
+                                        vec![
+                                            c + vec2(-2.0, -3.5),
+                                            c + vec2(2.0, 0.0),
+                                            c + vec2(-2.0, 3.5),
+                                        ],
+                                        arrow_stroke,
+                                    ));
+                                }
+
+                                let title = format!("{} ({})", group_display, group_items.len());
+                                paint_clipped_text(
+                                    ui,
+                                    header_row,
+                                    24.0,
+                                    &title,
+                                    colors::ACCENT_GREEN,
+                                );
+
+                                if is_open {
+                                    for item in group_items {
+                                        let (row, resp) = ui
+                                            .push_id(&item.id, |ui| {
+                                                ui.allocate_exact_size(
+                                                    vec2(ui.available_width(), 24.0),
+                                                    Sense::click(),
+                                                )
+                                            })
+                                            .inner;
+                                        let is_selected = item.id == *selected_id;
+                                        if resp.hovered() {
+                                            ui.painter().rect_filled(
+                                                row,
+                                                CornerRadius::same(4),
+                                                colors::ACCENT_GREEN,
+                                            );
+                                        } else if is_selected {
+                                            ui.painter().rect_filled(
+                                                row,
+                                                CornerRadius::same(4),
+                                                colors::SECONDARY_BG,
+                                            );
+                                        }
+
+                                        let text_color = if resp.hovered() {
+                                            colors::TEXT_COLOR_B
+                                        } else {
+                                            colors::LABEL_TEXT
+                                        };
+                                        paint_clipped_text(ui, row, 28.0, &item.name, text_color);
+
+                                        if resp.clicked() {
+                                            picked = Some(item.id.clone());
+                                            ui.close();
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                }
+
+                let (sep_rect, _) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), 4.0), Sense::hover());
+                let sep_y = sep_rect.min.y + 0.5;
+                ui.painter().line_segment(
+                    [pos2(sep_rect.min.x, sep_y), pos2(sep_rect.max.x, sep_y)],
+                    Stroke::new(1.0, colors::ENTRY_BORDER),
+                );
+
+                let mut search_query = prev_query.clone();
+                let search_height = 26.0;
+                let (search_row, _) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), search_height), Sense::hover());
+                ui.painter().rect_filled(search_row, CornerRadius::ZERO, colors::SECONDARY_BG);
+
+                let search_rect = search_row.shrink2(vec2(8.0, 2.0));
+                let has_query = !search_query.is_empty();
+                let clear_w = if has_query { 20.0 } else { 0.0 };
+                let edit_rect = search_rect.with_max_x(search_rect.max.x - clear_w);
+
+                let edit = TextEdit::singleline(&mut search_query)
+                    .hint_text(RichText::new("Search...").color(colors::PLACEHOLDER))
+                    .font(body_font())
+                    .vertical_align(Align::Center)
+                    .desired_width(edit_rect.width())
+                    .text_color(colors::TEXT_COLOR_W)
+                    .frame(egui::Frame::NONE)
+                    .margin(egui::Margin::ZERO);
+                ui.put(edit_rect, edit);
+
+                let mut query_changed = search_query != prev_query;
+
+                if has_query {
+                    let clear_rect = Rect::from_min_max(
+                        pos2(search_rect.max.x - 18.0, search_rect.min.y),
+                        pos2(search_rect.max.x, search_rect.max.y),
+                    );
+                    let clear_resp =
+                        ui.interact(clear_rect, popup_id.with("clear_search"), Sense::click());
+                    let clear_color = if clear_resp.hovered() {
+                        colors::HOVER_RED
+                    } else {
+                        colors::PLACEHOLDER
+                    };
+                    ui.painter().text(
+                        clear_rect.center(),
+                        Align2::CENTER_CENTER,
+                        "×",
+                        body_font(),
+                        clear_color,
+                    );
+                    if clear_resp.clicked() {
+                        search_query.clear();
+                        query_changed = true;
+                    }
+                }
+
+                if query_changed {
+                    ui.data_mut(|d| d.insert_temp(search_id, search_query.clone()));
+                    ui.ctx().request_repaint();
+                }
+            });
+    }
+
+    if let Some(v) = picked {
+        *selected_id = v;
+        response.mark_changed();
+    }
+    response
+}
+
 // ---------------------------------------------------------------------------
 // Section toggle
 // ---------------------------------------------------------------------------
@@ -761,6 +1168,205 @@ mod tests {
         });
         // No renderer here to upload the font atlas to
         output.textures_delta.clear();
+    }
+
+    #[test]
+    fn test_preset_menu_accordion() {
+        let ctx = Context::default();
+        let items = vec![
+            PresetItem {
+                id: "audio/mono".to_string(),
+                group: "audio".to_string(),
+                name: "mono".to_string(),
+            },
+            PresetItem {
+                id: "vfx/filter1".to_string(),
+                group: "vfx".to_string(),
+                name: "filter1".to_string(),
+            },
+        ];
+        let mut selected = "vfx/filter1".to_string();
+
+        // Frame 1: Show menu
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 2: Click the preset menu button (at 10, 10) to open popup
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::PointerButton {
+            pos: pos2(10.0, 10.0),
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        raw.events.push(egui::Event::PointerButton {
+            pos: pos2(10.0, 10.0),
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let mut out = ctx.run_ui(raw, |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 3: Render popup open. Active group "vfx" should be open by default.
+        let mut test_popup_id = None;
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            test_popup_id = Some(ui.make_persistent_id(("preset_menu", "test")));
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        let pid = test_popup_id.unwrap();
+        let open_gid = pid.with("preset_open_group");
+        let open_group: Option<String> = ctx.data(|d| d.get_temp(open_gid));
+        assert_eq!(open_group.as_deref(), Some("vfx"));
+
+        // Frame 4: Click on the "audio" header to switch open group
+        let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+        let audio_header_pos = popup_pos + vec2(50.0, 17.0);
+
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::PointerButton {
+            pos: audio_header_pos,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        raw.events.push(egui::Event::PointerButton {
+            pos: audio_header_pos,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let mut out = ctx.run_ui(raw, |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 5: Check state
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        let open_group: Option<String> = ctx.data(|d| d.get_temp(open_gid));
+        assert_eq!(open_group.as_deref(), Some("audio"));
+
+        // Frame 6: Click audio again to collapse it
+        let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+        let audio_header_pos = popup_pos + vec2(50.0, 17.0);
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::PointerButton {
+            pos: audio_header_pos,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        raw.events.push(egui::Event::PointerButton {
+            pos: audio_header_pos,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let mut out = ctx.run_ui(raw, |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 7: Check state - should now be None (all collapsed)
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            preset_menu(ui, "test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        let open_group: Option<String> = ctx.data(|d| d.get_temp(open_gid));
+        assert_eq!(open_group, None);
+    }
+
+    #[test]
+    fn test_preset_menu_root_and_search() {
+        let ctx = Context::default();
+        let items = vec![
+            PresetItem {
+                id: "vfx/old_crt_tv".to_string(),
+                group: "vfx".to_string(),
+                name: "old_crt_tv".to_string(),
+            },
+            PresetItem {
+                id: "my_root".to_string(),
+                group: String::new(),
+                name: "my_root".to_string(),
+            },
+        ];
+        let mut selected = "my_root".to_string();
+
+        // Frame 1: Render menu
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            preset_menu(ui, "search_test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 2: Click menu button to open popup
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::PointerButton {
+            pos: pos2(10.0, 10.0),
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        raw.events.push(egui::Event::PointerButton {
+            pos: pos2(10.0, 10.0),
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let mut pid = None;
+        let mut out = ctx.run_ui(raw, |ui| {
+            pid = Some(ui.make_persistent_id(("preset_menu", "search_test")));
+            preset_menu(ui, "search_test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Root preset opens the "" ("other") group
+        let pid = pid.unwrap();
+        let open_group: Option<String> = ctx.data(|d| d.get_temp(pid.with("preset_open_group")));
+        assert_eq!(open_group.as_deref(), Some(""));
+
+        // Frame 3: Inject search query "vfx/old" and render matching list
+        ctx.data_mut(|d| d.insert_temp(pid.with("preset_search"), "vfx/old".to_string()));
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            preset_menu(ui, "search_test", 200.0, &mut selected, &items, true);
+        });
+        out.textures_delta.clear();
+
+        // Frame 4: Click first search result
+        let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+        let first_match_pos = popup_pos + vec2(50.0, 17.0);
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::PointerButton {
+            pos: first_match_pos,
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        raw.events.push(egui::Event::PointerButton {
+            pos: first_match_pos,
+            button: PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        let mut changed = false;
+        let mut out = ctx.run_ui(raw, |ui| {
+            changed = preset_menu(ui, "search_test", 200.0, &mut selected, &items, true).changed();
+        });
+        out.textures_delta.clear();
+
+        assert!(changed);
+        assert_eq!(selected, "vfx/old_crt_tv");
     }
 
     #[test]

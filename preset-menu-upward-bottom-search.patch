@@ -1,0 +1,190 @@
+diff --git a/src/ui/widgets.rs b/src/ui/widgets.rs
+--- a/src/ui/widgets.rs
++++ b/src/ui/widgets.rs
+@@ -532,7 +532,7 @@
+     response
+ }
+ 
+-/// Preset option menu with a top search bar and collapsible category accordion.
++/// Preset option menu opening upward with a collapsible category accordion and bottom search bar.
+ pub fn preset_menu(
+     ui: &mut Ui,
+     id_salt: &str,
+@@ -607,69 +607,13 @@
+     if enabled {
+         Popup::menu(&response)
+             .id(popup_id)
++            .align(egui::RectAlign::TOP_START)
+             .width(width.max(220.0))
+             .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
+             .show(|ui| {
+                 ui.spacing_mut().item_spacing = Vec2::ZERO;
+ 
+                 let prev_query: String = ui.data_mut(|d| d.get_temp(search_id).unwrap_or_default());
+-                let mut search_query = prev_query.clone();
+-                let search_height = 28.0;
+-                let (search_row, _) =
+-                    ui.allocate_exact_size(vec2(ui.available_width(), search_height), Sense::hover());
+-                ui.painter().rect_filled(search_row, CornerRadius::ZERO, colors::SECONDARY_BG);
+-
+-                let search_rect = search_row.shrink2(vec2(6.0, 3.0));
+-                let has_query = !search_query.is_empty();
+-                let clear_w = if has_query { 20.0 } else { 0.0 };
+-                let edit_rect = search_rect.with_max_x(search_rect.max.x - clear_w);
+-
+-                let edit = TextEdit::singleline(&mut search_query)
+-                    .hint_text(RichText::new("Search...").color(colors::PLACEHOLDER))
+-                    .font(body_font())
+-                    .text_color(colors::TEXT_COLOR_W)
+-                    .frame(egui::Frame::NONE)
+-                    .margin(egui::Margin::symmetric(4, 2));
+-                ui.put(edit_rect, edit);
+-
+-                let mut query_changed = search_query != prev_query;
+-
+-                if has_query {
+-                    let clear_rect = Rect::from_min_max(
+-                        pos2(search_rect.max.x - 18.0, search_rect.min.y),
+-                        pos2(search_rect.max.x, search_rect.max.y),
+-                    );
+-                    let clear_resp =
+-                        ui.interact(clear_rect, popup_id.with("clear_search"), Sense::click());
+-                    let clear_color = if clear_resp.hovered() {
+-                        colors::HOVER_RED
+-                    } else {
+-                        colors::PLACEHOLDER
+-                    };
+-                    ui.painter().text(
+-                        clear_rect.center(),
+-                        Align2::CENTER_CENTER,
+-                        "×",
+-                        body_font(),
+-                        clear_color,
+-                    );
+-                    if clear_resp.clicked() {
+-                        search_query.clear();
+-                        query_changed = true;
+-                    }
+-                }
+-
+-                if query_changed {
+-                    ui.data_mut(|d| d.insert_temp(search_id, search_query.clone()));
+-                    ui.ctx().request_repaint();
+-                }
+-
+-                let (sep_rect, _) =
+-                    ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
+-                ui.painter().line_segment(
+-                    [sep_rect.left_top(), sep_rect.right_top()],
+-                    Stroke::new(1.0, colors::ENTRY_BORDER),
+-                );
+ 
+                 let paint_clipped_text =
+                     |ui: &Ui, row: Rect, x_offset: f32, text: &str, color: Color32| {
+@@ -684,10 +628,10 @@
+                     };
+ 
+                 let content_rect = ui.ctx().content_rect();
+-                let space_below = (content_rect.max.y - rect.max.y - 48.0).max(80.0);
+-                let max_list_h = 380.0_f32.min(space_below);
+-
+-                let query = search_query.trim().to_lowercase();
++                let space_above = (rect.min.y - content_rect.min.y - 48.0).max(80.0);
++                let max_list_h = 380.0_f32.min(space_above);
++
++                let query = prev_query.trim().to_lowercase();
+                 if !query.is_empty() {
+                     let matches: Vec<&PresetItem> = items
+                         .iter()
+@@ -923,6 +867,64 @@
+                             }
+                         });
+                 }
++
++                let (sep_rect, _) =
++                    ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
++                ui.painter().line_segment(
++                    [sep_rect.left_top(), sep_rect.right_top()],
++                    Stroke::new(1.0, colors::ENTRY_BORDER),
++                );
++
++                let mut search_query = prev_query.clone();
++                let search_height = 28.0;
++                let (search_row, _) =
++                    ui.allocate_exact_size(vec2(ui.available_width(), search_height), Sense::hover());
++                ui.painter().rect_filled(search_row, CornerRadius::ZERO, colors::SECONDARY_BG);
++
++                let search_rect = search_row.shrink2(vec2(6.0, 3.0));
++                let has_query = !search_query.is_empty();
++                let clear_w = if has_query { 20.0 } else { 0.0 };
++                let edit_rect = search_rect.with_max_x(search_rect.max.x - clear_w);
++
++                let edit = TextEdit::singleline(&mut search_query)
++                    .hint_text(RichText::new("Search...").color(colors::PLACEHOLDER))
++                    .font(body_font())
++                    .text_color(colors::TEXT_COLOR_W)
++                    .frame(egui::Frame::NONE)
++                    .margin(egui::Margin::symmetric(4, 2));
++                ui.put(edit_rect, edit);
++
++                let mut query_changed = search_query != prev_query;
++
++                if has_query {
++                    let clear_rect = Rect::from_min_max(
++                        pos2(search_rect.max.x - 18.0, search_rect.min.y),
++                        pos2(search_rect.max.x, search_rect.max.y),
++                    );
++                    let clear_resp =
++                        ui.interact(clear_rect, popup_id.with("clear_search"), Sense::click());
++                    let clear_color = if clear_resp.hovered() {
++                        colors::HOVER_RED
++                    } else {
++                        colors::PLACEHOLDER
++                    };
++                    ui.painter().text(
++                        clear_rect.center(),
++                        Align2::CENTER_CENTER,
++                        "×",
++                        body_font(),
++                        clear_color,
++                    );
++                    if clear_resp.clicked() {
++                        search_query.clear();
++                        query_changed = true;
++                    }
++                }
++
++                if query_changed {
++                    ui.data_mut(|d| d.insert_temp(search_id, search_query.clone()));
++                    ui.ctx().request_repaint();
++                }
+             });
+     }
+ 
+@@ -1222,7 +1224,7 @@
+ 
+         // Frame 4: Click on the "audio" header to switch open group
+         let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+-        let audio_header_pos = popup_pos + vec2(50.0, 45.0);
++        let audio_header_pos = popup_pos + vec2(50.0, 17.0);
+ 
+         let mut raw = egui::RawInput::default();
+         raw.events.push(egui::Event::PointerButton {
+@@ -1253,7 +1255,7 @@
+ 
+         // Frame 6: Click audio again to collapse it
+         let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+-        let audio_header_pos = popup_pos + vec2(50.0, 45.0);
++        let audio_header_pos = popup_pos + vec2(50.0, 17.0);
+         let mut raw = egui::RawInput::default();
+         raw.events.push(egui::Event::PointerButton {
+             pos: audio_header_pos,
+@@ -1340,7 +1342,7 @@
+ 
+         // Frame 4: Click first search result
+         let popup_pos = egui::AreaState::load(&ctx, pid).unwrap().left_top_pos();
+-        let first_match_pos = popup_pos + vec2(50.0, 45.0);
++        let first_match_pos = popup_pos + vec2(50.0, 17.0);
+         let mut raw = egui::RawInput::default();
+         raw.events.push(egui::Event::PointerButton {
+             pos: first_match_pos,
