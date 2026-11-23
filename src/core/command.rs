@@ -155,6 +155,11 @@ pub fn append_audio(cmd: &mut Vec<String>, s: &Settings) -> Result<(), String> {
         "opus_96k" => extend(cmd, &["-c:a", "libopus", "-b:a", "96k"]),
         "opus_160k" => extend(cmd, &["-c:a", "libopus", "-b:a", "160k"]),
         "opus_256k" => extend(cmd, &["-c:a", "libopus", "-b:a", "256k"]),
+        "mp3_320k" => extend(cmd, &["-c:a", "libmp3lame", "-b:a", "320k"]),
+        "flac" => extend(cmd, &["-c:a", "flac"]),
+        "alac" => extend(cmd, &["-c:a", "alac"]),
+        // 16-bit PCM track (a WAV-style stream inside the video container)
+        "wav" => extend(cmd, &["-c:a", "pcm_s16le"]),
         "custom" => {
             let kbps: i64 = s
                 .custom_abitrate
@@ -714,8 +719,12 @@ mod tests {
         assert_eq!(audio("opus_96k").unwrap(), "-c:a libopus -b:a 96k");
         assert_eq!(audio("opus_160k").unwrap(), "-c:a libopus -b:a 160k");
         assert_eq!(audio("opus_256k").unwrap(), "-c:a libopus -b:a 256k");
+        assert_eq!(audio("mp3_320k").unwrap(), "-c:a libmp3lame -b:a 320k");
+        assert_eq!(audio("flac").unwrap(), "-c:a flac");
+        assert_eq!(audio("alac").unwrap(), "-c:a alac");
+        assert_eq!(audio("wav").unwrap(), "-c:a pcm_s16le");
         assert_eq!(audio("custom").unwrap(), "-c:a aac -b:a 128k");
-        for unknown in ["mp3_320k", "x_y", "aac_128k", "", "AAC_96K"] {
+        for unknown in ["mp3_128k", "x_y", "aac_128k", "", "AAC_96K", "FLAC", "pcm_s16le"] {
             assert_eq!(audio(unknown).unwrap(), "", "{unknown}");
         }
     }

@@ -1650,13 +1650,17 @@ impl NvencFfxApp {
         if !self.expand_audio_settings {
             return;
         }
+        // Radio rows: top offset inside the frame, row height and frame height
+        const ROW_Y: [f32; 3] = [5.0, 47.0, 89.0];
+        const ROW_H: f32 = 42.0;
+        const FRAME_H: f32 = 136.0;
         ui.add_space(10.0);
-        let f = section_frame(ui, grid::SECTION_X, grid::SECTION_W, 94.0);
+        let f = section_frame(ui, grid::SECTION_X, grid::SECTION_W, FRAME_H);
         ui.add_space(10.0);
         let s = &mut self.s;
 
         const COLS: [f32; 5] = [25.0, 155.0, 285.0, 415.0, 545.0];
-        let first = sub_rect(f, 0.0, 5.0, f.width(), 42.0);
+        let first = sub_rect(f, 0.0, ROW_Y[0], f.width(), ROW_H);
         for (x, (text, value)) in COLS.iter().zip([
             ("Disable", "disable"),
             ("Source", "copy"),
@@ -1667,7 +1671,7 @@ impl NvencFfxApp {
             place(ui, cell(first, *x, 100.0), |ui| radio_value(ui, &mut s.audio_option, value, text));
         }
 
-        let second = sub_rect(f, 0.0, 47.0, f.width(), 42.0);
+        let second = sub_rect(f, 0.0, ROW_Y[1], f.width(), ROW_H);
         let disabled = s.audio_option != "custom";
         place(ui, cell(second, 30.0, 80.0), |ui| {
             entry(ui, "custom_abitrate", vec2(80.0, dimensions::WIDGET_HEIGHT), &mut s.custom_abitrate,
@@ -1680,6 +1684,16 @@ impl NvencFfxApp {
             ("Opus 256", "opus_256k"),
         ]) {
             place(ui, cell(second, *x, 100.0), |ui| radio_value(ui, &mut s.audio_option, value, text));
+        }
+
+        let third = sub_rect(f, 0.0, ROW_Y[2], f.width(), ROW_H);
+        for (x, (text, value)) in COLS[1..].iter().zip([
+            ("MP3 320", "mp3_320k"),
+            ("FLAC", "flac"),
+            ("ALAC", "alac"),
+            ("WAV", "wav"),
+        ]) {
+            place(ui, cell(third, *x, 100.0), |ui| radio_value(ui, &mut s.audio_option, value, text));
         }
     }
 
